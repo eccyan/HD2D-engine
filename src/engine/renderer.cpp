@@ -5,6 +5,7 @@
 #include <cstring>
 #include <stdexcept>
 
+#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -18,7 +19,9 @@ void Renderer::init(GLFWwindow* window) {
     sync_.init(context_.device(), swapchain_.image_count());
     descriptors_.init(context_.device());
 
-    create_quad_buffers();
+    sprite_batch_.init(context_.allocator(), context_.device(), command_pool_.pool(),
+                       context_.graphics_queue());
+
     create_uniform_buffers();
 
     test_texture_ =
@@ -35,12 +38,22 @@ void Renderer::init(GLFWwindow* window) {
 
     create_sprite_pipeline();
 
-    camera_.set_perspective(45.0f, static_cast<float>(kWindowWidth) / kWindowHeight, 0.1f, 100.0f);
+    float aspect = static_cast<float>(kWindowWidth) / static_cast<float>(kWindowHeight);
+    camera_.configure_hd2d(aspect);
+
+    last_time_ = static_cast<float>(glfwGetTime());
 }
 
-void Renderer::draw_frame() {
+void Renderer::draw_scene(Scene& scene) {
     auto device = context_.device();
     const auto& frame_sync = sync_.frame(current_frame_);
+
+    // Delta time
+    float now = static_cast<float>(glfwGetTime());
+    float dt = now - last_time_;
+    last_time_ = now;
+
+    camera_.update(dt);
 
     vkWaitForFences(device, 1, &frame_sync.in_flight, VK_TRUE, UINT64_MAX);
 
@@ -73,20 +86,28 @@ void Renderer::draw_frame() {
     rp_info.pClearValues = clear_values.data();
 
     vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
-
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_);
 
-    VkBuffer vertex_buffers[] = {quad_vertex_buffer_.buffer()};
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(cmd, 0, 1, vertex_buffers, offsets);
-    vkCmdBindIndexBuffer(cmd, quad_index_buffer_.buffer(), 0, VK_INDEX_TYPE_UINT16);
+    // Submit all entities to sprite batch
+    sprite_batch_.begin();
+    for (const auto& entity_ptr : scene.entities()) {
+        const auto& e = *entity_ptr;
+        SpriteDrawInfo info{};
+        info.position = e.transform.position;
+        info.size = e.transform.scale;
+        info.color = e.tint;
+        sprite_batch_.draw(info);
+    }
+    uint32_t index_count = sprite_batch_.flush(current_frame_);
 
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_, 0, 1,
-                            &descriptor_sets_[current_frame_], 0, nullptr);
+    update_uniform_buffer(current_frame_, camera_.view_projection());
 
-    update_uniform_buffer(current_frame_);
-
-    vkCmdDrawIndexed(cmd, 6, 1, 0, 0, 0);
+    if (index_count > 0) {
+        sprite_batch_.bind(cmd, current_frame_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_, 0,
+                                1, &descriptor_sets_[current_frame_], 0, nullptr);
+        vkCmdDrawIndexed(cmd, index_count, 1, 0, 0, 0);
+    }
 
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
@@ -122,6 +143,16 @@ void Renderer::draw_frame() {
     current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
 }
 
+void Renderer::draw_frame() {
+    // Legacy shim: create a static test scene with one white quad and render it
+    Scene test_scene;
+    auto* e = test_scene.create_entity();
+    e->transform.position = {0.0f, 0.0f, 0.0f};
+    e->transform.scale = {1.0f, 1.0f};
+    e->tint = {1.0f, 1.0f, 1.0f, 1.0f};
+    draw_scene(test_scene);
+}
+
 void Renderer::shutdown() {
     vkDeviceWaitIdle(context_.device());
 
@@ -130,8 +161,7 @@ void Renderer::shutdown() {
     for (auto& buf : uniform_buffers_) {
         buf.destroy(context_.allocator());
     }
-    quad_index_buffer_.destroy(context_.allocator());
-    quad_vertex_buffer_.destroy(context_.allocator());
+    sprite_batch_.shutdown(context_.allocator());
 
     vkDestroyPipeline(context_.device(), sprite_pipeline_, nullptr);
     vkDestroyPipelineLayout(context_.device(), sprite_pipeline_layout_, nullptr);
@@ -182,60 +212,15 @@ void Renderer::create_sprite_pipeline() {
     vkDestroyShaderModule(device, vert, nullptr);
 }
 
-void Renderer::create_quad_buffers() {
-    auto device = context_.device();
-    auto allocator = context_.allocator();
-    auto queue = context_.graphics_queue();
-
-    // Quad vertices
-    Vertex vertices[] = {
-        {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
-        {{ 0.5f,  0.5f, 0.0f}, {1.0f, 1.0f}},
-        {{-0.5f,  0.5f, 0.0f}, {0.0f, 1.0f}},
-    };
-    uint16_t indices[] = {0, 1, 2, 2, 3, 0};
-
-    VkDeviceSize vertex_size = sizeof(vertices);
-    VkDeviceSize index_size = sizeof(indices);
-
-    // Upload vertices via staging
-    auto staging_v = Buffer::create_staging(allocator, vertex_size);
-    staging_v.upload(vertices, vertex_size);
-    quad_vertex_buffer_ = Buffer::create_vertex(allocator, vertex_size);
-
-    auto cmd = command_pool_.begin_single_time(device);
-    VkBufferCopy copy_v{};
-    copy_v.size = vertex_size;
-    vkCmdCopyBuffer(cmd, staging_v.buffer(), quad_vertex_buffer_.buffer(), 1, &copy_v);
-    command_pool_.end_single_time(device, queue, cmd);
-    staging_v.destroy(allocator);
-
-    // Upload indices via staging
-    auto staging_i = Buffer::create_staging(allocator, index_size);
-    staging_i.upload(indices, index_size);
-    quad_index_buffer_ = Buffer::create_index(allocator, index_size);
-
-    cmd = command_pool_.begin_single_time(device);
-    VkBufferCopy copy_i{};
-    copy_i.size = index_size;
-    vkCmdCopyBuffer(cmd, staging_i.buffer(), quad_index_buffer_.buffer(), 1, &copy_i);
-    command_pool_.end_single_time(device, queue, cmd);
-    staging_i.destroy(allocator);
-}
-
 void Renderer::create_uniform_buffers() {
     for (auto& buf : uniform_buffers_) {
         buf = Buffer::create_uniform(context_.allocator(), sizeof(UniformBufferObject));
     }
 }
 
-void Renderer::update_uniform_buffer(uint32_t frame_index) {
-    auto model = glm::mat4(1.0f);
-    auto vp = camera_.view_projection();
+void Renderer::update_uniform_buffer(uint32_t frame_index, const glm::mat4& vp) {
     UniformBufferObject ubo{};
-    ubo.mvp = vp * model;
-
+    ubo.vp = vp;
     std::memcpy(uniform_buffers_[frame_index].mapped(), &ubo, sizeof(ubo));
 }
 

@@ -8,6 +8,7 @@ namespace vulkan_game {
 class Buffer {
 public:
     static Buffer create_vertex(VmaAllocator allocator, VkDeviceSize size);
+    static Buffer create_dynamic_vertex(VmaAllocator allocator, VkDeviceSize size);
     static Buffer create_index(VmaAllocator allocator, VkDeviceSize size);
     static Buffer create_uniform(VmaAllocator allocator, VkDeviceSize size);
     static Buffer create_staging(VmaAllocator allocator, VkDeviceSize size);

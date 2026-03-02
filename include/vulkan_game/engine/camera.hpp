@@ -12,6 +12,14 @@ public:
     void set_position(glm::vec3 position);
     void set_target(glm::vec3 target);
 
+    // HD-2D preset: 35° elevation, dist=12, perspective fov
+    void configure_hd2d(float aspect);
+
+    // Smooth camera follow
+    void set_follow_target(glm::vec3 target);
+    void set_follow_speed(float speed);
+    void update(float dt);
+
     glm::mat4 view_projection() const;
     glm::mat4 view() const;
     glm::mat4 projection() const;
@@ -25,6 +33,10 @@ private:
     float aspect_;
     float near_;
     float far_;
+
+    glm::vec3 follow_target_{0.0f};
+    float follow_speed_ = 5.0f;
+    bool has_follow_target_ = false;
 };
 
 }  // namespace vulkan_game

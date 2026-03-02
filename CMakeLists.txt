@@ -65,6 +65,9 @@ add_executable(vulkan_game
     src/engine/descriptor.cpp
     src/engine/renderer.cpp
     src/engine/camera.cpp
+    src/engine/sprite_batch.cpp
+    src/engine/input_manager.cpp
+    src/engine/scene.cpp
 )
 
 target_include_directories(vulkan_game PRIVATE
