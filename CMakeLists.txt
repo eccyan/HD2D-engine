@@ -53,6 +53,7 @@ add_subdirectory(shaders)
 
 add_executable(vulkan_game
     src/main.cpp
+    src/app.cpp
     src/engine/vk_context.cpp
     src/engine/swapchain.cpp
     src/engine/render_pass.cpp
