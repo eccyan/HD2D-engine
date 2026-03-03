@@ -446,6 +446,13 @@ void App::run() {
     ui_ctx_.init(font_atlas_, text_renderer_);
     audio_.init("assets");
     control_server_.start();
+
+    // Initialize Wren scripting
+    wren_vm_.init(this);
+    register_wren_bindings(wren_vm_);
+    wren_vm_.load_module("engine", "assets/scripts/engine.wren");
+    script_system_.init(this, &wren_vm_);
+
     state_stack_.push(std::make_unique<TitleState>(), *this);
     main_loop();
     cleanup();
@@ -548,6 +555,15 @@ void App::init_scene() {
         world_.add<ecs::DialogRef>(npc, ecs::DialogRef{i});
         world_.add<ecs::DynamicLight>(npc, ecs::DynamicLight{npc_data.light_color, npc_data.light_radius});
         world_.add<ecs::ParticleEmitterRef>(npc, ecs::ParticleEmitterRef{aura_eid});
+
+        // Attach script if specified in scene data
+        if (!npc_data.script_module.empty()) {
+            wren_vm_.load_module(npc_data.script_module,
+                "assets/scripts/" + npc_data.script_module + ".wren");
+            world_.add<ecs::ScriptRef>(npc, ecs::ScriptRef{
+                npc_data.script_module, npc_data.script_class});
+        }
+
         npc_ids_.push_back(npc);
     }
 
@@ -628,6 +644,10 @@ void App::update_game(float dt) {
         if (scene_.tile_layer().has_value()) {
             ecs::systems::npc_patrol(world_, *scene_.tile_layer(), dt);
         }
+
+        // Wren script system (runs update on entities with ScriptRef)
+        script_system_.update(dt);
+        script_system_.check_hot_reload();
 
         // Update all animations
         ecs::systems::animation_update(world_, dt);
@@ -1051,6 +1071,7 @@ void App::cleanup() {
     while (!state_stack_.empty()) {
         state_stack_.pop(*this);
     }
+    wren_vm_.shutdown();
     control_server_.stop();
     audio_.shutdown();
     renderer_.shutdown();

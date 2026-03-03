@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(vulkan_game VERSION 0.1.0 LANGUAGES CXX)
+project(vulkan_game VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,39 @@ FetchContent_Declare(
     BUILD_COMMAND ""
 )
 FetchContent_MakeAvailable(miniaudio)
+
+FetchContent_Declare(
+    wren
+    GIT_REPOSITORY https://github.com/wren-lang/wren.git
+    GIT_TAG        0.4.0
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+)
+FetchContent_MakeAvailable(wren)
+
+# Build wren as a static library from C sources
+add_library(wren_lib STATIC
+    ${wren_SOURCE_DIR}/src/vm/wren_compiler.c
+    ${wren_SOURCE_DIR}/src/vm/wren_core.c
+    ${wren_SOURCE_DIR}/src/vm/wren_debug.c
+    ${wren_SOURCE_DIR}/src/vm/wren_primitive.c
+    ${wren_SOURCE_DIR}/src/vm/wren_utils.c
+    ${wren_SOURCE_DIR}/src/vm/wren_value.c
+    ${wren_SOURCE_DIR}/src/vm/wren_vm.c
+    ${wren_SOURCE_DIR}/src/optional/wren_opt_meta.c
+    ${wren_SOURCE_DIR}/src/optional/wren_opt_random.c
+)
+target_include_directories(wren_lib PUBLIC
+    ${wren_SOURCE_DIR}/src/include
+)
+target_include_directories(wren_lib PRIVATE
+    ${wren_SOURCE_DIR}/src/vm
+    ${wren_SOURCE_DIR}/src/optional
+)
+set_target_properties(wren_lib PROPERTIES
+    C_STANDARD 99
+    POSITION_INDEPENDENT_CODE ON
+)
 
 # --- Download font if not present -------------------------------------------
 
@@ -128,6 +161,9 @@ add_executable(vulkan_game
     src/engine/scene_loader.cpp
     src/engine/ui/ui_context.cpp
     src/engine/save_system.cpp
+    src/engine/scripting/wren_vm.cpp
+    src/engine/scripting/wren_bindings.cpp
+    src/engine/scripting/script_system.cpp
     src/game/systems.cpp
     src/game/title_state.cpp
     src/game/gameplay_state.cpp
@@ -151,6 +187,7 @@ target_link_libraries(vulkan_game
         glm::glm
         GPUOpen::VulkanMemoryAllocator
         nlohmann_json::nlohmann_json
+        wren_lib
 )
 
 if(APPLE)

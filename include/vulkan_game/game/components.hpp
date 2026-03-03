@@ -6,6 +6,8 @@
 
 #include <glm/glm.hpp>
 
+#include <string>
+
 namespace vulkan_game::ecs {
 
 struct PlayerTag {};
@@ -41,6 +43,11 @@ struct ParticleEmitterRef {
 
 struct FootstepEmitterRef {
     size_t emitter_id = 0;
+};
+
+struct ScriptRef {
+    std::string module_name;
+    std::string class_name;
 };
 
 }  // namespace vulkan_game::ecs

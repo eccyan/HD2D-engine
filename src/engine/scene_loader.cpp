@@ -167,6 +167,8 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
                 npc.aura_color_start = parse_vec4(npc_j["aura_color_start"]);
             if (npc_j.contains("aura_color_end"))
                 npc.aura_color_end = parse_vec4(npc_j["aura_color_end"]);
+            npc.script_module = npc_j.value("script_module", "");
+            npc.script_class = npc_j.value("script_class", "");
             data.npcs.push_back(std::move(npc));
         }
     }

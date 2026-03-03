@@ -27,6 +27,8 @@ struct NpcData {
     float light_radius = 3.0f;
     glm::vec4 aura_color_start{1.0f};
     glm::vec4 aura_color_end{0.0f};
+    std::string script_module;  // empty = no script
+    std::string script_class;
 };
 
 struct SceneData {

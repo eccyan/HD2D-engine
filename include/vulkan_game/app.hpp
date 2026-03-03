@@ -14,6 +14,8 @@
 #include "vulkan_game/engine/renderer.hpp"
 #include "vulkan_game/engine/resource_manager.hpp"
 #include "vulkan_game/engine/save_system.hpp"
+#include "vulkan_game/engine/scripting/script_system.hpp"
+#include "vulkan_game/engine/scripting/wren_bindings.hpp"
 #include "vulkan_game/engine/scene.hpp"
 #include "vulkan_game/engine/text_renderer.hpp"
 #include "vulkan_game/engine/types.hpp"
@@ -141,6 +143,10 @@ private:
     SaveSystem save_system_;
     std::unordered_map<std::string, bool> game_flags_;
     float play_time_ = 0.0f;
+
+    // Scripting
+    WrenVM wren_vm_;
+    ScriptSystem script_system_;
 
     // Control server
     ControlServer control_server_;
