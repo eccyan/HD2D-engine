@@ -6,6 +6,7 @@
 #include "vulkan_game/engine/descriptor.hpp"
 #include "vulkan_game/engine/font_atlas.hpp"
 #include "vulkan_game/engine/render_pass.hpp"
+#include "vulkan_game/engine/resource_handle.hpp"
 #include "vulkan_game/engine/scene.hpp"
 #include "vulkan_game/engine/sprite_batch.hpp"
 #include "vulkan_game/engine/swapchain.hpp"
@@ -21,11 +22,13 @@ struct GLFWwindow;
 
 namespace vulkan_game {
 
+class ResourceManager;
+
 class Renderer {
 public:
-    void init(GLFWwindow* window);
-    void init_font(const FontAtlas& atlas);
-    void init_particles();
+    void init(GLFWwindow* window, ResourceManager& resources);
+    void init_font(const FontAtlas& atlas, ResourceManager& resources);
+    void init_particles(ResourceManager& resources);
     void draw_frame();
     void draw_scene(Scene& scene,
                     const std::vector<SpriteDrawInfo>& entity_sprites = {},
@@ -36,6 +39,9 @@ public:
 
     Camera& camera() { return camera_; }
     const Camera& camera() const { return camera_; }
+
+    VkContext& context() { return context_; }
+    CommandPool& command_pool() { return command_pool_; }
 
 private:
     void create_sprite_pipeline();
@@ -57,10 +63,10 @@ private:
     SpriteBatch sprite_batch_;
     std::array<Buffer, kMaxFramesInFlight> uniform_buffers_;
     std::array<Buffer, kMaxFramesInFlight> ui_uniform_buffers_;
-    Texture test_texture_;
-    Texture tileset_texture_;
-    Texture font_texture_;
-    Texture particle_texture_;
+    ResourceHandle<Texture> test_texture_;
+    ResourceHandle<Texture> tileset_texture_;
+    ResourceHandle<Texture> font_texture_;
+    ResourceHandle<Texture> particle_texture_;
     std::array<VkDescriptorSet, kMaxFramesInFlight> descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> tilemap_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> font_descriptor_sets_{};

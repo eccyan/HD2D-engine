@@ -13,6 +13,7 @@
 #include "vulkan_game/engine/locale_manager.hpp"
 #include "vulkan_game/engine/particle.hpp"
 #include "vulkan_game/engine/renderer.hpp"
+#include "vulkan_game/engine/resource_manager.hpp"
 #include "vulkan_game/engine/scene.hpp"
 #include "vulkan_game/engine/text_renderer.hpp"
 #include "vulkan_game/engine/types.hpp"
@@ -46,6 +47,7 @@ private:
     enum class GameMode  { Explore, Dialog };
 
     GLFWwindow* window_ = nullptr;
+    ResourceManager resources_;
     Renderer renderer_;
     InputManager input_;
     Scene scene_;

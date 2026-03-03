@@ -438,9 +438,9 @@ void App::run() {
     font_atlas_.init("assets/fonts/NotoSans-Regular.ttf", 32.0f, codepoints);
     text_renderer_.init(font_atlas_);
 
-    renderer_.init(window_);
-    renderer_.init_font(font_atlas_);
-    renderer_.init_particles();
+    renderer_.init(window_, resources_);
+    renderer_.init_font(font_atlas_, resources_);
+    renderer_.init_particles(resources_);
     audio_.init("assets");
     control_server_.start();
     init_scene();
@@ -1116,6 +1116,7 @@ void App::cleanup() {
     control_server_.stop();
     audio_.shutdown();
     renderer_.shutdown();
+    resources_.shutdown();
     glfwDestroyWindow(window_);
     glfwTerminate();
 }

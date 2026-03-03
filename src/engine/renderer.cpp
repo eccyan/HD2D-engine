@@ -1,5 +1,6 @@
 #include "vulkan_game/engine/renderer.hpp"
 #include "vulkan_game/engine/pipeline.hpp"
+#include "vulkan_game/engine/resource_manager.hpp"
 
 #include <array>
 #include <cstring>
@@ -11,7 +12,7 @@
 
 namespace vulkan_game {
 
-void Renderer::init(GLFWwindow* window) {
+void Renderer::init(GLFWwindow* window, ResourceManager& resources) {
     context_.init(window);
     swapchain_.init(context_, kWindowWidth, kWindowHeight);
     render_pass_mgr_.init(context_.device(), context_.allocator(), swapchain_);
@@ -24,25 +25,23 @@ void Renderer::init(GLFWwindow* window) {
 
     create_uniform_buffers();
 
-    test_texture_ =
-        Texture::load_from_file(context_.device(), context_.allocator(), command_pool_.pool(),
-                                context_.graphics_queue(), "assets/textures/player_sheet.png");
+    resources.init(context_.device(), context_.allocator(), command_pool_.pool(),
+                   context_.graphics_queue());
 
-    tileset_texture_ =
-        Texture::load_from_file(context_.device(), context_.allocator(), command_pool_.pool(),
-                                context_.graphics_queue(), "assets/textures/tileset.png");
+    test_texture_ = resources.load_texture("assets/textures/player_sheet.png");
+    tileset_texture_ = resources.load_texture("assets/textures/tileset.png");
 
     std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
     for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
         ubo_buffers[i] = uniform_buffers_[i].buffer();
     }
     descriptor_sets_ = descriptors_.allocate_sprite_sets(
-        context_.device(), ubo_buffers, sizeof(UniformBufferObject), test_texture_.image_view(),
-        test_texture_.sampler());
+        context_.device(), ubo_buffers, sizeof(UniformBufferObject), test_texture_->image_view(),
+        test_texture_->sampler());
 
     tilemap_descriptor_sets_ = descriptors_.allocate_sprite_sets(
         context_.device(), ubo_buffers, sizeof(UniformBufferObject),
-        tileset_texture_.image_view(), tileset_texture_.sampler());
+        tileset_texture_->image_view(), tileset_texture_->sampler());
 
     create_sprite_pipeline();
     create_ui_pipeline();
@@ -53,11 +52,9 @@ void Renderer::init(GLFWwindow* window) {
     last_time_ = static_cast<float>(glfwGetTime());
 }
 
-void Renderer::init_font(const FontAtlas& atlas) {
-    font_texture_ =
-        Texture::load_from_memory(context_.device(), context_.allocator(), command_pool_.pool(),
-                                  context_.graphics_queue(), atlas.pixels(),
-                                  atlas.width(), atlas.height(), VK_FILTER_LINEAR);
+void Renderer::init_font(const FontAtlas& atlas, ResourceManager& resources) {
+    font_texture_ = resources.load_texture_from_memory(
+        "font_atlas", atlas.pixels(), atlas.width(), atlas.height(), VK_FILTER_LINEAR);
 
     // Font descriptor sets with game UBOs (for world-space overlay)
     std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
@@ -66,7 +63,7 @@ void Renderer::init_font(const FontAtlas& atlas) {
     }
     font_descriptor_sets_ = descriptors_.allocate_sprite_sets(
         context_.device(), ubo_buffers, sizeof(UniformBufferObject),
-        font_texture_.image_view(), font_texture_.sampler());
+        font_texture_->image_view(), font_texture_->sampler());
 
     // UI uniform buffers with orthographic projection
     for (auto& buf : ui_uniform_buffers_) {
@@ -89,15 +86,13 @@ void Renderer::init_font(const FontAtlas& atlas) {
     }
     ui_descriptor_sets_ = descriptors_.allocate_sprite_sets(
         context_.device(), ui_ubo_buffers, sizeof(UniformBufferObject),
-        font_texture_.image_view(), font_texture_.sampler());
+        font_texture_->image_view(), font_texture_->sampler());
 
     font_initialized_ = true;
 }
 
-void Renderer::init_particles() {
-    particle_texture_ =
-        Texture::load_from_file(context_.device(), context_.allocator(), command_pool_.pool(),
-                                context_.graphics_queue(), "assets/textures/particle_atlas.png");
+void Renderer::init_particles(ResourceManager& resources) {
+    particle_texture_ = resources.load_texture("assets/textures/particle_atlas.png");
 
     std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
     for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
@@ -105,7 +100,7 @@ void Renderer::init_particles() {
     }
     particle_descriptor_sets_ = descriptors_.allocate_sprite_sets(
         context_.device(), ubo_buffers, sizeof(UniformBufferObject),
-        particle_texture_.image_view(), particle_texture_.sampler());
+        particle_texture_->image_view(), particle_texture_->sampler());
 }
 
 void Renderer::draw_scene(Scene& scene,
@@ -291,11 +286,16 @@ void Renderer::draw_frame() {
 void Renderer::shutdown() {
     vkDeviceWaitIdle(context_.device());
 
-    test_texture_.destroy(context_.device(), context_.allocator());
-    tileset_texture_.destroy(context_.device(), context_.allocator());
-    particle_texture_.destroy(context_.device(), context_.allocator());
+    // Release texture handles (actual GPU cleanup happens via shared_ptr destructor
+    // or ResourceManager::shutdown — we must destroy here while device is valid)
+    auto destroy_tex = [&](ResourceHandle<Texture>& h) {
+        if (h) { h->destroy(context_.device(), context_.allocator()); h = {}; }
+    };
+    destroy_tex(test_texture_);
+    destroy_tex(tileset_texture_);
+    destroy_tex(particle_texture_);
     if (font_initialized_) {
-        font_texture_.destroy(context_.device(), context_.allocator());
+        destroy_tex(font_texture_);
         for (auto& buf : ui_uniform_buffers_) {
             buf.destroy(context_.allocator());
         }
