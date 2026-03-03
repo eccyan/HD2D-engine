@@ -124,7 +124,11 @@ add_executable(vulkan_game
     src/engine/locale_manager.cpp
     src/engine/control_server.cpp
     src/engine/resource_manager.cpp
+    src/engine/game_state.cpp
     src/game/systems.cpp
+    src/game/title_state.cpp
+    src/game/gameplay_state.cpp
+    src/game/pause_state.cpp
 )
 
 target_include_directories(vulkan_game PRIVATE

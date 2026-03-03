@@ -1,6 +1,7 @@
 #include "vulkan_game/app.hpp"
 #include "vulkan_game/engine/ecs/default_components.hpp"
 #include "vulkan_game/game/components.hpp"
+#include "vulkan_game/game/states/title_state.hpp"
 #include "vulkan_game/game/systems.hpp"
 #include "vulkan_game/engine/tilemap.hpp"
 
@@ -443,7 +444,7 @@ void App::run() {
     renderer_.init_particles(resources_);
     audio_.init("assets");
     control_server_.start();
-    init_scene();
+    state_stack_.push(std::make_unique<TitleState>(), *this);
     main_loop();
     cleanup();
 }
@@ -673,14 +674,6 @@ void App::init_scene() {
 }
 
 void App::update_game(float dt) {
-    overlay_sprites_.clear();
-    ui_sprites_.clear();
-
-    if (input_.was_key_pressed(GLFW_KEY_ESCAPE)) {
-        glfwSetWindowShouldClose(window_, GLFW_TRUE);
-        return;
-    }
-
     if (game_mode_ == GameMode::Dialog) {
         // Dialog mode: freeze movement, handle advance
         if (input_.was_key_pressed(GLFW_KEY_E) || input_.was_key_pressed(GLFW_KEY_SPACE)) {
@@ -885,18 +878,19 @@ void App::main_loop() {
 
         process_commands();
 
+        // Clear draw lists at frame start (states will rebuild them)
+        overlay_sprites_.clear();
+        ui_sprites_.clear();
+
         if (step_mode_) {
             // Step mode: only update input + game when there are pending steps.
-            // This prevents inject_once_ from being consumed by input_.update()
-            // in frames where update_game doesn't run.
             bool did_step = pending_steps_ > 0;
             while (pending_steps_ > 0) {
                 input_.update();
-                update_game(kFixedDt);
+                state_stack_.update(*this, kFixedDt);
                 tick_++;
                 pending_steps_--;
             }
-            // Send state after all steps consumed
             if (did_step) {
                 control_server_.send(build_state_json());
             }
@@ -910,9 +904,12 @@ void App::main_loop() {
 
             if (dt > 0.1f) dt = 0.1f;
 
-            update_game(dt);
+            state_stack_.update(*this, dt);
             tick_++;
         }
+
+        // Let states build their draw lists
+        state_stack_.build_draw_lists(*this);
 
         // Always render
         std::vector<SpriteDrawInfo> particle_sprites;
@@ -1113,6 +1110,9 @@ void App::emit_event(const std::string& event, const nlohmann::json& data) {
 }
 
 void App::cleanup() {
+    while (!state_stack_.empty()) {
+        state_stack_.pop(*this);
+    }
     control_server_.stop();
     audio_.shutdown();
     renderer_.shutdown();
