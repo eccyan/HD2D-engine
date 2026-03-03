@@ -14,6 +14,8 @@ void PostProcessPipeline::init(VkDevice device, VmaAllocator allocator,
     scene_height_ = swapchain.extent().height;
     bloom_width_ = scene_width_ / 4;
     bloom_height_ = scene_height_ / 4;
+    dof_width_ = scene_width_ / 2;
+    dof_height_ = scene_height_ / 2;
 
     create_images(device, allocator, swapchain.extent());
     create_sampler(device);
@@ -25,6 +27,7 @@ void PostProcessPipeline::init(VkDevice device, VmaAllocator allocator,
 
 void PostProcessPipeline::shutdown(VkDevice device, VmaAllocator allocator) {
     vkDestroyPipeline(device, composite_pipeline_, nullptr);
+    vkDestroyPipeline(device, dof_blur_pipeline_, nullptr);
     vkDestroyPipeline(device, bloom_blur_pipeline_, nullptr);
     vkDestroyPipeline(device, bloom_extract_pipeline_, nullptr);
     vkDestroyPipelineLayout(device, composite_pipeline_layout_, nullptr);
@@ -37,6 +40,8 @@ void PostProcessPipeline::shutdown(VkDevice device, VmaAllocator allocator) {
     for (auto fb : composite_framebuffers_) {
         vkDestroyFramebuffer(device, fb, nullptr);
     }
+    vkDestroyFramebuffer(device, dof_b_framebuffer_, nullptr);
+    vkDestroyFramebuffer(device, dof_a_framebuffer_, nullptr);
     vkDestroyFramebuffer(device, bloom_b_framebuffer_, nullptr);
     vkDestroyFramebuffer(device, bloom_a_framebuffer_, nullptr);
     vkDestroyFramebuffer(device, scene_framebuffer_, nullptr);
@@ -45,8 +50,11 @@ void PostProcessPipeline::shutdown(VkDevice device, VmaAllocator allocator) {
     vkDestroyRenderPass(device, bloom_render_pass_, nullptr);
     vkDestroyRenderPass(device, scene_render_pass_, nullptr);
 
+    vkDestroySampler(device, nearest_sampler_, nullptr);
     vkDestroySampler(device, linear_sampler_, nullptr);
 
+    destroy_image(device, allocator, dof_b_);
+    destroy_image(device, allocator, dof_a_);
     destroy_image(device, allocator, bloom_b_);
     destroy_image(device, allocator, bloom_a_);
     destroy_image(device, allocator, offscreen_depth_);
@@ -119,7 +127,8 @@ void PostProcessPipeline::create_images(VkDevice device, VmaAllocator allocator,
         image_info.arrayLayers = 1;
         image_info.samples = VK_SAMPLE_COUNT_1_BIT;
         image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-        image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                           VK_IMAGE_USAGE_SAMPLED_BIT;
 
         VmaAllocationCreateInfo alloc_info{};
         alloc_info.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -154,6 +163,17 @@ void PostProcessPipeline::create_images(VkDevice device, VmaAllocator allocator,
         device, allocator, VK_FORMAT_R16G16B16A16_SFLOAT,
         bloom_width_, bloom_height_,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    // DoF half-res ping-pong buffers
+    dof_a_ = create_color_image(
+        device, allocator, VK_FORMAT_R16G16B16A16_SFLOAT,
+        dof_width_, dof_height_,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+    dof_b_ = create_color_image(
+        device, allocator, VK_FORMAT_R16G16B16A16_SFLOAT,
+        dof_width_, dof_height_,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 }
 
 void PostProcessPipeline::create_sampler(VkDevice device) {
@@ -167,6 +187,19 @@ void PostProcessPipeline::create_sampler(VkDevice device) {
 
     if (vkCreateSampler(device, &info, nullptr, &linear_sampler_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create post-process sampler");
+    }
+
+    // Nearest sampler for depth (avoids interpolation artifacts)
+    VkSamplerCreateInfo nearest_info{};
+    nearest_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    nearest_info.magFilter = VK_FILTER_NEAREST;
+    nearest_info.minFilter = VK_FILTER_NEAREST;
+    nearest_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    nearest_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    nearest_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+    if (vkCreateSampler(device, &nearest_info, nullptr, &nearest_sampler_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create nearest sampler");
     }
 }
 
@@ -187,11 +220,11 @@ void PostProcessPipeline::create_render_passes(VkDevice device, VkFormat swapcha
         depth_att.format = VK_FORMAT_D32_SFLOAT;
         depth_att.samples = VK_SAMPLE_COUNT_1_BIT;
         depth_att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depth_att.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depth_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         depth_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depth_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depth_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depth_att.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depth_att.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentReference color_ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
         VkAttachmentReference depth_ref{1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
@@ -362,6 +395,38 @@ void PostProcessPipeline::create_framebuffers(VkDevice device, const Swapchain& 
         }
     }
 
+    // DoF A framebuffer (half resolution)
+    {
+        VkFramebufferCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        info.renderPass = bloom_render_pass_;
+        info.attachmentCount = 1;
+        info.pAttachments = &dof_a_.view;
+        info.width = dof_width_;
+        info.height = dof_height_;
+        info.layers = 1;
+
+        if (vkCreateFramebuffer(device, &info, nullptr, &dof_a_framebuffer_) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create DoF A framebuffer");
+        }
+    }
+
+    // DoF B framebuffer (half resolution)
+    {
+        VkFramebufferCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        info.renderPass = bloom_render_pass_;
+        info.attachmentCount = 1;
+        info.pAttachments = &dof_b_.view;
+        info.width = dof_width_;
+        info.height = dof_height_;
+        info.layers = 1;
+
+        if (vkCreateFramebuffer(device, &info, nullptr, &dof_b_framebuffer_) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create DoF B framebuffer");
+        }
+    }
+
     // Composite framebuffers (one per swapchain image)
     composite_framebuffers_.resize(swapchain.image_count());
     for (uint32_t i = 0; i < swapchain.image_count(); i++) {
@@ -402,18 +467,15 @@ void PostProcessPipeline::create_descriptor_resources(VkDevice device) {
         }
     }
 
-    // Layout for composite (2 samplers: scene + bloom)
+    // Layout for composite (4 samplers: scene + bloom + dof + depth)
     {
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        std::array<VkDescriptorSetLayoutBinding, 4> bindings{};
+        for (uint32_t i = 0; i < 4; i++) {
+            bindings[i].binding = i;
+            bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
 
         VkDescriptorSetLayoutCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -426,17 +488,17 @@ void PostProcessPipeline::create_descriptor_resources(VkDevice device) {
         }
     }
 
-    // Descriptor pool: 4 sets total, 5 combined image samplers
+    // Descriptor pool: 6 sets total, 10 combined image samplers
     {
         VkDescriptorPoolSize pool_size{};
         pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        pool_size.descriptorCount = 5;
+        pool_size.descriptorCount = 10;
 
         VkDescriptorPoolCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         info.poolSizeCount = 1;
         info.pPoolSizes = &pool_size;
-        info.maxSets = 4;
+        info.maxSets = 6;
 
         if (vkCreateDescriptorPool(device, &info, nullptr, &pp_pool_) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create pp descriptor pool");
@@ -445,23 +507,25 @@ void PostProcessPipeline::create_descriptor_resources(VkDevice device) {
 
     // Allocate descriptor sets
     {
-        // 3 single-sampler sets
-        std::array<VkDescriptorSetLayout, 3> pp_layouts = {pp_layout_, pp_layout_, pp_layout_};
+        // 4 single-sampler sets (offscreen, bloom_a, bloom_b, dof_a)
+        std::array<VkDescriptorSetLayout, 4> pp_layouts = {
+            pp_layout_, pp_layout_, pp_layout_, pp_layout_};
         VkDescriptorSetAllocateInfo alloc_info{};
         alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         alloc_info.descriptorPool = pp_pool_;
-        alloc_info.descriptorSetCount = 3;
+        alloc_info.descriptorSetCount = 4;
         alloc_info.pSetLayouts = pp_layouts.data();
 
-        std::array<VkDescriptorSet, 3> pp_sets;
+        std::array<VkDescriptorSet, 4> pp_sets;
         if (vkAllocateDescriptorSets(device, &alloc_info, pp_sets.data()) != VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate pp descriptor sets");
         }
         ds_offscreen_ = pp_sets[0];
         ds_bloom_a_ = pp_sets[1];
         ds_bloom_b_ = pp_sets[2];
+        ds_dof_a_ = pp_sets[3];
 
-        // 1 composite set
+        // 1 composite set (4 samplers)
         VkDescriptorSetAllocateInfo comp_alloc{};
         comp_alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         comp_alloc.descriptorPool = pp_pool_;
@@ -495,8 +559,9 @@ void PostProcessPipeline::create_descriptor_resources(VkDevice device) {
         write_single(ds_offscreen_, offscreen_color_.view);
         write_single(ds_bloom_a_, bloom_a_.view);
         write_single(ds_bloom_b_, bloom_b_.view);
+        write_single(ds_dof_a_, dof_a_.view);
 
-        // Composite: binding 0 = scene, binding 1 = bloom
+        // Composite: binding 0 = scene, binding 1 = bloom, binding 2 = dof, binding 3 = depth
         VkDescriptorImageInfo scene_img{};
         scene_img.sampler = linear_sampler_;
         scene_img.imageView = offscreen_color_.view;
@@ -507,20 +572,28 @@ void PostProcessPipeline::create_descriptor_resources(VkDevice device) {
         bloom_img.imageView = bloom_a_.view;
         bloom_img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        std::array<VkWriteDescriptorSet, 2> writes{};
-        writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[0].dstSet = ds_composite_;
-        writes[0].dstBinding = 0;
-        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writes[0].descriptorCount = 1;
-        writes[0].pImageInfo = &scene_img;
+        VkDescriptorImageInfo dof_img{};
+        dof_img.sampler = linear_sampler_;
+        dof_img.imageView = dof_b_.view;
+        dof_img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writes[1].dstSet = ds_composite_;
-        writes[1].dstBinding = 1;
-        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        writes[1].descriptorCount = 1;
+        VkDescriptorImageInfo depth_img{};
+        depth_img.sampler = nearest_sampler_;
+        depth_img.imageView = offscreen_depth_.view;
+        depth_img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        std::array<VkWriteDescriptorSet, 4> writes{};
+        for (uint32_t i = 0; i < 4; i++) {
+            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet = ds_composite_;
+            writes[i].dstBinding = i;
+            writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[i].descriptorCount = 1;
+        }
+        writes[0].pImageInfo = &scene_img;
         writes[1].pImageInfo = &bloom_img;
+        writes[2].pImageInfo = &dof_img;
+        writes[3].pImageInfo = &depth_img;
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                                writes.data(), 0, nullptr);
@@ -553,12 +626,12 @@ void PostProcessPipeline::create_pipelines(VkDevice device) {
         }
     }
 
-    // Composite pipeline layout: composite_layout_ + 16B push constant
+    // Composite pipeline layout: composite_layout_ + 48B push constant
     {
         VkPushConstantRange push{};
         push.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         push.offset = 0;
-        push.size = 16;  // 4 floats
+        push.size = 48;  // 3 × vec4 (bloom_params, dof_params, depth_params)
 
         VkPipelineLayoutCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -596,6 +669,21 @@ void PostProcessPipeline::create_pipelines(VkDevice device) {
         .set_no_vertex_input()
         .set_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
         .set_viewport_scissor(bloom_extent)
+        .set_rasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE)
+        .set_multisampling(VK_SAMPLE_COUNT_1_BIT)
+        .set_depth_stencil(false, false)
+        .set_no_blend()
+        .set_layout(bloom_pipeline_layout_)
+        .set_render_pass(bloom_render_pass_, 0)
+        .build(device);
+
+    // DoF blur pipeline (half resolution, reuses bloom_blur.frag)
+    VkExtent2D dof_extent{dof_width_, dof_height_};
+    dof_blur_pipeline_ = PipelineBuilder()
+        .set_shaders(fullscreen_vert, bloom_blur_frag)
+        .set_no_vertex_input()
+        .set_input_assembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+        .set_viewport_scissor(dof_extent)
         .set_rasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE)
         .set_multisampling(VK_SAMPLE_COUNT_1_BIT)
         .set_depth_stencil(false, false)
@@ -706,6 +794,59 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         vkCmdEndRenderPass(cmd);
     }
 
+    float dof_texel[2] = {1.0f / static_cast<float>(dof_width_),
+                           1.0f / static_cast<float>(dof_height_)};
+
+    // --- DoF H-Blur: offscreen → dof_a (half resolution) ---
+    {
+        VkRenderPassBeginInfo rp_info{};
+        rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rp_info.renderPass = bloom_render_pass_;
+        rp_info.framebuffer = dof_a_framebuffer_;
+        rp_info.renderArea.extent = {dof_width_, dof_height_};
+
+        vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, dof_blur_pipeline_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bloom_pipeline_layout_,
+                                0, 1, &ds_offscreen_, 0, nullptr);
+
+        struct { float dir_x; float dir_y; float texel_x; float texel_y; } dof_h_pc;
+        dof_h_pc.dir_x = 1.0f;
+        dof_h_pc.dir_y = 0.0f;
+        dof_h_pc.texel_x = dof_texel[0];
+        dof_h_pc.texel_y = dof_texel[1];
+        vkCmdPushConstants(cmd, bloom_pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, 16, &dof_h_pc);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    }
+
+    // --- DoF V-Blur: dof_a → dof_b (half resolution) ---
+    {
+        VkRenderPassBeginInfo rp_info{};
+        rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rp_info.renderPass = bloom_render_pass_;
+        rp_info.framebuffer = dof_b_framebuffer_;
+        rp_info.renderArea.extent = {dof_width_, dof_height_};
+
+        vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, dof_blur_pipeline_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bloom_pipeline_layout_,
+                                0, 1, &ds_dof_a_, 0, nullptr);
+
+        struct { float dir_x; float dir_y; float texel_x; float texel_y; } dof_v_pc;
+        dof_v_pc.dir_x = 0.0f;
+        dof_v_pc.dir_y = 1.0f;
+        dof_v_pc.texel_x = dof_texel[0];
+        dof_v_pc.texel_y = dof_texel[1];
+        vkCmdPushConstants(cmd, bloom_pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, 16, &dof_v_pc);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    }
+
     // --- Composite: begin render pass (caller will end it after drawing UI) ---
     {
         VkRenderPassBeginInfo rp_info{};
@@ -719,14 +860,31 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, composite_pipeline_layout_,
                                 0, 1, &ds_composite_, 0, nullptr);
 
-        struct { float bloom_intensity; float exposure;
-                 float vignette_radius; float vignette_softness; } comp_pc;
+        // 48B push constant: 3 × vec4
+        float near = params.dof_near_plane;
+        float far = params.dof_far_plane;
+        struct {
+            float bloom_intensity; float exposure;
+            float vignette_radius; float vignette_softness;
+            float dof_focus_distance; float dof_focus_range;
+            float dof_max_blur; float pad0;
+            float depth_A; float depth_B;
+            float pad1; float pad2;
+        } comp_pc;
         comp_pc.bloom_intensity = params.bloom_intensity;
         comp_pc.exposure = params.exposure;
         comp_pc.vignette_radius = params.vignette_radius;
         comp_pc.vignette_softness = params.vignette_softness;
+        comp_pc.dof_focus_distance = params.dof_focus_distance;
+        comp_pc.dof_focus_range = params.dof_focus_range;
+        comp_pc.dof_max_blur = params.dof_max_blur;
+        comp_pc.pad0 = 0.0f;
+        comp_pc.depth_A = far / (far - near);
+        comp_pc.depth_B = (near * far) / (far - near);
+        comp_pc.pad1 = 0.0f;
+        comp_pc.pad2 = 0.0f;
         vkCmdPushConstants(cmd, composite_pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, 16, &comp_pc);
+                           0, 48, &comp_pc);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
         // NOTE: render pass left open for UI drawing. Caller must end it.

@@ -237,6 +237,8 @@ void Renderer::draw_scene(Scene& scene,
 
     // ===== Pass 2-4: Post-processing (bloom extract, blur H, blur V) + begin composite =====
     PostProcessParams pp_params;
+    pp_params.dof_near_plane = camera_.near_plane();
+    pp_params.dof_far_plane = camera_.far_plane();
     post_process_.record_post_process(cmd, image_index, pp_params);
 
     // ===== Pass 5: UI (drawn inside the composite render pass, unaffected by post-processing) =====

@@ -16,6 +16,11 @@ struct PostProcessParams {
     float exposure = 1.2f;
     float vignette_radius = 0.75f;
     float vignette_softness = 0.45f;
+    float dof_focus_distance = 12.0f;
+    float dof_focus_range = 3.0f;
+    float dof_max_blur = 1.0f;
+    float dof_near_plane = 0.1f;
+    float dof_far_plane = 100.0f;
 };
 
 class PostProcessPipeline {
@@ -64,7 +69,12 @@ private:
     ImageResource bloom_a_{};
     ImageResource bloom_b_{};
 
+    // DoF half-res ping-pong buffers
+    ImageResource dof_a_{};
+    ImageResource dof_b_{};
+
     VkSampler linear_sampler_ = VK_NULL_HANDLE;
+    VkSampler nearest_sampler_ = VK_NULL_HANDLE;
 
     // Render passes
     VkRenderPass scene_render_pass_ = VK_NULL_HANDLE;
@@ -75,28 +85,34 @@ private:
     VkFramebuffer scene_framebuffer_ = VK_NULL_HANDLE;
     VkFramebuffer bloom_a_framebuffer_ = VK_NULL_HANDLE;
     VkFramebuffer bloom_b_framebuffer_ = VK_NULL_HANDLE;
+    VkFramebuffer dof_a_framebuffer_ = VK_NULL_HANDLE;
+    VkFramebuffer dof_b_framebuffer_ = VK_NULL_HANDLE;
     std::vector<VkFramebuffer> composite_framebuffers_;
 
     // Descriptor resources
     VkDescriptorPool pp_pool_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout pp_layout_ = VK_NULL_HANDLE;       // 1 sampler
-    VkDescriptorSetLayout composite_layout_ = VK_NULL_HANDLE; // 2 samplers
+    VkDescriptorSetLayout composite_layout_ = VK_NULL_HANDLE; // 4 samplers
     VkDescriptorSet ds_offscreen_ = VK_NULL_HANDLE;   // reads offscreen color
     VkDescriptorSet ds_bloom_a_ = VK_NULL_HANDLE;     // reads bloom_a
     VkDescriptorSet ds_bloom_b_ = VK_NULL_HANDLE;     // reads bloom_b
-    VkDescriptorSet ds_composite_ = VK_NULL_HANDLE;   // reads offscreen + bloom_a
+    VkDescriptorSet ds_dof_a_ = VK_NULL_HANDLE;       // reads dof_a
+    VkDescriptorSet ds_composite_ = VK_NULL_HANDLE;   // reads offscreen + bloom + dof + depth
 
     // Pipeline resources
     VkPipelineLayout bloom_pipeline_layout_ = VK_NULL_HANDLE;
     VkPipelineLayout composite_pipeline_layout_ = VK_NULL_HANDLE;
     VkPipeline bloom_extract_pipeline_ = VK_NULL_HANDLE;
     VkPipeline bloom_blur_pipeline_ = VK_NULL_HANDLE;
+    VkPipeline dof_blur_pipeline_ = VK_NULL_HANDLE;
     VkPipeline composite_pipeline_ = VK_NULL_HANDLE;
 
     uint32_t scene_width_ = 0;
     uint32_t scene_height_ = 0;
     uint32_t bloom_width_ = 0;
     uint32_t bloom_height_ = 0;
+    uint32_t dof_width_ = 0;
+    uint32_t dof_height_ = 0;
 };
 
 }  // namespace vulkan_game

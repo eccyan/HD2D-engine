@@ -26,6 +26,8 @@ public:
 
     glm::vec3 position() const { return position_; }
     glm::vec3 target() const { return target_; }
+    float near_plane() const { return near_; }
+    float far_plane() const { return far_; }
 
 private:
     glm::vec3 position_;
