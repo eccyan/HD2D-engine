@@ -5,6 +5,7 @@
 #include "vulkan_game/engine/command_pool.hpp"
 #include "vulkan_game/engine/descriptor.hpp"
 #include "vulkan_game/engine/font_atlas.hpp"
+#include "vulkan_game/engine/post_process.hpp"
 #include "vulkan_game/engine/render_pass.hpp"
 #include "vulkan_game/engine/resource_handle.hpp"
 #include "vulkan_game/engine/scene.hpp"
@@ -52,6 +53,7 @@ private:
     VkContext context_;
     Swapchain swapchain_;
     RenderPassManager render_pass_mgr_;
+    PostProcessPipeline post_process_;
     CommandPool command_pool_;
     SyncObjects sync_;
     DescriptorManager descriptors_;

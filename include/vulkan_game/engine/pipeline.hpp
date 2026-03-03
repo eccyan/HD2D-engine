@@ -21,6 +21,8 @@ public:
     PipelineBuilder& set_multisampling(VkSampleCountFlagBits samples);
     PipelineBuilder& set_depth_stencil(bool depth_test, bool depth_write);
     PipelineBuilder& set_color_blend_alpha();
+    PipelineBuilder& set_no_blend();
+    PipelineBuilder& set_no_vertex_input();
     PipelineBuilder& set_layout(VkPipelineLayout layout);
     PipelineBuilder& set_render_pass(VkRenderPass render_pass, uint32_t subpass);
 

@@ -17,6 +17,10 @@ set(SHADER_SOURCES
     ${SHADER_SOURCE_DIR}/triangle.frag
     ${SHADER_SOURCE_DIR}/sprite.vert
     ${SHADER_SOURCE_DIR}/sprite.frag
+    ${SHADER_SOURCE_DIR}/fullscreen.vert
+    ${SHADER_SOURCE_DIR}/bloom_extract.frag
+    ${SHADER_SOURCE_DIR}/bloom_blur.frag
+    ${SHADER_SOURCE_DIR}/composite.frag
 )
 
 set(SHADER_OUTPUTS "")

@@ -16,6 +16,7 @@ void Renderer::init(GLFWwindow* window, ResourceManager& resources) {
     context_.init(window);
     swapchain_.init(context_, kWindowWidth, kWindowHeight);
     render_pass_mgr_.init(context_.device(), context_.allocator(), swapchain_);
+    post_process_.init(context_.device(), context_.allocator(), swapchain_);
     command_pool_.init(context_.device(), context_.graphics_queue_family());
     sync_.init(context_.device(), swapchain_.image_count());
     descriptors_.init(context_.device());
@@ -136,97 +137,115 @@ void Renderer::draw_scene(Scene& scene,
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(cmd, &begin_info);
 
-    std::array<VkClearValue, 2> clear_values{};
-    clear_values[0].color = {{0.05f, 0.05f, 0.15f, 1.0f}};
-    clear_values[1].depthStencil = {1.0f, 0};
+    // ===== Pass 1: Scene render pass (offscreen HDR) =====
+    {
+        std::array<VkClearValue, 2> clear_values{};
+        clear_values[0].color = {{0.05f, 0.05f, 0.15f, 1.0f}};
+        clear_values[1].depthStencil = {1.0f, 0};
 
-    VkRenderPassBeginInfo rp_info{};
-    rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rp_info.renderPass = render_pass_mgr_.render_pass();
-    rp_info.framebuffer = render_pass_mgr_.framebuffer(image_index);
-    rp_info.renderArea.extent = swapchain_.extent();
-    rp_info.clearValueCount = static_cast<uint32_t>(clear_values.size());
-    rp_info.pClearValues = clear_values.data();
+        VkRenderPassBeginInfo rp_info{};
+        rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rp_info.renderPass = post_process_.scene_render_pass();
+        rp_info.framebuffer = post_process_.scene_framebuffer();
+        rp_info.renderArea.extent = swapchain_.extent();
+        rp_info.clearValueCount = static_cast<uint32_t>(clear_values.size());
+        rp_info.pClearValues = clear_values.data();
 
-    vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_);
+        vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_);
 
-    // Reset vertex write offset for this frame
-    sprite_batch_.begin_frame();
+        // Reset vertex write offset for this frame
+        sprite_batch_.begin_frame();
 
-    // Build UBO with camera VP and lighting data from scene
-    UniformBufferObject ubo{};
-    ubo.vp = camera_.view_projection();
-    ubo.ambient_color = scene.ambient_color();
-    auto& scene_lights = scene.lights();
-    int light_count = static_cast<int>(std::min(scene_lights.size(),
-                                                static_cast<size_t>(kMaxLights)));
-    ubo.light_params = glm::ivec4(light_count, 0, 0, 0);
-    for (int i = 0; i < light_count; i++) {
-        ubo.lights[i] = scene_lights[i];
-    }
-    update_uniform_buffer(current_frame_, ubo);
+        // Build UBO with camera VP and lighting data from scene
+        UniformBufferObject ubo{};
+        ubo.vp = camera_.view_projection();
+        ubo.ambient_color = scene.ambient_color();
+        auto& scene_lights = scene.lights();
+        int light_count = static_cast<int>(std::min(scene_lights.size(),
+                                                    static_cast<size_t>(kMaxLights)));
+        ubo.light_params = glm::ivec4(light_count, 0, 0, 0);
+        for (int i = 0; i < light_count; i++) {
+            ubo.lights[i] = scene_lights[i];
+        }
+        update_uniform_buffer(current_frame_, ubo);
 
-    // Bind vertex/index buffers once (shared across all passes)
-    sprite_batch_.bind(cmd, current_frame_);
+        // Bind vertex/index buffers once (shared across all passes)
+        sprite_batch_.bind(cmd, current_frame_);
 
-    // Tilemap pass
-    if (scene.tile_layer().has_value()) {
+        // Tilemap pass
+        if (scene.tile_layer().has_value()) {
+            sprite_batch_.begin();
+            for (const auto& draw_info : scene.tile_layer()->generate_draw_infos()) {
+                sprite_batch_.draw(draw_info);
+            }
+            auto tile_flush = sprite_batch_.flush(current_frame_);
+            if (tile_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &tilemap_descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, tile_flush.index_count, 1, 0, tile_flush.vertex_offset, 0);
+            }
+        }
+
+        // Entity pass
         sprite_batch_.begin();
-        for (const auto& draw_info : scene.tile_layer()->generate_draw_infos()) {
-            sprite_batch_.draw(draw_info);
+        for (const auto& info : entity_sprites) {
+            sprite_batch_.draw(info);
         }
-        auto tile_flush = sprite_batch_.flush(current_frame_);
-        if (tile_flush.index_count > 0) {
+        auto entity_flush = sprite_batch_.flush(current_frame_);
+        if (entity_flush.index_count > 0) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
-                                    0, 1, &tilemap_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, tile_flush.index_count, 1, 0, tile_flush.vertex_offset, 0);
+                                    0, 1, &descriptor_sets_[current_frame_], 0, nullptr);
+            vkCmdDrawIndexed(cmd, entity_flush.index_count, 1, 0, entity_flush.vertex_offset, 0);
         }
+
+        // Particle pass
+        if (!particles.empty()) {
+            sprite_batch_.begin();
+            for (const auto& spr : particles) {
+                sprite_batch_.draw(spr);
+            }
+            auto particle_flush = sprite_batch_.flush(current_frame_);
+            if (particle_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &particle_descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, particle_flush.index_count, 1, 0,
+                                 particle_flush.vertex_offset, 0);
+            }
+        }
+
+        // Overlay pass (world-space, font texture)
+        if (font_initialized_ && !overlay.empty()) {
+            sprite_batch_.begin();
+            for (const auto& spr : overlay) {
+                sprite_batch_.draw(spr);
+            }
+            auto overlay_flush = sprite_batch_.flush(current_frame_);
+            if (overlay_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &font_descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, overlay_flush.index_count, 1, 0,
+                                 overlay_flush.vertex_offset, 0);
+            }
+        }
+
+        vkCmdEndRenderPass(cmd);
     }
 
-    // Entity pass
-    sprite_batch_.begin();
-    for (const auto& info : entity_sprites) {
-        sprite_batch_.draw(info);
-    }
-    auto entity_flush = sprite_batch_.flush(current_frame_);
-    if (entity_flush.index_count > 0) {
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_, 0,
-                                1, &descriptor_sets_[current_frame_], 0, nullptr);
-        vkCmdDrawIndexed(cmd, entity_flush.index_count, 1, 0, entity_flush.vertex_offset, 0);
-    }
+    // ===== Pass 2-4: Post-processing (bloom extract, blur H, blur V) + begin composite =====
+    PostProcessParams pp_params;
+    post_process_.record_post_process(cmd, image_index, pp_params);
 
-    // Particle pass (world-space, particle texture, depth ON, lit by point lights)
-    if (!particles.empty()) {
-        sprite_batch_.begin();
-        for (const auto& spr : particles) {
-            sprite_batch_.draw(spr);
-        }
-        auto particle_flush = sprite_batch_.flush(current_frame_);
-        if (particle_flush.index_count > 0) {
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
-                                    0, 1, &particle_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, particle_flush.index_count, 1, 0, particle_flush.vertex_offset, 0);
-        }
-    }
-
-    // Overlay pass (world-space, font texture, depth ON)
-    if (font_initialized_ && !overlay.empty()) {
-        sprite_batch_.begin();
-        for (const auto& spr : overlay) {
-            sprite_batch_.draw(spr);
-        }
-        auto overlay_flush = sprite_batch_.flush(current_frame_);
-        if (overlay_flush.index_count > 0) {
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
-                                    0, 1, &font_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, overlay_flush.index_count, 1, 0, overlay_flush.vertex_offset, 0);
-        }
-    }
-
-    // UI pass (screen-space, font texture, depth OFF)
+    // ===== Pass 5: UI (drawn inside the composite render pass, unaffected by post-processing) =====
     if (font_initialized_ && !ui.empty()) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ui_pipeline_);
+
+        // Re-bind sprite batch vertex/index buffers for UI drawing
+        sprite_batch_.bind(cmd, current_frame_);
+
         sprite_batch_.begin();
         for (const auto& spr : ui) {
             sprite_batch_.draw(spr);
@@ -239,6 +258,7 @@ void Renderer::draw_scene(Scene& scene,
         }
     }
 
+    // End composite render pass
     vkCmdEndRenderPass(cmd);
     vkEndCommandBuffer(cmd);
 
@@ -315,6 +335,7 @@ void Renderer::shutdown() {
     descriptors_.shutdown(context_.device());
     sync_.shutdown(context_.device());
     command_pool_.shutdown(context_.device());
+    post_process_.shutdown(context_.device(), context_.allocator());
     render_pass_mgr_.shutdown(context_.device(), context_.allocator());
     swapchain_.shutdown(context_.device());
     context_.shutdown();
@@ -351,7 +372,7 @@ void Renderer::create_sprite_pipeline() {
                            .set_depth_stencil(true, true)
                            .set_color_blend_alpha()
                            .set_layout(sprite_pipeline_layout_)
-                           .set_render_pass(render_pass_mgr_.render_pass(), 0)
+                           .set_render_pass(post_process_.scene_render_pass(), 0)
                            .build(device);
 
     vkDestroyShaderModule(device, frag, nullptr);
@@ -378,7 +399,7 @@ void Renderer::create_ui_pipeline() {
                        .set_depth_stencil(false, false)
                        .set_color_blend_alpha()
                        .set_layout(sprite_pipeline_layout_)
-                       .set_render_pass(render_pass_mgr_.render_pass(), 0)
+                       .set_render_pass(post_process_.composite_render_pass(), 0)
                        .build(device);
 
     vkDestroyShaderModule(device, frag, nullptr);

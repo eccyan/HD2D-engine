@@ -116,6 +116,22 @@ PipelineBuilder& PipelineBuilder::set_color_blend_alpha() {
     return *this;
 }
 
+PipelineBuilder& PipelineBuilder::set_no_blend() {
+    color_blend_attachment_.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    color_blend_attachment_.blendEnable = VK_FALSE;
+    return *this;
+}
+
+PipelineBuilder& PipelineBuilder::set_no_vertex_input() {
+    vertex_input_.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertex_input_.vertexBindingDescriptionCount = 0;
+    vertex_input_.pVertexBindingDescriptions = nullptr;
+    vertex_input_.vertexAttributeDescriptionCount = 0;
+    vertex_input_.pVertexAttributeDescriptions = nullptr;
+    return *this;
+}
+
 PipelineBuilder& PipelineBuilder::set_layout(VkPipelineLayout layout) {
     layout_ = layout;
     return *this;
