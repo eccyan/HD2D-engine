@@ -20,15 +20,22 @@ struct SpriteDrawInfo {
     glm::vec2 uv_max{1.0f, 1.0f};    // texture UV bottom-right
 };
 
+struct FlushResult {
+    uint32_t index_count   = 0;
+    int32_t  vertex_offset = 0;
+};
+
 class SpriteBatch {
 public:
     void init(VmaAllocator allocator, VkDevice device, VkCommandPool cmd_pool, VkQueue queue);
     void shutdown(VmaAllocator allocator);
 
+    void begin_frame();
     void begin();
     void draw(const SpriteDrawInfo& info);
-    // Flush pending sprites into vertex buffer for given frame; returns index count to draw.
-    uint32_t flush(uint32_t frame_index);
+    // Flush pending sprites into vertex buffer for given frame.
+    // Returns index count and vertex offset for vkCmdDrawIndexed.
+    FlushResult flush(uint32_t frame_index);
     void bind(VkCommandBuffer cmd, uint32_t frame_index);
 
 private:
@@ -36,6 +43,7 @@ private:
     Buffer index_buffer_;
 
     std::vector<SpriteDrawInfo> pending_sprites_;
+    uint32_t frame_vertex_offset_ = 0;
 };
 
 }  // namespace vulkan_game

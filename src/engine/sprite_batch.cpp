@@ -74,6 +74,10 @@ void SpriteBatch::shutdown(VmaAllocator allocator) {
     }
 }
 
+void SpriteBatch::begin_frame() {
+    frame_vertex_offset_ = 0;
+}
+
 void SpriteBatch::begin() {
     pending_sprites_.clear();
 }
@@ -84,9 +88,9 @@ void SpriteBatch::draw(const SpriteDrawInfo& info) {
     }
 }
 
-uint32_t SpriteBatch::flush(uint32_t frame_index) {
+FlushResult SpriteBatch::flush(uint32_t frame_index) {
     if (pending_sprites_.empty()) {
-        return 0;
+        return {};
     }
 
     // Back-to-front sort: larger Z = further from camera
@@ -95,8 +99,9 @@ uint32_t SpriteBatch::flush(uint32_t frame_index) {
                   return a.position.z > b.position.z;
               });
 
-    // Build vertices
+    // Build vertices at current write offset
     auto* verts = static_cast<Vertex*>(vertex_buffers_[frame_index].mapped());
+    uint32_t base = frame_vertex_offset_;
     for (uint32_t i = 0; i < static_cast<uint32_t>(pending_sprites_.size()); ++i) {
         const auto& s = pending_sprites_[i];
         float cx = s.position.x;
@@ -105,14 +110,21 @@ uint32_t SpriteBatch::flush(uint32_t frame_index) {
         float hw = s.size.x * 0.5f;
         float hh = s.size.y * 0.5f;
 
+        uint32_t vi = base + i * 4;
         // TL, TR, BR, BL
-        verts[i * 4 + 0] = {{cx - hw, cy + hh, cz}, {s.uv_min.x, s.uv_min.y}, s.color};
-        verts[i * 4 + 1] = {{cx + hw, cy + hh, cz}, {s.uv_max.x, s.uv_min.y}, s.color};
-        verts[i * 4 + 2] = {{cx + hw, cy - hh, cz}, {s.uv_max.x, s.uv_max.y}, s.color};
-        verts[i * 4 + 3] = {{cx - hw, cy - hh, cz}, {s.uv_min.x, s.uv_max.y}, s.color};
+        verts[vi + 0] = {{cx - hw, cy + hh, cz}, {s.uv_min.x, s.uv_min.y}, s.color};
+        verts[vi + 1] = {{cx + hw, cy + hh, cz}, {s.uv_max.x, s.uv_min.y}, s.color};
+        verts[vi + 2] = {{cx + hw, cy - hh, cz}, {s.uv_max.x, s.uv_max.y}, s.color};
+        verts[vi + 3] = {{cx - hw, cy - hh, cz}, {s.uv_min.x, s.uv_max.y}, s.color};
     }
 
-    return static_cast<uint32_t>(pending_sprites_.size()) * 6;
+    uint32_t sprite_count = static_cast<uint32_t>(pending_sprites_.size());
+    frame_vertex_offset_ = base + sprite_count * 4;
+
+    FlushResult result;
+    result.index_count = sprite_count * 6;
+    result.vertex_offset = static_cast<int32_t>(base);
+    return result;
 }
 
 void SpriteBatch::bind(VkCommandBuffer cmd, uint32_t frame_index) {

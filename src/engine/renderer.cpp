@@ -155,6 +155,9 @@ void Renderer::draw_scene(Scene& scene,
     vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_);
 
+    // Reset vertex write offset for this frame
+    sprite_batch_.begin_frame();
+
     // Build UBO with camera VP and lighting data from scene
     UniformBufferObject ubo{};
     ubo.vp = camera_.view_projection();
@@ -168,18 +171,20 @@ void Renderer::draw_scene(Scene& scene,
     }
     update_uniform_buffer(current_frame_, ubo);
 
+    // Bind vertex/index buffers once (shared across all passes)
+    sprite_batch_.bind(cmd, current_frame_);
+
     // Tilemap pass
     if (scene.tile_layer().has_value()) {
         sprite_batch_.begin();
         for (const auto& draw_info : scene.tile_layer()->generate_draw_infos()) {
             sprite_batch_.draw(draw_info);
         }
-        uint32_t tile_index_count = sprite_batch_.flush(current_frame_);
-        if (tile_index_count > 0) {
-            sprite_batch_.bind(cmd, current_frame_);
+        auto tile_flush = sprite_batch_.flush(current_frame_);
+        if (tile_flush.index_count > 0) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
                                     0, 1, &tilemap_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, tile_index_count, 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd, tile_flush.index_count, 1, 0, tile_flush.vertex_offset, 0);
         }
     }
 
@@ -195,12 +200,11 @@ void Renderer::draw_scene(Scene& scene,
         info.uv_max = e.uv_max;
         sprite_batch_.draw(info);
     }
-    uint32_t entity_index_count = sprite_batch_.flush(current_frame_);
-    if (entity_index_count > 0) {
-        sprite_batch_.bind(cmd, current_frame_);
+    auto entity_flush = sprite_batch_.flush(current_frame_);
+    if (entity_flush.index_count > 0) {
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_, 0,
                                 1, &descriptor_sets_[current_frame_], 0, nullptr);
-        vkCmdDrawIndexed(cmd, entity_index_count, 1, 0, 0, 0);
+        vkCmdDrawIndexed(cmd, entity_flush.index_count, 1, 0, entity_flush.vertex_offset, 0);
     }
 
     // Particle pass (world-space, particle texture, depth ON, lit by point lights)
@@ -209,12 +213,11 @@ void Renderer::draw_scene(Scene& scene,
         for (const auto& spr : particles) {
             sprite_batch_.draw(spr);
         }
-        uint32_t particle_index_count = sprite_batch_.flush(current_frame_);
-        if (particle_index_count > 0) {
-            sprite_batch_.bind(cmd, current_frame_);
+        auto particle_flush = sprite_batch_.flush(current_frame_);
+        if (particle_flush.index_count > 0) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
                                     0, 1, &particle_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, particle_index_count, 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd, particle_flush.index_count, 1, 0, particle_flush.vertex_offset, 0);
         }
     }
 
@@ -224,12 +227,11 @@ void Renderer::draw_scene(Scene& scene,
         for (const auto& spr : overlay) {
             sprite_batch_.draw(spr);
         }
-        uint32_t overlay_index_count = sprite_batch_.flush(current_frame_);
-        if (overlay_index_count > 0) {
-            sprite_batch_.bind(cmd, current_frame_);
+        auto overlay_flush = sprite_batch_.flush(current_frame_);
+        if (overlay_flush.index_count > 0) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
                                     0, 1, &font_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, overlay_index_count, 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd, overlay_flush.index_count, 1, 0, overlay_flush.vertex_offset, 0);
         }
     }
 
@@ -240,12 +242,11 @@ void Renderer::draw_scene(Scene& scene,
         for (const auto& spr : ui) {
             sprite_batch_.draw(spr);
         }
-        uint32_t ui_index_count = sprite_batch_.flush(current_frame_);
-        if (ui_index_count > 0) {
-            sprite_batch_.bind(cmd, current_frame_);
+        auto ui_flush = sprite_batch_.flush(current_frame_);
+        if (ui_flush.index_count > 0) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, sprite_pipeline_layout_,
                                     0, 1, &ui_descriptor_sets_[current_frame_], 0, nullptr);
-            vkCmdDrawIndexed(cmd, ui_index_count, 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd, ui_flush.index_count, 1, 0, ui_flush.vertex_offset, 0);
         }
     }
 
