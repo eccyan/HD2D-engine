@@ -1,8 +1,9 @@
-#include "vulkan_game/engine/ecs/systems.hpp"
-#include "vulkan_game/engine/ecs/components.hpp"
+#include "vulkan_game/game/systems.hpp"
+#include "vulkan_game/engine/ecs/default_components.hpp"
 #include "vulkan_game/engine/ecs/ecs.hpp"
 #include "vulkan_game/engine/direction.hpp"
 #include "vulkan_game/engine/sprite_batch.hpp"
+#include "vulkan_game/game/components.hpp"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>

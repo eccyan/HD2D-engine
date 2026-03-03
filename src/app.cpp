@@ -1,6 +1,7 @@
 #include "vulkan_game/app.hpp"
-#include "vulkan_game/engine/ecs/components.hpp"
-#include "vulkan_game/engine/ecs/systems.hpp"
+#include "vulkan_game/engine/ecs/default_components.hpp"
+#include "vulkan_game/game/components.hpp"
+#include "vulkan_game/game/systems.hpp"
 #include "vulkan_game/engine/tilemap.hpp"
 
 #define GLFW_INCLUDE_VULKAN
