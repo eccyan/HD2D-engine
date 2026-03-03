@@ -439,6 +439,7 @@ void App::run() {
     renderer_.init_font(font_atlas_);
     renderer_.init_particles();
     audio_.init("assets");
+    control_server_.start();
     init_scene();
     main_loop();
     cleanup();
@@ -702,8 +703,10 @@ void App::update_game(float dt) {
             if (!dialog_state_.advance()) {
                 game_mode_ = GameMode::Explore;
                 audio_.play(SoundId::DialogClose);
+                emit_event("dialog_ended");
             } else {
                 audio_.play(SoundId::DialogBlip);
+                emit_event("dialog_advanced", {{"line", dialog_state_.current_line}});
             }
         }
 
@@ -828,6 +831,7 @@ void App::update_game(float dt) {
                     dialog_state_.start(npc_dialogs_[di]);
                     game_mode_ = GameMode::Dialog;
                     audio_.play(SoundId::DialogOpen);
+                    emit_event("dialog_started", {{"npc_index", nearest_npc}});
 
                     // Transition player to idle
                     player_anim_.transition_to(std::string("idle_") + dir_suffix);
@@ -996,23 +1000,255 @@ void App::main_loop() {
 
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
-        input_.update();
 
-        auto now = std::chrono::steady_clock::now();
-        float dt = std::chrono::duration<float>(now - last_update_time_).count();
-        last_update_time_ = now;
+        // Handle client disconnect → revert to realtime
+        if (!control_server_.has_client() && step_mode_) {
+            step_mode_ = false;
+            pending_steps_ = 0;
+            input_.clear_injections();
+        }
 
-        if (dt > 0.1f) dt = 0.1f;
+        process_commands();
 
-        update_game(dt);
+        if (step_mode_) {
+            // Step mode: only update input + game when there are pending steps.
+            // This prevents inject_once_ from being consumed by input_.update()
+            // in frames where update_game doesn't run.
+            bool did_step = pending_steps_ > 0;
+            while (pending_steps_ > 0) {
+                input_.update();
+                update_game(kFixedDt);
+                tick_++;
+                pending_steps_--;
+            }
+            // Send state after all steps consumed
+            if (did_step) {
+                control_server_.send(build_state_json());
+            }
+        } else {
+            // Realtime mode
+            input_.update();
 
+            auto now = std::chrono::steady_clock::now();
+            float dt = std::chrono::duration<float>(now - last_update_time_).count();
+            last_update_time_ = now;
+
+            if (dt > 0.1f) dt = 0.1f;
+
+            update_game(dt);
+            tick_++;
+        }
+
+        // Always render
         std::vector<SpriteDrawInfo> particle_sprites;
         particles_.generate_draw_infos(particle_sprites);
         renderer_.draw_scene(scene_, particle_sprites, overlay_sprites_, ui_sprites_);
     }
 }
 
+void App::process_commands() {
+    auto commands = control_server_.poll();
+    for (const auto& cmd_json : commands) {
+        if (!cmd_json.contains("cmd") || !cmd_json["cmd"].is_string()) {
+            control_server_.send({{"type", "error"}, {"message", "missing 'cmd' field"}});
+            continue;
+        }
+
+        const std::string cmd = cmd_json["cmd"];
+
+        if (cmd == "get_state") {
+            control_server_.send(build_state_json());
+        } else if (cmd == "get_map") {
+            control_server_.send(build_map_json());
+        } else if (cmd == "move") {
+            // Clear previous movement injections
+            input_.inject_key(GLFW_KEY_W, false);
+            input_.inject_key(GLFW_KEY_A, false);
+            input_.inject_key(GLFW_KEY_S, false);
+            input_.inject_key(GLFW_KEY_D, false);
+            input_.inject_key(GLFW_KEY_LEFT_SHIFT, false);
+
+            if (cmd_json.contains("direction") && cmd_json["direction"].is_string()) {
+                const std::string dir = cmd_json["direction"];
+                if (dir == "up")         input_.inject_key(GLFW_KEY_W, true);
+                else if (dir == "left")  input_.inject_key(GLFW_KEY_A, true);
+                else if (dir == "down")  input_.inject_key(GLFW_KEY_S, true);
+                else if (dir == "right") input_.inject_key(GLFW_KEY_D, true);
+            }
+
+            bool sprint = cmd_json.value("sprint", false);
+            input_.inject_key(GLFW_KEY_LEFT_SHIFT, sprint);
+
+            control_server_.send({{"type", "ok"}});
+        } else if (cmd == "stop") {
+            input_.clear_injections();
+            control_server_.send({{"type", "ok"}});
+        } else if (cmd == "interact") {
+            input_.inject_key_once(GLFW_KEY_E);
+            control_server_.send({{"type", "ok"}});
+        } else if (cmd == "set_mode") {
+            if (cmd_json.contains("mode") && cmd_json["mode"].is_string()) {
+                const std::string mode = cmd_json["mode"];
+                if (mode == "step") {
+                    step_mode_ = true;
+                    pending_steps_ = 0;
+                    last_update_time_ = std::chrono::steady_clock::now();
+                    control_server_.send({{"type", "ok"}});
+                } else if (mode == "realtime") {
+                    step_mode_ = false;
+                    pending_steps_ = 0;
+                    last_update_time_ = std::chrono::steady_clock::now();
+                    control_server_.send({{"type", "ok"}});
+                } else {
+                    control_server_.send({{"type", "error"},
+                                          {"message", "unknown mode: " + mode}});
+                }
+            } else {
+                control_server_.send({{"type", "error"}, {"message", "missing 'mode' field"}});
+            }
+        } else if (cmd == "step") {
+            if (!step_mode_) {
+                control_server_.send({{"type", "error"},
+                                      {"message", "not in step mode"}});
+            } else {
+                int frames = cmd_json.value("frames", 1);
+                if (frames < 1) frames = 1;
+                if (frames > 600) frames = 600;
+                pending_steps_ += frames;
+                // State will be sent after steps are consumed in main_loop
+            }
+        } else {
+            control_server_.send({{"type", "error"},
+                                  {"message", "unknown command: " + cmd}});
+        }
+    }
+}
+
+nlohmann::json App::build_state_json() const {
+    nlohmann::json state;
+    state["type"] = "state";
+    state["tick"] = tick_;
+
+    // Game mode
+    state["game_mode"] = (game_mode_ == GameMode::Dialog) ? "dialog" : "explore";
+
+    // Player
+    if (player_entity_) {
+        const auto& pos = player_entity_->transform.position;
+        const char* dir_str = "down";
+        switch (player_dir_) {
+            case Direction::Down:  dir_str = "down";  break;
+            case Direction::Left:  dir_str = "left";  break;
+            case Direction::Right: dir_str = "right"; break;
+            case Direction::Up:    dir_str = "up";    break;
+        }
+        state["player"] = {
+            {"x", pos.x},
+            {"y", pos.y},
+            {"direction", dir_str},
+            {"animation", player_anim_.current_state()}
+        };
+    }
+
+    // NPCs
+    nlohmann::json npc_arr = nlohmann::json::array();
+    for (size_t i = 0; i < npcs_.size(); ++i) {
+        const auto& npc = npcs_[i];
+        const auto& pos = npc.entity->transform.position;
+        const char* dir_str = "down";
+        switch (npc.dir) {
+            case Direction::Down:  dir_str = "down";  break;
+            case Direction::Left:  dir_str = "left";  break;
+            case Direction::Right: dir_str = "right"; break;
+            case Direction::Up:    dir_str = "up";    break;
+        }
+        npc_arr.push_back({
+            {"index", i},
+            {"x", pos.x},
+            {"y", pos.y},
+            {"direction", dir_str}
+        });
+    }
+    state["npcs"] = npc_arr;
+
+    // Dialog
+    if (game_mode_ == GameMode::Dialog && dialog_state_.active) {
+        const auto& line = dialog_state_.current();
+        state["dialog"] = {
+            {"speaker_key", line.speaker_key},
+            {"text_key", line.text_key},
+            {"line", dialog_state_.current_line}
+        };
+    } else {
+        state["dialog"] = nullptr;
+    }
+
+    // Nearest NPC (proximity check)
+    if (player_entity_ && game_mode_ == GameMode::Explore) {
+        constexpr float kInteractRange = 1.5f;
+        int nearest = -1;
+        float nearest_dist_sq = kInteractRange * kInteractRange;
+        for (size_t i = 0; i < npcs_.size(); i++) {
+            float dx = npcs_[i].entity->transform.position.x - player_entity_->transform.position.x;
+            float dy = npcs_[i].entity->transform.position.y - player_entity_->transform.position.y;
+            float dist_sq = dx * dx + dy * dy;
+            if (dist_sq < nearest_dist_sq) {
+                nearest_dist_sq = dist_sq;
+                nearest = static_cast<int>(i);
+            }
+        }
+        if (nearest >= 0) {
+            state["nearby_npc"] = {{"index", nearest},
+                                   {"distance", std::sqrt(nearest_dist_sq)}};
+        } else {
+            state["nearby_npc"] = nullptr;
+        }
+    } else {
+        state["nearby_npc"] = nullptr;
+    }
+
+    return state;
+}
+
+nlohmann::json App::build_map_json() const {
+    nlohmann::json map;
+    map["type"] = "map";
+
+    if (scene_.tile_layer().has_value()) {
+        const auto& layer = *scene_.tile_layer();
+        map["width"] = layer.width;
+        map["height"] = layer.height;
+        map["tile_size"] = layer.tile_size;
+
+        nlohmann::json solid = nlohmann::json::array();
+        for (uint32_t row = 0; row < layer.height; ++row) {
+            nlohmann::json row_arr = nlohmann::json::array();
+            for (uint32_t col = 0; col < layer.width; ++col) {
+                uint32_t idx = row * layer.width + col;
+                row_arr.push_back(idx < layer.solid.size() && layer.solid[idx]);
+            }
+            solid.push_back(row_arr);
+        }
+        map["solid"] = solid;
+    }
+
+    return map;
+}
+
+void App::emit_event(const std::string& event, const nlohmann::json& data) {
+    if (!control_server_.has_client()) return;
+    nlohmann::json msg;
+    msg["type"] = "event";
+    msg["event"] = event;
+    msg["tick"] = tick_;
+    if (!data.is_null()) {
+        msg["data"] = data;
+    }
+    control_server_.send(msg);
+}
+
 void App::cleanup() {
+    control_server_.stop();
     audio_.shutdown();
     renderer_.shutdown();
     glfwDestroyWindow(window_);

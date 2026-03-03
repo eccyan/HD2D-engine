@@ -122,6 +122,7 @@ add_executable(vulkan_game
     src/engine/font_atlas.cpp
     src/engine/text_renderer.cpp
     src/engine/locale_manager.cpp
+    src/engine/control_server.cpp
 )
 
 target_include_directories(vulkan_game PRIVATE
