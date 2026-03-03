@@ -21,6 +21,10 @@ struct PostProcessParams {
     float dof_max_blur = 1.0f;
     float dof_near_plane = 0.1f;
     float dof_far_plane = 100.0f;
+    float fog_density = 0.0f;
+    float fog_color_r = 0.3f;
+    float fog_color_g = 0.35f;
+    float fog_color_b = 0.45f;
 };
 
 class PostProcessPipeline {

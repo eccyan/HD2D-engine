@@ -27,6 +27,8 @@ enum class ParticleTile : uint32_t {
     SoftGlow  = 1,
     Spark     = 2,
     SmokePuff = 3,
+    Raindrop  = 4,
+    Snowflake = 5,
 };
 
 struct EmitterConfig {
@@ -61,8 +63,8 @@ struct Emitter {
 
 class ParticleSystem {
 public:
-    static constexpr uint32_t kMaxParticles = 300;
-    static constexpr uint32_t kAtlasColumns = 4;
+    static constexpr uint32_t kMaxParticles = 600;
+    static constexpr uint32_t kAtlasColumns = 6;
 
     size_t add_emitter(const EmitterConfig& config, glm::vec2 position);
     void set_emitter_position(size_t index, glm::vec2 position);

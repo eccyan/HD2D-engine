@@ -25,11 +25,18 @@ public:
     void set_background_layers(std::vector<ParallaxLayer> layers) { background_layers_ = std::move(layers); }
     const std::vector<ParallaxLayer>& background_layers() const { return background_layers_; }
 
+    void set_fog_density(float d) { fog_density_ = d; }
+    float fog_density() const { return fog_density_; }
+    void set_fog_color(const glm::vec3& c) { fog_color_ = c; }
+    const glm::vec3& fog_color() const { return fog_color_; }
+
 private:
     std::optional<TileLayer> tile_layer_;
     glm::vec4 ambient_color_{0.25f, 0.28f, 0.45f, 1.0f};
     std::vector<PointLight> lights_;
     std::vector<ParallaxLayer> background_layers_;
+    float fog_density_ = 0.0f;
+    glm::vec3 fog_color_{0.3f, 0.35f, 0.45f};
 };
 
 }  // namespace vulkan_game

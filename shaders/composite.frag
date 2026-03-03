@@ -19,10 +19,15 @@ layout(push_constant) uniform PushConstants {
     float dof_focus_range;
     float dof_max_blur;
     float _pad0;
-    // vec4 2: depth linearization
+    // vec4 2: depth + fog density
     float depth_A;  // far / (far - near)
     float depth_B;  // near * far / (far - near)
+    float fog_density;
     float _pad1;
+    // vec4 3: fog color
+    float fog_r;
+    float fog_g;
+    float fog_b;
     float _pad2;
 } pc;
 
@@ -45,6 +50,14 @@ void main() {
 
     // DoF blend
     vec3 color = mix(scene, dof_blurred, coc);
+
+    // Depth-based fog (exponential squared)
+    if (pc.fog_density > 0.0) {
+        float fog_amount = 1.0 - exp(-pc.fog_density * linear_z * linear_z);
+        fog_amount = clamp(fog_amount, 0.0, 1.0);
+        vec3 fog_col = vec3(pc.fog_r, pc.fog_g, pc.fog_b);
+        color = mix(color, fog_col, fog_amount);
+    }
 
     // Additive bloom
     color = color + bloom * pc.bloom_intensity;

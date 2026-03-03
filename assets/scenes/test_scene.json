@@ -117,6 +117,24 @@
     "tile": "Spark", "z": -0.04,
     "spawn_offset_min": [-0.4, -0.3], "spawn_offset_max": [0.4, 0.3]
   },
+  "weather": {
+    "enabled": true,
+    "type": "rain",
+    "emitter": {
+      "spawn_rate": 120.0,
+      "particle_lifetime_min": 1.5, "particle_lifetime_max": 2.5,
+      "velocity_min": [-0.5, -4.0], "velocity_max": [0.5, -6.0],
+      "acceleration": [0.0, -0.5],
+      "size_min": 0.02, "size_max": 0.06, "size_end_scale": 0.8,
+      "color_start": [0.7, 0.8, 1.0, 0.7], "color_end": [0.5, 0.6, 0.8, 0.0],
+      "tile": "Raindrop", "z": -0.3,
+      "spawn_offset_min": [-12.0, -8.0], "spawn_offset_max": [12.0, 8.0]
+    },
+    "ambient_override": [0.18, 0.20, 0.35, 1.0],
+    "fog_density": 0.03,
+    "fog_color": [0.3, 0.35, 0.45],
+    "transition_speed": 2.0
+  },
   "background_layers": [
     {
       "texture": "bg_sky",

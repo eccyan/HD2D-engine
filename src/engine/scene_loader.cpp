@@ -18,6 +18,8 @@ ParticleTile SceneLoader::parse_tile(const std::string& s) {
     if (s == "SoftGlow")  return ParticleTile::SoftGlow;
     if (s == "Spark")     return ParticleTile::Spark;
     if (s == "SmokePuff") return ParticleTile::SmokePuff;
+    if (s == "Raindrop")  return ParticleTile::Raindrop;
+    if (s == "Snowflake") return ParticleTile::Snowflake;
     return ParticleTile::Circle;
 }
 
@@ -187,6 +189,21 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
             if (layer_j.contains("tint")) layer.tint = parse_vec4(layer_j["tint"]);
             data.background_layers.push_back(std::move(layer));
         }
+    }
+
+    // Weather
+    if (j.contains("weather")) {
+        const auto& w = j["weather"];
+        data.weather.enabled = w.value("enabled", false);
+        data.weather.type = w.value("type", "clear");
+        if (w.contains("emitter")) data.weather.emitter = parse_emitter(w["emitter"]);
+        if (w.contains("ambient_override")) data.weather.ambient_override = parse_vec4(w["ambient_override"]);
+        data.weather.fog_density = w.value("fog_density", 0.0f);
+        if (w.contains("fog_color")) {
+            auto fc = parse_vec3(w["fog_color"]);
+            data.weather.fog_color = fc;
+        }
+        data.weather.transition_speed = w.value("transition_speed", 1.0f);
     }
 
     return data;

@@ -626,12 +626,12 @@ void PostProcessPipeline::create_pipelines(VkDevice device) {
         }
     }
 
-    // Composite pipeline layout: composite_layout_ + 48B push constant
+    // Composite pipeline layout: composite_layout_ + 64B push constant
     {
         VkPushConstantRange push{};
         push.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         push.offset = 0;
-        push.size = 48;  // 3 × vec4 (bloom_params, dof_params, depth_params)
+        push.size = 64;  // 4 × vec4 (bloom_params, dof_params, depth_params, fog_params)
 
         VkPipelineLayoutCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -860,7 +860,7 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, composite_pipeline_layout_,
                                 0, 1, &ds_composite_, 0, nullptr);
 
-        // 48B push constant: 3 × vec4
+        // 64B push constant: 4 × vec4
         float near = params.dof_near_plane;
         float far = params.dof_far_plane;
         struct {
@@ -869,7 +869,9 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
             float dof_focus_distance; float dof_focus_range;
             float dof_max_blur; float pad0;
             float depth_A; float depth_B;
-            float pad1; float pad2;
+            float fog_density; float pad1;
+            float fog_r; float fog_g;
+            float fog_b; float pad2;
         } comp_pc;
         comp_pc.bloom_intensity = params.bloom_intensity;
         comp_pc.exposure = params.exposure;
@@ -881,10 +883,14 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         comp_pc.pad0 = 0.0f;
         comp_pc.depth_A = far / (far - near);
         comp_pc.depth_B = (near * far) / (far - near);
+        comp_pc.fog_density = params.fog_density;
         comp_pc.pad1 = 0.0f;
+        comp_pc.fog_r = params.fog_color_r;
+        comp_pc.fog_g = params.fog_color_g;
+        comp_pc.fog_b = params.fog_color_b;
         comp_pc.pad2 = 0.0f;
         vkCmdPushConstants(cmd, composite_pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, 48, &comp_pc);
+                           0, 64, &comp_pc);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
         // NOTE: render pass left open for UI drawing. Caller must end it.

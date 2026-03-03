@@ -277,6 +277,10 @@ void Renderer::draw_scene(Scene& scene,
     PostProcessParams pp_params;
     pp_params.dof_near_plane = camera_.near_plane();
     pp_params.dof_far_plane = camera_.far_plane();
+    pp_params.fog_density = scene.fog_density();
+    pp_params.fog_color_r = scene.fog_color().r;
+    pp_params.fog_color_g = scene.fog_color().g;
+    pp_params.fog_color_b = scene.fog_color().b;
     post_process_.record_post_process(cmd, image_index, pp_params);
 
     // ===== Pass 5: UI (drawn inside the composite render pass, unaffected by post-processing) =====

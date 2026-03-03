@@ -161,6 +161,7 @@ add_executable(vulkan_game
     src/engine/resource_manager.cpp
     src/engine/game_state.cpp
     src/engine/scene_loader.cpp
+    src/engine/weather_system.cpp
     src/engine/ui/ui_context.cpp
     src/engine/save_system.cpp
     src/engine/scripting/wren_vm.cpp

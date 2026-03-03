@@ -17,6 +17,7 @@
 #include "vulkan_game/engine/scripting/script_system.hpp"
 #include "vulkan_game/engine/scripting/wren_bindings.hpp"
 #include "vulkan_game/engine/scene.hpp"
+#include "vulkan_game/engine/weather_system.hpp"
 #include "vulkan_game/engine/text_renderer.hpp"
 #include "vulkan_game/engine/types.hpp"
 #include "vulkan_game/engine/ui/ui_context.hpp"
@@ -131,9 +132,10 @@ private:
     DialogState dialog_state_;
     std::vector<DialogScript> npc_dialogs_;
 
-    // Particles
+    // Particles & Weather
     ParticleSystem particles_;
     size_t torch_emitter_ids_[4]{};
+    WeatherSystem weather_system_;
 
     // Audio
     AudioSystem audio_;

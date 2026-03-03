@@ -42,11 +42,22 @@ struct ParallaxLayerData {
     glm::vec4 tint{1.0f};
 };
 
+struct WeatherData {
+    bool enabled = false;
+    std::string type = "clear";
+    EmitterConfig emitter;
+    glm::vec4 ambient_override{0.2f, 0.22f, 0.35f, 1.0f};
+    float fog_density = 0.0f;
+    glm::vec3 fog_color{0.3f, 0.35f, 0.45f};
+    float transition_speed = 1.0f;
+};
+
 struct SceneData {
     TileLayer tilemap;
     glm::vec4 ambient_color{0.25f, 0.28f, 0.45f, 1.0f};
     std::vector<PointLight> static_lights;
     std::vector<ParallaxLayerData> background_layers;
+    WeatherData weather;
 
     // Player
     glm::vec3 player_position{0.0f};

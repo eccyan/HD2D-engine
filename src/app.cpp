@@ -131,8 +131,8 @@ void App::generate_tileset() {
 
 void App::generate_particle_atlas() {
     constexpr int kTileSize = 16;
-    constexpr int kTiles    = 4;
-    constexpr int kWidth    = kTileSize * kTiles;  // 64
+    constexpr int kTiles    = 6;
+    constexpr int kWidth    = kTileSize * kTiles;  // 96
     constexpr int kHeight   = kTileSize;           // 16
     constexpr int kChannels = 4;
     constexpr float kCenter = 7.5f;
@@ -187,6 +187,31 @@ void App::generate_particle_atlas() {
                 val = std::max(0.0f, std::min(1.0f, val));
                 val = std::sqrt(val);
                 set_pixel(3 * kTileSize + px, py, static_cast<uint8_t>(val * 255.0f));
+            }
+
+            // Tile 4: Raindrop (vertical streak, narrow)
+            {
+                float ax = std::abs(dx);
+                float fy = static_cast<float>(py) / static_cast<float>(kTileSize - 1);
+                // Narrow horizontal (2px wide center), alpha gradient top-to-bottom
+                float h_falloff = std::max(0.0f, 1.0f - ax / 1.5f);
+                float v_alpha = fy;  // faint at top, solid at bottom
+                float val = h_falloff * v_alpha;
+                val = std::max(0.0f, std::min(1.0f, val));
+                set_pixel(4 * kTileSize + px, py, static_cast<uint8_t>(val * 255.0f));
+            }
+
+            // Tile 5: Snowflake (cross/star pattern, soft edges)
+            {
+                float adx = std::abs(dx);
+                float ady = std::abs(dy);
+                // Cross: bright along axes
+                float cross = std::max(0.0f, 1.0f - std::min(adx, ady) / 2.0f);
+                // Radial falloff
+                float radial = std::max(0.0f, 1.0f - dist / kRadius);
+                float val = cross * radial;
+                val = std::max(0.0f, std::min(1.0f, val));
+                set_pixel(5 * kTileSize + px, py, static_cast<uint8_t>(val * 255.0f));
             }
         }
     }
@@ -666,6 +691,22 @@ void App::init_scene() {
             scene_data.torch_emitter, scene_data.torch_positions[i]);
     }
 
+    // Weather system from scene data
+    if (scene_data.weather.enabled) {
+        WeatherConfig weather_cfg;
+        if (scene_data.weather.type == "rain") {
+            weather_cfg.type = WeatherType::Rain;
+        } else if (scene_data.weather.type == "snow") {
+            weather_cfg.type = WeatherType::Snow;
+        }
+        weather_cfg.emitter = scene_data.weather.emitter;
+        weather_cfg.ambient_override = scene_data.weather.ambient_override;
+        weather_cfg.fog_density = scene_data.weather.fog_density;
+        weather_cfg.fog_color = scene_data.weather.fog_color;
+        weather_cfg.transition_speed = scene_data.weather.transition_speed;
+        weather_system_.init(particles_, scene_, weather_cfg);
+    }
+
     // Audio: position torch crackle instances
     for (size_t i = 0; i < scene_data.torch_audio_positions.size() && i < 4; ++i) {
         audio_.set_torch_position(static_cast<uint32_t>(i), scene_data.torch_audio_positions[i]);
@@ -782,6 +823,12 @@ void App::update_game(float dt) {
                 }
             }
         }
+    }
+
+    // Weather system update (before particles, updates ambient + fog)
+    if (weather_system_.active()) {
+        const auto& cam = renderer_.camera();
+        weather_system_.update(dt, scene_, {cam.target().x, cam.target().y});
     }
 
     // ECS systems: particles, lighting, sprite collection
