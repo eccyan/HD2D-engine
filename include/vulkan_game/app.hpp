@@ -101,6 +101,7 @@ private:
     static void generate_player_sheet();
     static void generate_tileset();
     static void generate_particle_atlas();
+    static void generate_background_textures();
     static void generate_audio_assets();
 
     GLFWwindow* window_ = nullptr;

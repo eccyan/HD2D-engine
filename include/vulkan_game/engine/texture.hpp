@@ -11,11 +11,14 @@ class Texture {
 public:
     static Texture load_from_file(VkDevice device, VmaAllocator allocator,
                                   VkCommandPool cmd_pool, VkQueue queue,
-                                  const std::string& path);
+                                  const std::string& path,
+                                  VkFilter filter = VK_FILTER_NEAREST,
+                                  VkSamplerAddressMode address_mode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
     static Texture load_from_memory(VkDevice device, VmaAllocator allocator,
                                     VkCommandPool cmd_pool, VkQueue queue,
                                     const uint8_t* pixels, uint32_t width, uint32_t height,
-                                    VkFilter filter = VK_FILTER_NEAREST);
+                                    VkFilter filter = VK_FILTER_NEAREST,
+                                    VkSamplerAddressMode address_mode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
     void destroy(VkDevice device, VmaAllocator allocator);
 
     VkImageView image_view() const { return image_view_; }

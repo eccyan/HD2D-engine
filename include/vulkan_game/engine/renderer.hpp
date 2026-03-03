@@ -30,6 +30,7 @@ public:
     void init(GLFWwindow* window, ResourceManager& resources);
     void init_font(const FontAtlas& atlas, ResourceManager& resources);
     void init_particles(ResourceManager& resources);
+    void init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_textures);
     void draw_frame();
     void draw_scene(Scene& scene,
                     const std::vector<SpriteDrawInfo>& entity_sprites = {},
@@ -69,11 +70,13 @@ private:
     ResourceHandle<Texture> tileset_texture_;
     ResourceHandle<Texture> font_texture_;
     ResourceHandle<Texture> particle_texture_;
+    std::vector<ResourceHandle<Texture>> bg_textures_;
     std::array<VkDescriptorSet, kMaxFramesInFlight> descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> tilemap_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> font_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> ui_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> particle_descriptor_sets_{};
+    std::vector<std::array<VkDescriptorSet, kMaxFramesInFlight>> bg_descriptor_sets_;
     Camera camera_;
 
     uint32_t current_frame_ = 0;

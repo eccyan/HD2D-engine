@@ -148,6 +148,7 @@ add_executable(vulkan_game
     src/engine/input_manager.cpp
     src/engine/scene.cpp
     src/engine/tilemap.cpp
+    src/engine/parallax_layer.cpp
     src/engine/animation.cpp
     src/engine/animation_state_machine.cpp
     src/engine/particle.cpp

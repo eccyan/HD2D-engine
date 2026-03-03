@@ -196,6 +196,64 @@ void App::generate_particle_atlas() {
                    pixels.data(), kWidth * kChannels);
 }
 
+void App::generate_background_textures() {
+    std::filesystem::create_directories("assets/textures");
+    constexpr int kChannels = 4;
+
+    // Sky gradient: 128x64, deep indigo at top to warm horizon at bottom
+    {
+        constexpr int w = 128, h = 64;
+        std::vector<uint8_t> px(w * h * kChannels);
+        for (int y = 0; y < h; ++y) {
+            float t = static_cast<float>(y) / static_cast<float>(h - 1);
+            auto r = static_cast<uint8_t>(15 + t * 65);
+            auto g = static_cast<uint8_t>(10 + t * 40);
+            auto b = static_cast<uint8_t>(50 + t * 40);
+            for (int x = 0; x < w; ++x) {
+                int idx = (y * w + x) * kChannels;
+                px[idx] = r; px[idx+1] = g; px[idx+2] = b; px[idx+3] = 255;
+            }
+        }
+        stbi_write_png("assets/textures/bg_sky.png", w, h, kChannels, px.data(), w * kChannels);
+    }
+
+    // Distant mountains: 256x64, dark silhouette on transparent
+    {
+        constexpr int w = 256, h = 64;
+        std::vector<uint8_t> px(w * h * kChannels, 0);
+        for (int x = 0; x < w; ++x) {
+            float fx = static_cast<float>(x) / static_cast<float>(w);
+            float mountain_h = 0.35f + 0.15f * std::sin(fx * 6.2832f * 2.0f)
+                             + 0.10f * std::sin(fx * 6.2832f * 5.0f + 1.0f)
+                             + 0.05f * std::sin(fx * 6.2832f * 11.0f + 2.5f);
+            int peak_y = static_cast<int>((1.0f - mountain_h) * h);
+            for (int y = peak_y; y < h; ++y) {
+                int idx = (y * w + x) * kChannels;
+                px[idx] = 35; px[idx+1] = 30; px[idx+2] = 55; px[idx+3] = 255;
+            }
+        }
+        stbi_write_png("assets/textures/bg_mountains.png", w, h, kChannels, px.data(), w * kChannels);
+    }
+
+    // Mid-ground trees: 256x64, tree-like silhouettes, semi-transparent
+    {
+        constexpr int w = 256, h = 64;
+        std::vector<uint8_t> px(w * h * kChannels, 0);
+        for (int x = 0; x < w; ++x) {
+            float fx = static_cast<float>(x) / static_cast<float>(w);
+            float tree_h = 0.55f + 0.12f * std::sin(fx * 6.2832f * 8.0f)
+                         + 0.08f * std::sin(fx * 6.2832f * 13.0f + 0.7f)
+                         + 0.06f * std::sin(fx * 6.2832f * 21.0f + 3.1f);
+            int peak_y = static_cast<int>((1.0f - tree_h) * h);
+            for (int y = peak_y; y < h; ++y) {
+                int idx = (y * w + x) * kChannels;
+                px[idx] = 20; px[idx+1] = 35; px[idx+2] = 30; px[idx+3] = 220;
+            }
+        }
+        stbi_write_png("assets/textures/bg_trees.png", w, h, kChannels, px.data(), w * kChannels);
+    }
+}
+
 namespace {
 
 void write_wav(const std::string& path, const std::vector<int16_t>& samples, uint32_t sample_rate) {
@@ -424,6 +482,7 @@ void App::run() {
     generate_player_sheet();
     generate_tileset();
     generate_particle_atlas();
+    generate_background_textures();
     generate_audio_assets();
 
     // Load locale and build font atlas from all text
@@ -443,6 +502,19 @@ void App::run() {
     renderer_.init(window_, resources_);
     renderer_.init_font(font_atlas_, resources_);
     renderer_.init_particles(resources_);
+
+    // Load background textures with REPEAT sampler for parallax tiling
+    {
+        std::vector<ResourceHandle<Texture>> bg_textures;
+        bg_textures.push_back(resources_.load_texture(
+            "assets/textures/bg_sky.png", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT));
+        bg_textures.push_back(resources_.load_texture(
+            "assets/textures/bg_mountains.png", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT));
+        bg_textures.push_back(resources_.load_texture(
+            "assets/textures/bg_trees.png", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT));
+        renderer_.init_backgrounds(bg_textures);
+    }
+
     ui_ctx_.init(font_atlas_, text_renderer_);
     audio_.init("assets");
     control_server_.start();
@@ -570,6 +642,23 @@ void App::init_scene() {
     // Tilemap from scene data
     scene_.set_tile_layer(std::move(scene_data.tilemap));
     scene_.set_ambient_color(scene_data.ambient_color);
+
+    // Background parallax layers from scene data
+    {
+        std::vector<ParallaxLayer> bg_layers;
+        for (const auto& layer_data : scene_data.background_layers) {
+            ParallaxLayer layer;
+            layer.z = layer_data.z;
+            layer.parallax_factor = layer_data.parallax_factor;
+            layer.quad_width = layer_data.quad_width;
+            layer.quad_height = layer_data.quad_height;
+            layer.uv_repeat_x = layer_data.uv_repeat_x;
+            layer.uv_repeat_y = layer_data.uv_repeat_y;
+            layer.tint = layer_data.tint;
+            bg_layers.push_back(layer);
+        }
+        scene_.set_background_layers(std::move(bg_layers));
+    }
 
     // Torch emitters from scene data
     for (size_t i = 0; i < scene_data.torch_positions.size() && i < 4; ++i) {

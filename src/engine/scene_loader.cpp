@@ -173,6 +173,22 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         }
     }
 
+    // Background parallax layers
+    if (j.contains("background_layers")) {
+        for (const auto& layer_j : j["background_layers"]) {
+            ParallaxLayerData layer;
+            layer.texture_key = layer_j.value("texture", "");
+            layer.z = layer_j.value("z", 5.0f);
+            layer.parallax_factor = layer_j.value("parallax_factor", 0.0f);
+            layer.quad_width = layer_j.value("quad_width", 40.0f);
+            layer.quad_height = layer_j.value("quad_height", 25.0f);
+            layer.uv_repeat_x = layer_j.value("uv_repeat_x", 1.0f);
+            layer.uv_repeat_y = layer_j.value("uv_repeat_y", 1.0f);
+            if (layer_j.contains("tint")) layer.tint = parse_vec4(layer_j["tint"]);
+            data.background_layers.push_back(std::move(layer));
+        }
+    }
+
     return data;
 }
 

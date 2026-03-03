@@ -116,5 +116,37 @@
     "size_min": 0.03, "size_max": 0.07, "size_end_scale": 0.2,
     "tile": "Spark", "z": -0.04,
     "spawn_offset_min": [-0.4, -0.3], "spawn_offset_max": [0.4, 0.3]
-  }
+  },
+  "background_layers": [
+    {
+      "texture": "bg_sky",
+      "z": 10.0,
+      "parallax_factor": 0.0,
+      "quad_width": 40.0,
+      "quad_height": 25.0,
+      "uv_repeat_x": 2.0,
+      "uv_repeat_y": 1.0,
+      "tint": [1.0, 1.0, 1.0, 1.0]
+    },
+    {
+      "texture": "bg_mountains",
+      "z": 8.0,
+      "parallax_factor": 0.15,
+      "quad_width": 40.0,
+      "quad_height": 15.0,
+      "uv_repeat_x": 3.0,
+      "uv_repeat_y": 1.0,
+      "tint": [0.7, 0.7, 0.9, 1.0]
+    },
+    {
+      "texture": "bg_trees",
+      "z": 5.0,
+      "parallax_factor": 0.4,
+      "quad_width": 35.0,
+      "quad_height": 12.0,
+      "uv_repeat_x": 4.0,
+      "uv_repeat_y": 1.0,
+      "tint": [0.5, 0.6, 0.5, 0.9]
+    }
+  ]
 }

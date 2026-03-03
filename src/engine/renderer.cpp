@@ -104,6 +104,23 @@ void Renderer::init_particles(ResourceManager& resources) {
         particle_texture_->image_view(), particle_texture_->sampler());
 }
 
+void Renderer::init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_textures) {
+    bg_textures_ = bg_textures;
+
+    std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
+    for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
+        ubo_buffers[i] = uniform_buffers_[i].buffer();
+    }
+
+    bg_descriptor_sets_.reserve(bg_textures_.size());
+    for (const auto& tex : bg_textures_) {
+        auto sets = descriptors_.allocate_sprite_sets(
+            context_.device(), ubo_buffers, sizeof(UniformBufferObject),
+            tex->image_view(), tex->sampler());
+        bg_descriptor_sets_.push_back(sets);
+    }
+}
+
 void Renderer::draw_scene(Scene& scene,
                            const std::vector<SpriteDrawInfo>& entity_sprites,
                            const std::vector<SpriteDrawInfo>& particles,
@@ -172,6 +189,27 @@ void Renderer::draw_scene(Scene& scene,
 
         // Bind vertex/index buffers once (shared across all passes)
         sprite_batch_.bind(cmd, current_frame_);
+
+        // Background layers pass (rendered before tilemap, back-to-front by Z)
+        if (!scene.background_layers().empty()) {
+            auto cam_target = camera_.target();
+            glm::vec2 cam_xy = {cam_target.x, cam_target.y};
+
+            for (size_t i = 0; i < scene.background_layers().size(); ++i) {
+                if (i >= bg_descriptor_sets_.size()) break;
+
+                sprite_batch_.begin();
+                auto draw_info = scene.background_layers()[i].generate_draw_info(cam_xy);
+                sprite_batch_.draw(draw_info);
+                auto bg_flush = sprite_batch_.flush(current_frame_);
+                if (bg_flush.index_count > 0) {
+                    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                            sprite_pipeline_layout_, 0, 1,
+                                            &bg_descriptor_sets_[i][current_frame_], 0, nullptr);
+                    vkCmdDrawIndexed(cmd, bg_flush.index_count, 1, 0, bg_flush.vertex_offset, 0);
+                }
+            }
+        }
 
         // Tilemap pass
         if (scene.tile_layer().has_value()) {
@@ -316,6 +354,11 @@ void Renderer::shutdown() {
     destroy_tex(test_texture_);
     destroy_tex(tileset_texture_);
     destroy_tex(particle_texture_);
+    for (auto& tex : bg_textures_) {
+        destroy_tex(tex);
+    }
+    bg_textures_.clear();
+    bg_descriptor_sets_.clear();
     if (font_initialized_) {
         destroy_tex(font_texture_);
         for (auto& buf : ui_uniform_buffers_) {

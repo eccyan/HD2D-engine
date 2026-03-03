@@ -71,7 +71,9 @@ static void transition_image_layout(VkDevice device, VkCommandPool cmd_pool, VkQ
 
 Texture Texture::load_from_file(VkDevice device, VmaAllocator allocator,
                                 VkCommandPool cmd_pool, VkQueue queue,
-                                const std::string& path) {
+                                const std::string& path,
+                                VkFilter filter,
+                                VkSamplerAddressMode address_mode) {
     int width, height, channels;
     stbi_uc* pixels = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
     if (!pixels) {
@@ -167,14 +169,14 @@ Texture Texture::load_from_file(VkDevice device, VmaAllocator allocator,
         throw std::runtime_error("Failed to create texture image view");
     }
 
-    // Create sampler — NEAREST for pixel art
+    // Create sampler
     VkSamplerCreateInfo sampler_info{};
     sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    sampler_info.magFilter = VK_FILTER_NEAREST;
-    sampler_info.minFilter = VK_FILTER_NEAREST;
-    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_info.magFilter = filter;
+    sampler_info.minFilter = filter;
+    sampler_info.addressModeU = address_mode;
+    sampler_info.addressModeV = address_mode;
+    sampler_info.addressModeW = address_mode;
     sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
     if (vkCreateSampler(device, &sampler_info, nullptr, &tex.sampler_) != VK_SUCCESS) {
@@ -187,7 +189,8 @@ Texture Texture::load_from_file(VkDevice device, VmaAllocator allocator,
 Texture Texture::load_from_memory(VkDevice device, VmaAllocator allocator,
                                    VkCommandPool cmd_pool, VkQueue queue,
                                    const uint8_t* pixels, uint32_t width, uint32_t height,
-                                   VkFilter filter) {
+                                   VkFilter filter,
+                                   VkSamplerAddressMode address_mode) {
     VkDeviceSize image_size = static_cast<VkDeviceSize>(width) * height * 4;
 
     Buffer staging = Buffer::create_staging(allocator, image_size);
@@ -275,9 +278,9 @@ Texture Texture::load_from_memory(VkDevice device, VmaAllocator allocator,
     sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     sampler_info.magFilter = filter;
     sampler_info.minFilter = filter;
-    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_info.addressModeU = address_mode;
+    sampler_info.addressModeV = address_mode;
+    sampler_info.addressModeW = address_mode;
     sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
     if (vkCreateSampler(device, &sampler_info, nullptr, &tex.sampler_) != VK_SUCCESS) {

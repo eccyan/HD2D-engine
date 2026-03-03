@@ -20,27 +20,32 @@ void ResourceManager::shutdown() {
     font_cache_.clear();
 }
 
-ResourceHandle<Texture> ResourceManager::load_texture(const std::string& path, VkFilter filter) {
+ResourceHandle<Texture> ResourceManager::load_texture(const std::string& path, VkFilter filter,
+                                                       VkSamplerAddressMode address_mode) {
     std::string key = path;
     if (filter == VK_FILTER_LINEAR) {
         key += ":linear";
     }
+    if (address_mode == VK_SAMPLER_ADDRESS_MODE_REPEAT) {
+        key += ":repeat";
+    }
     if (texture_cache_.contains(key)) {
         return texture_cache_.get(key);
     }
-    // File-based textures always use NEAREST via the default loader
-    // For LINEAR filter, we need custom loading but currently all file textures are NEAREST
-    return texture_cache_.get(key);
+    auto tex = Texture::load_from_file(device_, allocator_, cmd_pool_, queue_,
+                                       path, filter, address_mode);
+    return texture_cache_.insert(key, std::make_shared<Texture>(std::move(tex)));
 }
 
 ResourceHandle<Texture> ResourceManager::load_texture_from_memory(
     const std::string& key, const uint8_t* pixels,
-    uint32_t width, uint32_t height, VkFilter filter) {
+    uint32_t width, uint32_t height, VkFilter filter,
+    VkSamplerAddressMode address_mode) {
     if (texture_cache_.contains(key)) {
         return texture_cache_.get(key);
     }
     auto tex = Texture::load_from_memory(device_, allocator_, cmd_pool_, queue_,
-                                         pixels, width, height, filter);
+                                         pixels, width, height, filter, address_mode);
     return texture_cache_.insert(key, std::make_shared<Texture>(std::move(tex)));
 }
 

@@ -31,10 +31,22 @@ struct NpcData {
     std::string script_class;
 };
 
+struct ParallaxLayerData {
+    std::string texture_key;
+    float z = 5.0f;
+    float parallax_factor = 0.0f;
+    float quad_width = 40.0f;
+    float quad_height = 25.0f;
+    float uv_repeat_x = 1.0f;
+    float uv_repeat_y = 1.0f;
+    glm::vec4 tint{1.0f};
+};
+
 struct SceneData {
     TileLayer tilemap;
     glm::vec4 ambient_color{0.25f, 0.28f, 0.45f, 1.0f};
     std::vector<PointLight> static_lights;
+    std::vector<ParallaxLayerData> background_layers;
 
     // Player
     glm::vec3 player_position{0.0f};
