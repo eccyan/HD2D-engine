@@ -40,6 +40,14 @@ void WeatherSystem::update(float dt, Scene& scene, const glm::vec2& camera_targe
     scene.set_fog_color(config_.fog_color);
 }
 
+void WeatherSystem::reset() {
+    active_ = false;
+    intensity_ = 0.0f;
+    particles_ = nullptr;
+    emitter_id_ = 0;
+    base_ambient_ = {};
+}
+
 float WeatherSystem::fog_density() const {
     return active_ ? config_.fog_density * intensity_ : 0.0f;
 }

@@ -10,7 +10,7 @@
 namespace vulkan_game {
 
 void DemoGameplayState::on_enter(App& app) {
-    app.init_scene();
+    app.init_scene(app.current_scene_path());
 }
 
 void DemoGameplayState::on_exit(App& /*app*/) {
@@ -30,7 +30,7 @@ void DemoGameplayState::update(App& app, float dt) {
 
     // Panel navigation (arrow keys, no conflict with WASD)
     if (panel_visible_) {
-        constexpr int item_count = 14;
+        constexpr int item_count = 15;
         if (app.input().was_key_pressed(GLFW_KEY_UP)) {
             selected_item_ = (selected_item_ - 1 + item_count) % item_count;
         }

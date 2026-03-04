@@ -114,4 +114,10 @@ glm::vec2 ParticleSystem::tile_uv_max(uint32_t tile_id) const {
     return {col / static_cast<float>(kAtlasColumns), 1.0f};
 }
 
+void ParticleSystem::clear() {
+    emitters_.clear();
+    for (auto& p : pool_) p.alive = false;
+    next_spawn_index_ = 0;
+}
+
 }  // namespace vulkan_game

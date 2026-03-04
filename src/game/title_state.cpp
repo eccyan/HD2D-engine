@@ -64,6 +64,7 @@ void TitleState::build_draw_lists(App& app) {
             int slot = app.save_system().most_recent_slot();
             auto loaded = app.save_system().load(slot);
             if (loaded) {
+                app.set_current_scene_path(loaded->scene_path);
                 app.state_stack().replace(std::make_unique<GameplayState>(), app);
                 app.apply_save_data(*loaded);
             }

@@ -15,6 +15,7 @@
 #include "vulkan_game/engine/renderer.hpp"
 #include "vulkan_game/engine/resource_manager.hpp"
 #include "vulkan_game/engine/save_system.hpp"
+#include "vulkan_game/engine/scene_loader.hpp"
 #include "vulkan_game/engine/scripting/script_system.hpp"
 #include "vulkan_game/engine/scripting/wren_bindings.hpp"
 #include "vulkan_game/engine/scene.hpp"
@@ -77,9 +78,16 @@ public:
     void apply_save_data(const SaveData& data);
 
     // Public methods used by states
-    void init_scene();
+    void init_scene(const std::string& scene_path);
+    void clear_scene();
     void update_game(float dt);
     void update_audio(float dt);
+
+    // Scene transition support
+    const std::string& current_scene_path() const { return current_scene_path_; }
+    void set_current_scene_path(const std::string& path) { current_scene_path_ = path; }
+    bool is_transitioning() const { return transitioning_; }
+    void set_transitioning(bool t) { transitioning_ = t; }
 
     // Audio state
     float& footstep_timer() { return footstep_timer_; }
@@ -149,6 +157,12 @@ private:
     TextRenderer text_renderer_;
     DialogState dialog_state_;
     std::vector<DialogScript> npc_dialogs_;
+
+    // Scene transition
+    std::string current_scene_path_ = "assets/scenes/test_scene.json";
+    std::vector<PortalData> portals_;
+    bool transitioning_ = false;
+    void check_portals();
 
     // Particles & Weather
     ParticleSystem particles_;

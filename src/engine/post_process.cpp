@@ -871,7 +871,7 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
             float depth_A; float depth_B;
             float fog_density; float pad1;
             float fog_r; float fog_g;
-            float fog_b; float pad2;
+            float fog_b; float fade_amount;
         } comp_pc;
         comp_pc.bloom_intensity = params.bloom_intensity;
         comp_pc.exposure = params.exposure;
@@ -888,7 +888,7 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         comp_pc.fog_r = params.fog_color_r;
         comp_pc.fog_g = params.fog_color_g;
         comp_pc.fog_b = params.fog_color_b;
-        comp_pc.pad2 = 0.0f;
+        comp_pc.fade_amount = params.fade_amount;
         vkCmdPushConstants(cmd, composite_pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, 64, &comp_pc);
 

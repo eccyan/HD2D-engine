@@ -44,6 +44,9 @@ public:
     Camera& camera() { return camera_; }
     const Camera& camera() const { return camera_; }
 
+    void set_fade_amount(float f) { fade_amount_ = f; }
+    float fade_amount() const { return fade_amount_; }
+
     VkContext& context() { return context_; }
     CommandPool& command_pool() { return command_pool_; }
 
@@ -80,6 +83,7 @@ private:
     std::array<VkDescriptorSet, kMaxFramesInFlight> particle_descriptor_sets_{};
     std::vector<std::array<VkDescriptorSet, kMaxFramesInFlight>> bg_descriptor_sets_;
     Camera camera_;
+    float fade_amount_ = 0.0f;
 
     uint32_t current_frame_ = 0;
     uint32_t acquire_semaphore_index_ = 0;

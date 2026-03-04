@@ -8,13 +8,15 @@
 namespace vulkan_game {
 
 void GameplayState::on_enter(App& app) {
-    app.init_scene();
+    app.init_scene(app.current_scene_path());
 }
 
 void GameplayState::on_exit(App& /*app*/) {
 }
 
 void GameplayState::update(App& app, float dt) {
+    if (app.is_transitioning()) return;
+
     // Escape toggles pause overlay (instead of quitting)
     if (app.input().was_key_pressed(GLFW_KEY_ESCAPE)) {
         app.state_stack().push(std::make_unique<PauseState>(), app);

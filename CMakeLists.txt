@@ -170,6 +170,7 @@ add_library(vulkan_game_core OBJECT
     src/game/title_state.cpp
     src/game/gameplay_state.cpp
     src/game/pause_state.cpp
+    src/game/transition_state.cpp
 )
 
 target_include_directories(vulkan_game_core PUBLIC

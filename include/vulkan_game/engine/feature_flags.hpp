@@ -24,6 +24,9 @@ struct FeatureFlags {
     bool animation = true;
     bool npc_lights = true;
 
+    // Gameplay (cont.)
+    bool scene_transitions = true;
+
     // Audio
     bool music = true;
     bool sfx = true;
@@ -35,7 +38,7 @@ struct FeatureFlags {
         bool FeatureFlags::* ptr;
     };
 
-    static constexpr std::array<Entry, 14> entries() {
+    static constexpr std::array<Entry, 15> entries() {
         return {{
             {"Parallax BG",    "24",  "RENDERING", &FeatureFlags::parallax_backgrounds},
             {"Point Lights",   "11",  "RENDERING", &FeatureFlags::point_lights},
@@ -49,6 +52,7 @@ struct FeatureFlags {
             {"NPC Patrol",     "8",   "GAMEPLAY",  &FeatureFlags::npc_patrol},
             {"Animation",      "4-6", "GAMEPLAY",  &FeatureFlags::animation},
             {"NPC Lights",     "11",  "GAMEPLAY",  &FeatureFlags::npc_lights},
+            {"Scene Trans.",   "27",  "GAMEPLAY",  &FeatureFlags::scene_transitions},
             {"Music",          "13",  "AUDIO",     &FeatureFlags::music},
             {"SFX",            "13",  "AUDIO",     &FeatureFlags::sfx},
         }};

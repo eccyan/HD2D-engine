@@ -298,6 +298,7 @@ void Renderer::draw_scene(Scene& scene,
     if (!flags.vignette) pp_params.vignette_radius = 2.0f;
     if (!flags.tone_mapping) pp_params.exposure = 1.0f;
     if (!flags.fog) pp_params.fog_density = 0.0f;
+    pp_params.fade_amount = fade_amount_;
 
     post_process_.record_post_process(cmd, image_index, pp_params);
 

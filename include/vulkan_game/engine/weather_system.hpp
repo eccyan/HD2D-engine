@@ -23,6 +23,7 @@ class WeatherSystem {
 public:
     void init(ParticleSystem& particles, Scene& scene, const WeatherConfig& config);
     void update(float dt, Scene& scene, const glm::vec2& camera_target);
+    void reset();
     bool active() const { return active_; }
     float fog_density() const;
     glm::vec3 fog_color() const;

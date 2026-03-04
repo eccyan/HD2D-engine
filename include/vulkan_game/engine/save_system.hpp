@@ -26,6 +26,7 @@ struct SaveData {
     std::vector<NpcSaveData> npcs;
     std::unordered_map<std::string, bool> game_flags;
     float play_time = 0.0f;
+    std::string scene_path = "assets/scenes/test_scene.json";
 };
 
 struct SaveMetadata {

@@ -8,6 +8,9 @@
   "scholar_name": "Scholar",
   "scholar_line_1": "Fascinating... these ruins predate the old empire.",
   "scholar_line_2": "If only I could decipher the glyphs on the northern wall.",
+  "keeper_name": "Keeper",
+  "keeper_line_1": "You have entered the dungeon depths. Few return.",
+  "keeper_line_2": "The exit lies to the north. Tread carefully.",
   "prompt_continue": ">>",
   "prompt_interact": "[E]"
 }

@@ -71,6 +71,7 @@ public:
     void set_emitter_active(size_t index, bool active);
     void update(float dt);
     void generate_draw_infos(std::vector<SpriteDrawInfo>& out) const;
+    void clear();
 
 private:
     void spawn_particle(const Emitter& emitter);

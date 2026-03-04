@@ -160,6 +160,21 @@ public:
         *static_cast<T*>(columns.at(cid).at(idx)) = std::move(value);
     }
 
+    void clear() {
+        // Destroy all elements in each column
+        for (auto& [cid, col] : columns) {
+            if (col.destructor) {
+                size_t n = col.count();
+                for (size_t i = 0; i < n; ++i) {
+                    col.destructor(col.at(i));
+                }
+            }
+            col.data.clear();
+        }
+        entities.clear();
+        entity_to_index.clear();
+    }
+
     template <typename T>
     T* get_column_data() {
         ComponentId cid = component_id<T>();

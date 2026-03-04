@@ -52,6 +52,14 @@ struct WeatherData {
     float transition_speed = 1.0f;
 };
 
+struct PortalData {
+    glm::vec2 position{0.0f};
+    glm::vec2 size{1.0f};
+    std::string target_scene;
+    glm::vec3 spawn_position{0.0f};
+    Direction spawn_facing = Direction::Down;
+};
+
 struct SceneData {
     TileLayer tilemap;
     glm::vec4 ambient_color{0.25f, 0.28f, 0.45f, 1.0f};
@@ -66,6 +74,9 @@ struct SceneData {
 
     // NPCs
     std::vector<NpcData> npcs;
+
+    // Portals
+    std::vector<PortalData> portals;
 
     // Emitter templates
     EmitterConfig torch_emitter;

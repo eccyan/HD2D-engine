@@ -135,6 +135,13 @@ public:
         return View<Ts...>(std::move(matching));
     }
 
+    void clear() {
+        for (auto& arch : archetypes_) arch->clear();
+        entity_archetype_.clear();
+        archetypes_.clear();
+        next_id_ = 1;
+    }
+
     template <typename... Ts>
     Entity create_with(Ts... components) {
         Entity e = create();

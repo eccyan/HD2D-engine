@@ -2,6 +2,7 @@
 #include "vulkan_game/engine/ecs/default_components.hpp"
 #include "vulkan_game/game/components.hpp"
 #include "vulkan_game/game/states/title_state.hpp"
+#include "vulkan_game/game/states/transition_state.hpp"
 #include "vulkan_game/game/systems.hpp"
 #include "vulkan_game/engine/scene_loader.hpp"
 #include "vulkan_game/engine/tilemap.hpp"
@@ -576,8 +577,9 @@ void App::init_window() {
     input_.set_window(window_);
 }
 
-void App::init_scene() {
-    auto scene_data = SceneLoader::load("assets/scenes/test_scene.json");
+void App::init_scene(const std::string& scene_path) {
+    current_scene_path_ = scene_path;
+    auto scene_data = SceneLoader::load(scene_path);
 
     // Animation setup helper (shared by player and NPCs)
     auto setup_anim = [](ecs::Animation& anim_comp) {
@@ -723,9 +725,59 @@ void App::init_scene() {
     for (size_t i = 0; i < scene_data.torch_audio_positions.size() && i < 4; ++i) {
         audio_.set_torch_position(static_cast<uint32_t>(i), scene_data.torch_audio_positions[i]);
     }
+
+    // Store portals for transition checking
+    portals_ = std::move(scene_data.portals);
+}
+
+void App::clear_scene() {
+    // Destroy all ECS entities
+    world_.clear();
+    player_id_ = ecs::kNullEntity;
+    npc_ids_.clear();
+    npc_dialogs_.clear();
+    entity_sprites_.clear();
+
+    // Clear particles and weather
+    particles_.clear();
+    weather_system_.reset();
+    for (auto& id : torch_emitter_ids_) id = 0;
+
+    // Reset scene state
+    scene_.clear_lights();
+    scene_.set_fog_density(0.0f);
+    scene_.set_background_layers({});
+
+    // Reset portals
+    portals_.clear();
+
+    // Reset dialog/game mode
+    game_mode_ = GameMode::Explore;
+    dialog_state_ = {};
+}
+
+void App::check_portals() {
+    if (!player_id_.valid()) return;
+
+    const auto& player_pos = world_.get<ecs::Transform>(player_id_).position;
+
+    for (const auto& portal : portals_) {
+        float dx = player_pos.x - portal.position.x;
+        float dy = player_pos.y - portal.position.y;
+        float hw = portal.size.x * 0.5f;
+        float hh = portal.size.y * 0.5f;
+
+        if (std::abs(dx) < hw && std::abs(dy) < hh) {
+            state_stack_.push(std::make_unique<TransitionState>(
+                portal.target_scene, portal.spawn_position, portal.spawn_facing), *this);
+            return;
+        }
+    }
 }
 
 void App::update_game(float dt) {
+    if (transitioning_) return;
+
     if (game_mode_ == GameMode::Dialog) {
         // Dialog mode: freeze movement, handle advance
         if (input_.was_key_pressed(GLFW_KEY_E) || input_.was_key_pressed(GLFW_KEY_SPACE)) {
@@ -768,6 +820,12 @@ void App::update_game(float dt) {
 
         if (scene_.tile_layer().has_value()) {
             ecs::systems::player_collision(world_, *scene_.tile_layer());
+        }
+
+        // Check portals for scene transitions
+        if (feature_flags_.scene_transitions) {
+            check_portals();
+            if (transitioning_) return;
         }
 
         auto& player_pos = world_.get<ecs::Transform>(player_id_).position;
@@ -1185,10 +1243,17 @@ SaveData App::build_save_data() const {
     }
     data.game_flags = game_flags_;
     data.play_time = play_time_;
+    data.scene_path = current_scene_path_;
     return data;
 }
 
 void App::apply_save_data(const SaveData& data) {
+    // If scene differs, clear and reload
+    if (data.scene_path != current_scene_path_ && !data.scene_path.empty()) {
+        clear_scene();
+        init_scene(data.scene_path);
+    }
+
     if (player_id_.valid()) {
         world_.get<ecs::Transform>(player_id_).position = data.player_position;
         world_.get<ecs::Facing>(player_id_).dir = data.player_facing;

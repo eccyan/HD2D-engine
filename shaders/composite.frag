@@ -28,7 +28,7 @@ layout(push_constant) uniform PushConstants {
     float fog_r;
     float fog_g;
     float fog_b;
-    float _pad2;
+    float fade_amount;
 } pc;
 
 void main() {
@@ -70,6 +70,9 @@ void main() {
     float dist = length(uv_centered);
     float vignette = smoothstep(pc.vignette_radius, pc.vignette_radius - pc.vignette_softness, dist);
     color *= vignette;
+
+    // Scene fade (for transitions)
+    color *= (1.0 - pc.fade_amount);
 
     out_color = vec4(color, 1.0);
 }

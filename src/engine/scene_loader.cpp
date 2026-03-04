@@ -191,6 +191,20 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         }
     }
 
+    // Portals
+    if (j.contains("portals")) {
+        for (const auto& portal_j : j["portals"]) {
+            PortalData portal;
+            portal.position = parse_vec2(portal_j["position"]);
+            if (portal_j.contains("size")) portal.size = parse_vec2(portal_j["size"]);
+            portal.target_scene = portal_j["target_scene"].get<std::string>();
+            portal.spawn_position = parse_vec3(portal_j["spawn_position"]);
+            if (portal_j.contains("spawn_facing"))
+                portal.spawn_facing = parse_direction(portal_j["spawn_facing"]);
+            data.portals.push_back(std::move(portal));
+        }
+    }
+
     // Weather
     if (j.contains("weather")) {
         const auto& w = j["weather"];

@@ -25,6 +25,7 @@ struct PostProcessParams {
     float fog_color_r = 0.3f;
     float fog_color_g = 0.35f;
     float fog_color_b = 0.45f;
+    float fade_amount = 0.0f;
 };
 
 class PostProcessPipeline {
