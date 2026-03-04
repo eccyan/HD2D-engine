@@ -861,6 +861,7 @@ void App::clear_scene() {
     npc_dialogs_.clear();
     entity_sprites_.clear();
     shadow_sprites_.clear();
+    reflection_sprites_.clear();
 
     // Clear particles and weather
     particles_.clear();
@@ -1047,6 +1048,11 @@ void App::update_game(float dt) {
     } else {
         shadow_sprites_.clear();
     }
+    if (feature_flags_.water_reflections && scene_.tile_layer().has_value()) {
+        ecs::systems::reflection_collect(world_, *scene_.tile_layer(), reflection_sprites_);
+    } else {
+        reflection_sprites_.clear();
+    }
     update_audio(dt);
 }
 
@@ -1177,8 +1183,8 @@ void App::main_loop() {
         // Always render
         std::vector<SpriteDrawInfo> particle_sprites;
         particles_.generate_draw_infos(particle_sprites);
-        renderer_.draw_scene(scene_, entity_sprites_, shadow_sprites_, particle_sprites,
-                             overlay_sprites_, ui_sprites_, feature_flags_);
+        renderer_.draw_scene(scene_, entity_sprites_, reflection_sprites_, shadow_sprites_,
+                             particle_sprites, overlay_sprites_, ui_sprites_, feature_flags_);
     }
 }
 

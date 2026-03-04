@@ -148,6 +148,7 @@ private:
     std::vector<ecs::Entity> npc_ids_;
     std::vector<SpriteDrawInfo> entity_sprites_;
     std::vector<SpriteDrawInfo> shadow_sprites_;
+    std::vector<SpriteDrawInfo> reflection_sprites_;
 
     // UI context
     ui::UIContext ui_ctx_;

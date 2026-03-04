@@ -135,6 +135,7 @@ void Renderer::init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_t
 
 void Renderer::draw_scene(Scene& scene,
                            const std::vector<SpriteDrawInfo>& entity_sprites,
+                           const std::vector<SpriteDrawInfo>& reflection_sprites,
                            const std::vector<SpriteDrawInfo>& shadow_sprites,
                            const std::vector<SpriteDrawInfo>& particles,
                            const std::vector<SpriteDrawInfo>& overlay,
@@ -246,6 +247,22 @@ void Renderer::draw_scene(Scene& scene,
                                         sprite_pipeline_layout_, 0, 1,
                                         &tilemap_descriptor_sets_[current_frame_], 0, nullptr);
                 vkCmdDrawIndexed(cmd, tile_flush.index_count, 1, 0, tile_flush.vertex_offset, 0);
+            }
+        }
+
+        // Reflection pass (between tilemap and shadows)
+        if (flags.water_reflections && !reflection_sprites.empty()) {
+            sprite_batch_.begin();
+            for (const auto& spr : reflection_sprites) {
+                sprite_batch_.draw(spr);
+            }
+            auto refl_flush = sprite_batch_.flush(current_frame_);
+            if (refl_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, refl_flush.index_count, 1, 0,
+                                 refl_flush.vertex_offset, 0);
             }
         }
 
@@ -392,7 +409,7 @@ void Renderer::draw_frame() {
     info.position = {0.0f, 0.0f, 0.0f};
     info.size = {1.0f, 1.0f};
     info.color = {1.0f, 1.0f, 1.0f, 1.0f};
-    draw_scene(test_scene, {info}, {}, {}, {}, {});
+    draw_scene(test_scene, {info}, {}, {}, {}, {}, {});
 }
 
 void Renderer::shutdown() {

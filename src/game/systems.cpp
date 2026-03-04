@@ -163,4 +163,61 @@ void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out) {
         });
 }
 
+void reflection_collect(World& world, const TileLayer& layer, std::vector<SpriteDrawInfo>& out) {
+    out.clear();
+
+    // Build list of water tile center positions (base tile ID 2)
+    constexpr uint16_t kWaterBaseTile = 2;
+    std::vector<glm::vec2> water_positions;
+    for (uint32_t row = 0; row < layer.height; ++row) {
+        for (uint32_t col = 0; col < layer.width; ++col) {
+            uint16_t tile_id = layer.tiles[row * layer.width + col];
+            if (tile_id == kWaterBaseTile) {
+                float x = (static_cast<float>(col) + 0.5f) * layer.tile_size
+                          - static_cast<float>(layer.width) * layer.tile_size * 0.5f;
+                float y = (static_cast<float>(row) + 0.5f) * layer.tile_size
+                          - static_cast<float>(layer.height) * layer.tile_size * 0.5f;
+                water_positions.push_back({x, y});
+            }
+        }
+    }
+
+    if (water_positions.empty()) return;
+
+    constexpr float kMaxDist = 1.5f;
+    constexpr float kMaxDistSq = kMaxDist * kMaxDist;
+
+    world.view<Transform, Sprite>().each(
+        [&](Entity, Transform& tf, Sprite& sprite) {
+            // Find nearest water tile
+            float best_dist_sq = kMaxDistSq;
+            glm::vec2 best_water{0.0f, 0.0f};
+            bool found = false;
+
+            for (const auto& wp : water_positions) {
+                float dx = tf.position.x - wp.x;
+                float dy = tf.position.y - wp.y;
+                float dist_sq = dx * dx + dy * dy;
+                if (dist_sq < best_dist_sq) {
+                    best_dist_sq = dist_sq;
+                    best_water = wp;
+                    found = true;
+                }
+            }
+
+            if (!found) return;
+
+            SpriteDrawInfo info{};
+            // Y-mirror across water surface
+            info.position = {tf.position.x, 2.0f * best_water.y - tf.position.y, 0.9f};
+            info.size = tf.scale;
+            // Flip UV vertically
+            info.uv_min = {sprite.uv_min.x, sprite.uv_max.y};
+            info.uv_max = {sprite.uv_max.x, sprite.uv_min.y};
+            // Blue wash, semi-transparent
+            info.color = sprite.tint * glm::vec4{0.4f, 0.6f, 0.9f, 0.35f};
+            out.push_back(info);
+        });
+}
+
 }  // namespace vulkan_game::ecs::systems

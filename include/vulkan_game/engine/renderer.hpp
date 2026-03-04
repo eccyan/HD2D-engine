@@ -36,6 +36,7 @@ public:
     void draw_frame();
     void draw_scene(Scene& scene,
                     const std::vector<SpriteDrawInfo>& entity_sprites = {},
+                    const std::vector<SpriteDrawInfo>& reflection_sprites = {},
                     const std::vector<SpriteDrawInfo>& shadow_sprites = {},
                     const std::vector<SpriteDrawInfo>& particles = {},
                     const std::vector<SpriteDrawInfo>& overlay = {},
