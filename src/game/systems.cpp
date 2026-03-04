@@ -149,4 +149,18 @@ void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out) {
         });
 }
 
+void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out) {
+    out.clear();
+    world.view<Transform, Sprite>().each(
+        [&](Entity, Transform& tf, Sprite& sprite) {
+            SpriteDrawInfo info{};
+            info.position = {tf.position.x, tf.position.y - 0.35f, 0.5f};
+            info.size = {tf.scale.x * 1.2f, tf.scale.y * 0.3f};
+            info.color = {0.0f, 0.0f, 0.0f, 0.35f};
+            info.uv_min = {0.0f, 0.0f};
+            info.uv_max = {1.0f, 1.0f};
+            out.push_back(info);
+        });
+}
+
 }  // namespace vulkan_game::ecs::systems

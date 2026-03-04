@@ -104,6 +104,18 @@ void Renderer::init_particles(ResourceManager& resources) {
         particle_texture_->image_view(), particle_texture_->sampler());
 }
 
+void Renderer::init_shadows(ResourceManager& resources) {
+    shadow_texture_ = resources.load_texture("assets/textures/shadow_blob.png");
+
+    std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
+    for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
+        ubo_buffers[i] = uniform_buffers_[i].buffer();
+    }
+    shadow_descriptor_sets_ = descriptors_.allocate_sprite_sets(
+        context_.device(), ubo_buffers, sizeof(UniformBufferObject),
+        shadow_texture_->image_view(), shadow_texture_->sampler());
+}
+
 void Renderer::init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_textures) {
     bg_textures_ = bg_textures;
 
@@ -123,6 +135,7 @@ void Renderer::init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_t
 
 void Renderer::draw_scene(Scene& scene,
                            const std::vector<SpriteDrawInfo>& entity_sprites,
+                           const std::vector<SpriteDrawInfo>& shadow_sprites,
                            const std::vector<SpriteDrawInfo>& particles,
                            const std::vector<SpriteDrawInfo>& overlay,
                            const std::vector<SpriteDrawInfo>& ui,
@@ -233,6 +246,22 @@ void Renderer::draw_scene(Scene& scene,
                                         sprite_pipeline_layout_, 0, 1,
                                         &tilemap_descriptor_sets_[current_frame_], 0, nullptr);
                 vkCmdDrawIndexed(cmd, tile_flush.index_count, 1, 0, tile_flush.vertex_offset, 0);
+            }
+        }
+
+        // Shadow pass (between tilemap and entities)
+        if (flags.blob_shadows && !shadow_sprites.empty()) {
+            sprite_batch_.begin();
+            for (const auto& spr : shadow_sprites) {
+                sprite_batch_.draw(spr);
+            }
+            auto shadow_flush = sprite_batch_.flush(current_frame_);
+            if (shadow_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &shadow_descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, shadow_flush.index_count, 1, 0,
+                                 shadow_flush.vertex_offset, 0);
             }
         }
 
@@ -363,7 +392,7 @@ void Renderer::draw_frame() {
     info.position = {0.0f, 0.0f, 0.0f};
     info.size = {1.0f, 1.0f};
     info.color = {1.0f, 1.0f, 1.0f, 1.0f};
-    draw_scene(test_scene, {info}, {}, {}, {});
+    draw_scene(test_scene, {info}, {}, {}, {}, {});
 }
 
 void Renderer::shutdown() {
@@ -377,6 +406,7 @@ void Renderer::shutdown() {
     destroy_tex(test_texture_);
     destroy_tex(tileset_texture_);
     destroy_tex(particle_texture_);
+    destroy_tex(shadow_texture_);
     for (auto& tex : bg_textures_) {
         destroy_tex(tex);
     }

@@ -32,9 +32,11 @@ public:
     void init_font(const FontAtlas& atlas, ResourceManager& resources);
     void init_particles(ResourceManager& resources);
     void init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_textures);
+    void init_shadows(ResourceManager& resources);
     void draw_frame();
     void draw_scene(Scene& scene,
                     const std::vector<SpriteDrawInfo>& entity_sprites = {},
+                    const std::vector<SpriteDrawInfo>& shadow_sprites = {},
                     const std::vector<SpriteDrawInfo>& particles = {},
                     const std::vector<SpriteDrawInfo>& overlay = {},
                     const std::vector<SpriteDrawInfo>& ui = {},
@@ -75,12 +77,14 @@ private:
     ResourceHandle<Texture> tileset_texture_;
     ResourceHandle<Texture> font_texture_;
     ResourceHandle<Texture> particle_texture_;
+    ResourceHandle<Texture> shadow_texture_;
     std::vector<ResourceHandle<Texture>> bg_textures_;
     std::array<VkDescriptorSet, kMaxFramesInFlight> descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> tilemap_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> font_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> ui_descriptor_sets_{};
     std::array<VkDescriptorSet, kMaxFramesInFlight> particle_descriptor_sets_{};
+    std::array<VkDescriptorSet, kMaxFramesInFlight> shadow_descriptor_sets_{};
     std::vector<std::array<VkDescriptorSet, kMaxFramesInFlight>> bg_descriptor_sets_;
     Camera camera_;
     float fade_amount_ = 0.0f;

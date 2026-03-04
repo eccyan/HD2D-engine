@@ -23,5 +23,6 @@ void animation_update(World& world, float dt);
 void lighting_rebuild(World& world, Scene& scene, bool include_npc_lights = true);
 void particle_sync(World& world, ParticleSystem& particles, bool footstep_active);
 void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out);
+void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out);
 
 }  // namespace vulkan_game::ecs::systems

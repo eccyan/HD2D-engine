@@ -314,6 +314,36 @@ void write_wav(const std::string& path, const std::vector<int16_t>& samples, uin
 
 }  // namespace
 
+void App::generate_shadow_texture() {
+    constexpr int kSize = 32;
+    constexpr int kChannels = 4;
+    constexpr float kCenter = 15.5f;
+    constexpr float kRadius = 14.0f;
+
+    std::vector<uint8_t> pixels(kSize * kSize * kChannels, 0);
+
+    for (int y = 0; y < kSize; ++y) {
+        for (int x = 0; x < kSize; ++x) {
+            float dx = static_cast<float>(x) - kCenter;
+            float dy = static_cast<float>(y) - kCenter;
+            float dist = std::sqrt(dx * dx + dy * dy);
+            float norm = dist / kRadius;
+            float alpha = std::exp(-norm * norm * 3.0f);
+            alpha = std::max(0.0f, std::min(1.0f, alpha));
+
+            int idx = (y * kSize + x) * kChannels;
+            pixels[idx + 0] = 255;
+            pixels[idx + 1] = 255;
+            pixels[idx + 2] = 255;
+            pixels[idx + 3] = static_cast<uint8_t>(alpha * 255.0f);
+        }
+    }
+
+    std::filesystem::create_directories("assets/textures");
+    stbi_write_png("assets/textures/shadow_blob.png", kSize, kSize, kChannels,
+                   pixels.data(), kSize * kChannels);
+}
+
 void App::generate_audio_assets() {
     std::filesystem::create_directories("assets/audio");
 
@@ -513,6 +543,7 @@ void App::init_subsystems() {
     generate_tileset();
     generate_particle_atlas();
     generate_background_textures();
+    generate_shadow_texture();
     generate_audio_assets();
 
     // Load locale and build font atlas from all text
@@ -532,6 +563,7 @@ void App::init_subsystems() {
     renderer_.init(window_, resources_);
     renderer_.init_font(font_atlas_, resources_);
     renderer_.init_particles(resources_);
+    renderer_.init_shadows(resources_);
 
     // Load background textures with REPEAT sampler for parallax tiling
     {
@@ -737,6 +769,7 @@ void App::clear_scene() {
     npc_ids_.clear();
     npc_dialogs_.clear();
     entity_sprites_.clear();
+    shadow_sprites_.clear();
 
     // Clear particles and weather
     particles_.clear();
@@ -912,6 +945,11 @@ void App::update_game(float dt) {
     }
     ecs::systems::lighting_rebuild(world_, scene_, feature_flags_.npc_lights);
     ecs::systems::sprite_collect(world_, entity_sprites_);
+    if (feature_flags_.blob_shadows) {
+        ecs::systems::shadow_collect(world_, shadow_sprites_);
+    } else {
+        shadow_sprites_.clear();
+    }
     update_audio(dt);
 }
 
@@ -1042,8 +1080,8 @@ void App::main_loop() {
         // Always render
         std::vector<SpriteDrawInfo> particle_sprites;
         particles_.generate_draw_infos(particle_sprites);
-        renderer_.draw_scene(scene_, entity_sprites_, particle_sprites, overlay_sprites_, ui_sprites_,
-                             feature_flags_);
+        renderer_.draw_scene(scene_, entity_sprites_, shadow_sprites_, particle_sprites,
+                             overlay_sprites_, ui_sprites_, feature_flags_);
     }
 }
 

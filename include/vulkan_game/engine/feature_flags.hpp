@@ -18,6 +18,7 @@ struct FeatureFlags {
     // Effects
     bool particles = true;
     bool weather = true;
+    bool blob_shadows = true;
 
     // Gameplay
     bool npc_patrol = true;
@@ -38,7 +39,7 @@ struct FeatureFlags {
         bool FeatureFlags::* ptr;
     };
 
-    static constexpr std::array<Entry, 15> entries() {
+    static constexpr std::array<Entry, 16> entries() {
         return {{
             {"Parallax BG",    "24",  "RENDERING", &FeatureFlags::parallax_backgrounds},
             {"Point Lights",   "11",  "RENDERING", &FeatureFlags::point_lights},
@@ -49,6 +50,7 @@ struct FeatureFlags {
             {"Fog",            "25",  "RENDERING", &FeatureFlags::fog},
             {"Particles",      "12",  "EFFECTS",   &FeatureFlags::particles},
             {"Weather",        "25",  "EFFECTS",   &FeatureFlags::weather},
+            {"Blob Shadows",   "28",  "EFFECTS",   &FeatureFlags::blob_shadows},
             {"NPC Patrol",     "8",   "GAMEPLAY",  &FeatureFlags::npc_patrol},
             {"Animation",      "4-6", "GAMEPLAY",  &FeatureFlags::animation},
             {"NPC Lights",     "11",  "GAMEPLAY",  &FeatureFlags::npc_lights},

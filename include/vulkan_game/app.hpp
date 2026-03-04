@@ -125,6 +125,7 @@ private:
     static void generate_tileset();
     static void generate_particle_atlas();
     static void generate_background_textures();
+    static void generate_shadow_texture();
     static void generate_audio_assets();
 
     GLFWwindow* window_ = nullptr;
@@ -146,6 +147,7 @@ private:
     ecs::Entity player_id_ = ecs::kNullEntity;
     std::vector<ecs::Entity> npc_ids_;
     std::vector<SpriteDrawInfo> entity_sprites_;
+    std::vector<SpriteDrawInfo> shadow_sprites_;
 
     // UI context
     ui::UIContext ui_ctx_;
