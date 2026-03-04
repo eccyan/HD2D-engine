@@ -26,8 +26,8 @@ PlayerMoveResult player_movement(World& world, InputManager& input, float dt) {
 
     world.view<Transform, PlayerTag, Facing>().each(
         [&](Entity, Transform& tf, PlayerTag&, Facing& facing) {
-            if (w) tf.position.y += speed * dt;
-            if (s) tf.position.y -= speed * dt;
+            if (w) tf.position.y -= speed * dt;
+            if (s) tf.position.y += speed * dt;
             if (a) tf.position.x -= speed * dt;
             if (d) tf.position.x += speed * dt;
 
@@ -59,10 +59,10 @@ void npc_patrol(World& world, const TileLayer& layer, float dt) {
             const float prev_y = tf.position.y;
 
             switch (patrol.dir) {
-                case Direction::Down:  tf.position.y -= patrol.speed * dt; break;
+                case Direction::Down:  tf.position.y += patrol.speed * dt; break;
                 case Direction::Left:  tf.position.x -= patrol.speed * dt; break;
                 case Direction::Right: tf.position.x += patrol.speed * dt; break;
-                case Direction::Up:    tf.position.y += patrol.speed * dt; break;
+                case Direction::Up:    tf.position.y -= patrol.speed * dt; break;
             }
 
             const glm::vec2 resolved = resolve_tilemap_collision(

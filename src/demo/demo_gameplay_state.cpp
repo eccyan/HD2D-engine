@@ -54,20 +54,21 @@ void DemoGameplayState::build_draw_lists(App& app) {
     auto& ui_sprites = app.ui_sprites();
 
     // Panel background
+    // UI uses Y-UP coordinates: y=0 is screen bottom, y=720 is screen top.
     constexpr float panel_x = 930.0f;
     constexpr float panel_w = 350.0f;
     constexpr float panel_h = 720.0f;
     ui.panel(panel_x + panel_w * 0.5f, panel_h * 0.5f, panel_w, panel_h,
              {0.02f, 0.02f, 0.08f, 0.92f});
 
-    // Title
-    ui.label("FEATURE DEMO", panel_x + 20.0f, 20.0f, 0.7f, {1.0f, 0.85f, 0.2f, 1.0f});
-    ui.label("[F1]", panel_x + panel_w - 60.0f, 20.0f, 0.5f, {0.5f, 0.5f, 0.5f, 1.0f});
+    // Title near screen top (high Y)
+    ui.label("FEATURE DEMO", panel_x + 20.0f, 700.0f, 0.7f, {1.0f, 0.85f, 0.2f, 1.0f});
+    ui.label("[F1]", panel_x + panel_w - 60.0f, 700.0f, 0.5f, {0.5f, 0.5f, 0.5f, 1.0f});
 
     auto entries = FeatureFlags::entries();
     const auto& flags = app.feature_flags();
 
-    float y = 60.0f;
+    float y = 660.0f;
     std::string_view current_category;
 
     for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
@@ -76,10 +77,10 @@ void DemoGameplayState::build_draw_lists(App& app) {
         // Category header
         if (entry.category != current_category) {
             current_category = entry.category;
-            y += 8.0f;
+            y -= 8.0f;
             ui.label(std::string(current_category), panel_x + 20.0f, y, 0.5f,
                      {0.4f, 0.6f, 0.9f, 1.0f});
-            y += 30.0f;
+            y -= 30.0f;
         }
 
         // Selection indicator
@@ -89,7 +90,7 @@ void DemoGameplayState::build_draw_lists(App& app) {
 
         // Highlight bar for selected item
         if (selected) {
-            ui.panel(panel_x + panel_w * 0.5f, y + 10.0f, panel_w - 10.0f, 28.0f,
+            ui.panel(panel_x + panel_w * 0.5f, y - 10.0f, panel_w - 10.0f, 28.0f,
                      {0.15f, 0.15f, 0.35f, 0.8f});
         }
 
@@ -107,11 +108,11 @@ void DemoGameplayState::build_draw_lists(App& app) {
         ui.label(std::string(entry.phase), panel_x + panel_w - 45.0f, y, 0.45f,
                  {0.5f, 0.5f, 0.5f, 1.0f});
 
-        y += 32.0f;
+        y -= 32.0f;
     }
 
-    // Help text at bottom
-    ui.label("Up/Down:Nav Enter:Toggle", panel_x + 20.0f, panel_h - 30.0f, 0.4f,
+    // Help text near screen bottom (low Y)
+    ui.label("Up/Down:Nav Enter:Toggle", panel_x + 20.0f, 30.0f, 0.4f,
              {0.4f, 0.4f, 0.4f, 1.0f});
 
     // Append UI draw list
