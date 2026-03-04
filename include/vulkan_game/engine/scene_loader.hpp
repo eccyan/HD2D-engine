@@ -62,6 +62,7 @@ struct PortalData {
 
 struct SceneData {
     TileLayer tilemap;
+    std::vector<TileAnimationDef> tile_animations;
     glm::vec4 ambient_color{0.25f, 0.28f, 0.45f, 1.0f};
     std::vector<PointLight> static_lights;
     std::vector<ParallaxLayerData> background_layers;

@@ -86,8 +86,20 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         data.tilemap.solid.resize(tiles.size(), false);
         for (size_t i = 0; i < tiles.size(); i++) {
             data.tilemap.tiles[i] = tiles[i].get<uint16_t>();
-            // Tile 1 = wall = solid
-            data.tilemap.solid[i] = (data.tilemap.tiles[i] == 1);
+            // Tile 1 = wall, tile 8 = wall torch = solid
+            data.tilemap.solid[i] = (data.tilemap.tiles[i] == 1 || data.tilemap.tiles[i] == 8);
+        }
+
+        if (tm.contains("tile_animations")) {
+            for (const auto& anim_j : tm["tile_animations"]) {
+                TileAnimationDef def;
+                def.base_tile_id = anim_j["base_tile"].get<uint16_t>();
+                for (const auto& f : anim_j["frames"]) {
+                    def.frame_tile_ids.push_back(f.get<uint16_t>());
+                }
+                def.frame_duration = anim_j["frame_duration"].get<float>();
+                data.tile_animations.push_back(std::move(def));
+            }
         }
     }
 

@@ -22,7 +22,37 @@ glm::vec2 Tileset::uv_max(uint32_t tile_id) const {
     };
 }
 
-std::vector<SpriteDrawInfo> TileLayer::generate_draw_infos() const {
+void TileAnimator::add_definition(TileAnimationDef def) {
+    size_t idx = anims_.size();
+    uint16_t base = def.base_tile_id;
+    anims_.push_back(AnimState{std::move(def), 0.0f, 0});
+    lookup_[base] = idx;
+}
+
+void TileAnimator::update(float dt) {
+    for (auto& anim : anims_) {
+        anim.timer += dt;
+        if (anim.timer >= anim.def.frame_duration) {
+            anim.timer -= anim.def.frame_duration;
+            anim.current_frame = (anim.current_frame + 1) %
+                static_cast<uint32_t>(anim.def.frame_tile_ids.size());
+        }
+    }
+}
+
+uint16_t TileAnimator::resolve(uint16_t tile_id) const {
+    auto it = lookup_.find(tile_id);
+    if (it == lookup_.end()) return tile_id;
+    const auto& anim = anims_[it->second];
+    return anim.def.frame_tile_ids[anim.current_frame];
+}
+
+void TileAnimator::reset() {
+    anims_.clear();
+    lookup_.clear();
+}
+
+std::vector<SpriteDrawInfo> TileLayer::generate_draw_infos(const TileAnimator* animator) const {
     std::vector<SpriteDrawInfo> infos;
     infos.reserve(width * height);
 
@@ -44,8 +74,9 @@ std::vector<SpriteDrawInfo> TileLayer::generate_draw_infos() const {
             };
             info.size = {tile_size, tile_size};
             info.color = {1.0f, 1.0f, 1.0f, 1.0f};
-            info.uv_min = tileset.uv_min(tile_id);
-            info.uv_max = tileset.uv_max(tile_id);
+            uint16_t resolved = animator ? animator->resolve(tile_id) : tile_id;
+            info.uv_min = tileset.uv_min(resolved);
+            info.uv_max = tileset.uv_max(resolved);
             infos.push_back(info);
         }
     }

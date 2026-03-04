@@ -15,6 +15,10 @@ public:
     void set_tile_layer(TileLayer layer);
     const std::optional<TileLayer>& tile_layer() const { return tile_layer_; }
 
+    void set_tile_animator(TileAnimator animator) { tile_animator_ = std::move(animator); }
+    TileAnimator* tile_animator() { return tile_animator_ ? &*tile_animator_ : nullptr; }
+    const TileAnimator* tile_animator() const { return tile_animator_ ? &*tile_animator_ : nullptr; }
+
     void set_ambient_color(const glm::vec4& color) { ambient_color_ = color; }
     const glm::vec4& ambient_color() const { return ambient_color_; }
 
@@ -32,6 +36,7 @@ public:
 
 private:
     std::optional<TileLayer> tile_layer_;
+    std::optional<TileAnimator> tile_animator_;
     glm::vec4 ambient_color_{0.25f, 0.28f, 0.45f, 1.0f};
     std::vector<PointLight> lights_;
     std::vector<ParallaxLayer> background_layers_;

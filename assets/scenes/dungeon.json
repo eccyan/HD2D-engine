@@ -1,8 +1,8 @@
 {
   "tilemap": {
     "tileset": {
-      "tile_width": 16, "tile_height": 16, "columns": 2,
-      "sheet_width": 32, "sheet_height": 16
+      "tile_width": 16, "tile_height": 16, "columns": 8,
+      "sheet_width": 128, "sheet_height": 48
     },
     "width": 10, "height": 10,
     "tile_size": 1.0, "z": 1.0,
@@ -12,11 +12,14 @@
       1,0,0,0,0,0,0,0,0,1,
       1,0,0,0,0,0,0,0,0,1,
       1,0,0,0,0,0,0,0,0,1,
-      1,0,0,0,0,0,0,0,0,1,
-      1,0,0,0,0,0,0,0,0,1,
+      1,0,0,0,0,0,0,5,5,1,
+      1,0,0,0,0,0,0,5,5,1,
       1,0,0,0,0,0,0,0,0,1,
       1,0,0,0,0,0,0,0,0,1,
       1,1,1,1,1,1,1,1,1,1
+    ],
+    "tile_animations": [
+      { "base_tile": 5, "frames": [5, 6, 7], "frame_duration": 0.2 }
     ]
   },
   "ambient_color": [0.35, 0.25, 0.15, 1.0],

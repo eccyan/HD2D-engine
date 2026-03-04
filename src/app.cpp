@@ -100,27 +100,109 @@ void App::generate_player_sheet() {
 void App::generate_tileset() {
     constexpr int kTileW    = 16;
     constexpr int kTileH    = 16;
-    constexpr int kTiles    = 2;
-    constexpr int kWidth    = kTileW * kTiles;  // 32
-    constexpr int kHeight   = kTileH;           // 16
+    constexpr int kCols     = 8;
+    constexpr int kRows     = 3;
+    constexpr int kWidth    = kTileW * kCols;   // 128
+    constexpr int kHeight   = kTileH * kRows;   // 48
     constexpr int kChannels = 4;
 
-    const uint8_t tile_colors[kTiles][4] = {
-        {200, 185, 145, 255},
-        { 70,  60,  55, 255},
+    // 24 tile slots (8 columns x 3 rows):
+    // Row 0: [0] floor, [1] wall, [2-4] water frames, [5-7] lava frames
+    // Row 1: [8-9] wall torch frames, [10-15] unused
+    // Row 2: unused
+    const uint8_t tile_colors[10][4] = {
+        {200, 185, 145, 255},  // 0: beige floor
+        { 70,  60,  55, 255},  // 1: dark rock wall
+        { 40,  90, 180, 255},  // 2: water frame 0 (deep blue)
+        { 55, 110, 200, 255},  // 3: water frame 1 (medium blue)
+        { 70, 130, 210, 255},  // 4: water frame 2 (light blue)
+        {200,  60,  20, 255},  // 5: lava frame 0 (dark red-orange)
+        {240, 100,  20, 255},  // 6: lava frame 1 (bright orange)
+        {255, 160,  40, 255},  // 7: lava frame 2 (yellow-orange)
+        { 60,  50,  45, 255},  // 8: wall torch frame 0 (dark wall + dim ember)
+        { 80,  65,  40, 255},  // 9: wall torch frame 1 (dark wall + bright ember)
     };
 
-    std::vector<uint8_t> pixels(kWidth * kHeight * kChannels);
+    std::vector<uint8_t> pixels(kWidth * kHeight * kChannels, 0);
 
-    for (int tile = 0; tile < kTiles; ++tile) {
+    auto fill_tile = [&](int tile_id, const uint8_t color[4]) {
+        int col = tile_id % kCols;
+        int row = tile_id / kCols;
         for (int py = 0; py < kTileH; ++py) {
-            for (int px_local = 0; px_local < kTileW; ++px_local) {
-                int px  = tile * kTileW + px_local;
-                int idx = (py * kWidth + px) * kChannels;
-                pixels[idx + 0] = tile_colors[tile][0];
-                pixels[idx + 1] = tile_colors[tile][1];
-                pixels[idx + 2] = tile_colors[tile][2];
-                pixels[idx + 3] = tile_colors[tile][3];
+            for (int px = 0; px < kTileW; ++px) {
+                int abs_x = col * kTileW + px;
+                int abs_y = row * kTileH + py;
+                int idx = (abs_y * kWidth + abs_x) * kChannels;
+                pixels[idx + 0] = color[0];
+                pixels[idx + 1] = color[1];
+                pixels[idx + 2] = color[2];
+                pixels[idx + 3] = color[3];
+            }
+        }
+    };
+
+    // Fill all 10 defined tiles
+    for (int t = 0; t < 10; ++t) {
+        fill_tile(t, tile_colors[t]);
+    }
+
+    // Add wave-like brightness variation to water tiles (2-4)
+    for (int frame = 0; frame < 3; ++frame) {
+        int tile_id = 2 + frame;
+        int col = tile_id % kCols;
+        int row = tile_id / kCols;
+        for (int py = 0; py < kTileH; ++py) {
+            float wave = 0.85f + 0.15f * std::sin(static_cast<float>(py + frame * 5) * 0.8f);
+            for (int px = 0; px < kTileW; ++px) {
+                int abs_x = col * kTileW + px;
+                int abs_y = row * kTileH + py;
+                int idx = (abs_y * kWidth + abs_x) * kChannels;
+                pixels[idx + 0] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 0] * wave));
+                pixels[idx + 1] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 1] * wave));
+                pixels[idx + 2] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 2] * wave));
+            }
+        }
+    }
+
+    // Add flow pattern to lava tiles (5-7)
+    for (int frame = 0; frame < 3; ++frame) {
+        int tile_id = 5 + frame;
+        int col = tile_id % kCols;
+        int row = tile_id / kCols;
+        for (int py = 0; py < kTileH; ++py) {
+            float flow = 0.8f + 0.2f * std::sin(static_cast<float>(py + frame * 4) * 0.6f);
+            for (int px = 0; px < kTileW; ++px) {
+                int abs_x = col * kTileW + px;
+                int abs_y = row * kTileH + py;
+                int idx = (abs_y * kWidth + abs_x) * kChannels;
+                pixels[idx + 0] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 0] * flow));
+                pixels[idx + 1] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 1] * flow));
+                pixels[idx + 2] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 2] * flow));
+            }
+        }
+    }
+
+    // Add ember glow to wall torch tiles (8-9)
+    {
+        for (int frame = 0; frame < 2; ++frame) {
+            int tile_id = 8 + frame;
+            int col = tile_id % kCols;
+            int row = tile_id / kCols;
+            float ember_intensity = frame == 0 ? 0.4f : 0.9f;
+            for (int py = 0; py < kTileH; ++py) {
+                for (int px = 0; px < kTileW; ++px) {
+                    // Ember at top-center of tile
+                    float dx = static_cast<float>(px) - 7.5f;
+                    float dy = static_cast<float>(py) - 3.0f;
+                    float dist = std::sqrt(dx * dx + dy * dy);
+                    float glow = std::max(0.0f, 1.0f - dist / 5.0f) * ember_intensity;
+                    int abs_x = col * kTileW + px;
+                    int abs_y = row * kTileH + py;
+                    int idx = (abs_y * kWidth + abs_x) * kChannels;
+                    pixels[idx + 0] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 0] + glow * 180.0f));
+                    pixels[idx + 1] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 1] + glow * 100.0f));
+                    pixels[idx + 2] = static_cast<uint8_t>(std::min(255.0f, pixels[idx + 2] + glow * 20.0f));
+                }
             }
         }
     }
@@ -714,6 +796,15 @@ void App::init_scene(const std::string& scene_path) {
     scene_.set_tile_layer(std::move(scene_data.tilemap));
     scene_.set_ambient_color(scene_data.ambient_color);
 
+    // Tile animator from scene data
+    if (!scene_data.tile_animations.empty()) {
+        TileAnimator animator;
+        for (auto& def : scene_data.tile_animations) {
+            animator.add_definition(std::move(def));
+        }
+        scene_.set_tile_animator(std::move(animator));
+    }
+
     // Background parallax layers from scene data
     {
         std::vector<ParallaxLayer> bg_layers;
@@ -780,6 +871,7 @@ void App::clear_scene() {
     scene_.clear_lights();
     scene_.set_fog_density(0.0f);
     scene_.set_background_layers({});
+    scene_.set_tile_animator({});
 
     // Reset portals
     portals_.clear();
@@ -928,6 +1020,11 @@ void App::update_game(float dt) {
                 }
             }
         }
+    }
+
+    // Animated tiles (runs in both explore and dialog modes so water keeps flowing)
+    if (feature_flags_.animated_tiles && scene_.tile_animator()) {
+        scene_.tile_animator()->update(dt);
     }
 
     // Weather system update (before particles, updates ambient + fog)

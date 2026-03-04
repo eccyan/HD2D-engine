@@ -3,6 +3,7 @@
 #include "vulkan_game/engine/sprite_batch.hpp"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -20,6 +21,29 @@ struct Tileset {
     glm::vec2 uv_max(uint32_t tile_id) const;
 };
 
+struct TileAnimationDef {
+    uint16_t base_tile_id;                // tile_id used in tiles[]
+    std::vector<uint16_t> frame_tile_ids; // sequence of tile_ids to cycle
+    float frame_duration;                 // seconds per frame (uniform)
+};
+
+class TileAnimator {
+public:
+    void add_definition(TileAnimationDef def);
+    void update(float dt);
+    uint16_t resolve(uint16_t tile_id) const;
+    void reset();
+
+private:
+    struct AnimState {
+        TileAnimationDef def;
+        float timer = 0;
+        uint32_t current_frame = 0;
+    };
+    std::vector<AnimState> anims_;
+    std::unordered_map<uint16_t, size_t> lookup_;
+};
+
 struct TileLayer {
     Tileset tileset;
     uint32_t width;     // grid width in tiles
@@ -29,7 +53,7 @@ struct TileLayer {
     std::vector<uint16_t> tiles;  // row-major; 0xFFFF = skip
     std::vector<bool> solid;      // row-major; true = blocks movement (empty = all passable)
 
-    std::vector<SpriteDrawInfo> generate_draw_infos() const;
+    std::vector<SpriteDrawInfo> generate_draw_infos(const TileAnimator* animator = nullptr) const;
 };
 
 // Resolves AABB overlap between an entity (axis-aligned square with given
