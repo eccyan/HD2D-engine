@@ -22,8 +22,8 @@ void npc_patrol(World& world, const TileLayer& layer, float dt);
 void animation_update(World& world, float dt);
 void lighting_rebuild(World& world, Scene& scene, bool include_npc_lights = true);
 void particle_sync(World& world, ParticleSystem& particles, bool footstep_active);
-void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out);
-void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out);
-void reflection_collect(World& world, const TileLayer& layer, std::vector<SpriteDrawInfo>& out);
+void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out, bool y_sort = false);
+void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out, bool y_sort = false);
+void reflection_collect(World& world, const TileLayer& layer, std::vector<SpriteDrawInfo>& out, bool y_sort = false);
 
 }  // namespace vulkan_game::ecs::systems

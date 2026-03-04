@@ -1042,14 +1042,14 @@ void App::update_game(float dt) {
         particles_.update(dt);
     }
     ecs::systems::lighting_rebuild(world_, scene_, feature_flags_.npc_lights);
-    ecs::systems::sprite_collect(world_, entity_sprites_);
+    ecs::systems::sprite_collect(world_, entity_sprites_, feature_flags_.y_sort_depth);
     if (feature_flags_.blob_shadows) {
-        ecs::systems::shadow_collect(world_, shadow_sprites_);
+        ecs::systems::shadow_collect(world_, shadow_sprites_, feature_flags_.y_sort_depth);
     } else {
         shadow_sprites_.clear();
     }
     if (feature_flags_.water_reflections && scene_.tile_layer().has_value()) {
-        ecs::systems::reflection_collect(world_, *scene_.tile_layer(), reflection_sprites_);
+        ecs::systems::reflection_collect(world_, *scene_.tile_layer(), reflection_sprites_, feature_flags_.y_sort_depth);
     } else {
         reflection_sprites_.clear();
     }

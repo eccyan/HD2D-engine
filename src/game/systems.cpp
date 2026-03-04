@@ -12,6 +12,8 @@
 
 namespace vulkan_game::ecs::systems {
 
+constexpr float kYSortScale = 0.01f;
+
 PlayerMoveResult player_movement(World& world, InputManager& input, float dt) {
     PlayerMoveResult result;
 
@@ -135,12 +137,15 @@ void particle_sync(World& world, ParticleSystem& particles, bool footstep_active
         });
 }
 
-void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out) {
+void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out, bool y_sort) {
     out.clear();
     world.view<Transform, Sprite>().each(
         [&](Entity, Transform& tf, Sprite& sprite) {
             SpriteDrawInfo info{};
             info.position = tf.position;
+            if (y_sort) {
+                info.position.z = -tf.position.y * kYSortScale;
+            }
             info.size = tf.scale;
             info.color = sprite.tint;
             info.uv_min = sprite.uv_min;
@@ -149,12 +154,13 @@ void sprite_collect(World& world, std::vector<SpriteDrawInfo>& out) {
         });
 }
 
-void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out) {
+void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out, bool y_sort) {
     out.clear();
     world.view<Transform, Sprite>().each(
-        [&](Entity, Transform& tf, Sprite& sprite) {
+        [&](Entity, Transform& tf, Sprite&) {
             SpriteDrawInfo info{};
-            info.position = {tf.position.x, tf.position.y - 0.35f, 0.5f};
+            float z = y_sort ? 0.5f + (-tf.position.y * kYSortScale) : 0.5f;
+            info.position = {tf.position.x, tf.position.y - 0.35f, z};
             info.size = {tf.scale.x * 1.2f, tf.scale.y * 0.3f};
             info.color = {0.0f, 0.0f, 0.0f, 0.35f};
             info.uv_min = {0.0f, 0.0f};
@@ -163,7 +169,7 @@ void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out) {
         });
 }
 
-void reflection_collect(World& world, const TileLayer& layer, std::vector<SpriteDrawInfo>& out) {
+void reflection_collect(World& world, const TileLayer& layer, std::vector<SpriteDrawInfo>& out, bool y_sort) {
     out.clear();
 
     // Build list of water tile center positions (base tile ID 2)
@@ -209,7 +215,8 @@ void reflection_collect(World& world, const TileLayer& layer, std::vector<Sprite
 
             SpriteDrawInfo info{};
             // Y-mirror across water surface
-            info.position = {tf.position.x, 2.0f * best_water.y - tf.position.y, 0.9f};
+            float z = y_sort ? 0.9f + (-tf.position.y * kYSortScale) : 0.9f;
+            info.position = {tf.position.x, 2.0f * best_water.y - tf.position.y, z};
             info.size = tf.scale;
             // Flip UV vertically
             info.uv_min = {sprite.uv_min.x, sprite.uv_max.y};
