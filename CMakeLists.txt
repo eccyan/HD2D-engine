@@ -160,6 +160,7 @@ add_library(vulkan_game_core OBJECT
     src/engine/resource_manager.cpp
     src/engine/game_state.cpp
     src/engine/scene_loader.cpp
+    src/engine/screen_effects.cpp
     src/engine/weather_system.cpp
     src/engine/ui/ui_context.cpp
     src/engine/save_system.cpp

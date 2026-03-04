@@ -53,6 +53,9 @@ public:
     void set_fade_amount(float f) { fade_amount_ = f; }
     float fade_amount() const { return fade_amount_; }
 
+    void set_ca_intensity(float v) { ca_intensity_ = v; }
+    void set_flash_color(float r, float g, float b) { flash_r_ = r; flash_g_ = g; flash_b_ = b; }
+
     void request_screenshot(const std::string& path);
     bool screenshot_write_ok() const { return screenshot_write_ok_; }
     uint32_t screenshot_width() const { return screenshot_width_; }
@@ -103,6 +106,10 @@ private:
     std::vector<std::array<VkDescriptorSet, kMaxFramesInFlight>> bg_descriptor_sets_;
     Camera camera_;
     float fade_amount_ = 0.0f;
+    float ca_intensity_ = 0.0f;
+    float flash_r_ = 0.0f;
+    float flash_g_ = 0.0f;
+    float flash_b_ = 0.0f;
 
     uint32_t current_frame_ = 0;
     uint32_t acquire_semaphore_index_ = 0;

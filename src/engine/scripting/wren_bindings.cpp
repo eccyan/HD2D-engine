@@ -187,6 +187,48 @@ static void engine_npc_ids(::WrenVM* vm) {
     }
 }
 
+// --- Camera & Screen Effects ---
+static void engine_camera_shake_1(::WrenVM* vm) {
+    App* app = get_app(vm);
+    if (!app) return;
+    float amp = static_cast<float>(wrenGetSlotDouble(vm, 1));
+    app->renderer().camera().trigger_shake(amp);
+}
+
+static void engine_camera_shake_3(::WrenVM* vm) {
+    App* app = get_app(vm);
+    if (!app) return;
+    float amp = static_cast<float>(wrenGetSlotDouble(vm, 1));
+    float freq = static_cast<float>(wrenGetSlotDouble(vm, 2));
+    float dur = static_cast<float>(wrenGetSlotDouble(vm, 3));
+    app->renderer().camera().trigger_shake(amp, freq, dur);
+}
+
+static void engine_camera_zoom(::WrenVM* vm) {
+    App* app = get_app(vm);
+    if (!app) return;
+    float z = static_cast<float>(wrenGetSlotDouble(vm, 1));
+    app->renderer().camera().set_target_zoom(z);
+}
+
+static void engine_screen_flash(::WrenVM* vm) {
+    App* app = get_app(vm);
+    if (!app) return;
+    float r = static_cast<float>(wrenGetSlotDouble(vm, 1));
+    float g = static_cast<float>(wrenGetSlotDouble(vm, 2));
+    float b = static_cast<float>(wrenGetSlotDouble(vm, 3));
+    float dur = static_cast<float>(wrenGetSlotDouble(vm, 4));
+    app->screen_effects().trigger_flash({r, g, b}, dur);
+}
+
+static void engine_chromatic_aberration(::WrenVM* vm) {
+    App* app = get_app(vm);
+    if (!app) return;
+    float intensity = static_cast<float>(wrenGetSlotDouble(vm, 1));
+    float dur = static_cast<float>(wrenGetSlotDouble(vm, 2));
+    app->screen_effects().trigger_chromatic_pulse(intensity, dur);
+}
+
 // Binding dispatch.
 void register_wren_bindings(WrenVM& wren_vm) {
     wren_vm.set_bind_foreign_method(
@@ -208,6 +250,11 @@ void register_wren_bindings(WrenVM& wren_vm) {
             if (std::strcmp(signature, "log(_)") == 0)                return &engine_log;
             if (std::strcmp(signature, "player_id()") == 0)           return &engine_player_id;
             if (std::strcmp(signature, "npc_ids()") == 0)             return &engine_npc_ids;
+            if (std::strcmp(signature, "camera_shake(_)") == 0)       return &engine_camera_shake_1;
+            if (std::strcmp(signature, "camera_shake(_,_,_)") == 0)   return &engine_camera_shake_3;
+            if (std::strcmp(signature, "camera_zoom(_)") == 0)        return &engine_camera_zoom;
+            if (std::strcmp(signature, "screen_flash(_,_,_,_)") == 0) return &engine_screen_flash;
+            if (std::strcmp(signature, "chromatic_aberration(_,_)") == 0) return &engine_chromatic_aberration;
 
             return nullptr;
         });

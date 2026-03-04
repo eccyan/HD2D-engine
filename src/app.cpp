@@ -1250,6 +1250,7 @@ void App::update_game(float dt) {
         particles_.update(dt);
     }
     ecs::systems::lighting_rebuild(world_, scene_, feature_flags_.npc_lights);
+    screen_effects_.update(dt);
     ecs::systems::sprite_collect(world_, entity_sprites_, feature_flags_.y_sort_depth);
     if (feature_flags_.sprite_outlines) {
         ecs::systems::outline_collect(world_, outline_sprites_, 0.06f, feature_flags_.y_sort_depth);
@@ -1409,6 +1410,16 @@ void App::main_loop() {
             if (!b.sprites.empty()) ui_batches.push_back(b);
         }
 
+        // Pass screen effects to renderer
+        if (feature_flags_.screen_effects) {
+            auto fc = screen_effects_.flash_color() * screen_effects_.flash_alpha();
+            renderer_.set_ca_intensity(screen_effects_.ca_intensity());
+            renderer_.set_flash_color(fc.r, fc.g, fc.b);
+        } else {
+            renderer_.set_ca_intensity(0.0f);
+            renderer_.set_flash_color(0.0f, 0.0f, 0.0f);
+        }
+
         renderer_.draw_scene(scene_, entity_sprites_, outline_sprites_, reflection_sprites_,
                              shadow_sprites_, particle_sprites, overlay_sprites_, ui_batches,
                              feature_flags_);
@@ -1510,6 +1521,32 @@ void App::process_commands() {
                 control_server_.send({{"type", "error"},
                                       {"message", "missing 'path' field"}});
             }
+        } else if (cmd == "shake") {
+            float amplitude = cmd_json.value("amplitude", 0.5f);
+            float frequency = cmd_json.value("frequency", 15.0f);
+            float duration = cmd_json.value("duration", 0.4f);
+            renderer_.camera().trigger_shake(amplitude, frequency, duration);
+            control_server_.send({{"type", "ok"}});
+        } else if (cmd == "zoom") {
+            float target = cmd_json.value("target", 1.0f);
+            renderer_.camera().set_target_zoom(target);
+            control_server_.send({{"type", "ok"}});
+        } else if (cmd == "flash") {
+            float r = 1.0f, g = 1.0f, b = 1.0f;
+            if (cmd_json.contains("color") && cmd_json["color"].is_array() &&
+                cmd_json["color"].size() >= 3) {
+                r = cmd_json["color"][0];
+                g = cmd_json["color"][1];
+                b = cmd_json["color"][2];
+            }
+            float duration = cmd_json.value("duration", 0.15f);
+            screen_effects_.trigger_flash({r, g, b}, duration);
+            control_server_.send({{"type", "ok"}});
+        } else if (cmd == "chromatic") {
+            float intensity = cmd_json.value("intensity", 0.008f);
+            float duration = cmd_json.value("duration", 0.3f);
+            screen_effects_.trigger_chromatic_pulse(intensity, duration);
+            control_server_.send({{"type", "ok"}});
         } else {
             control_server_.send({{"type", "error"},
                                   {"message", "unknown command: " + cmd}});

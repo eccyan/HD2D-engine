@@ -168,6 +168,10 @@ void Renderer::draw_scene(Scene& scene,
     float dt = now - last_time_;
     last_time_ = now;
 
+    // Suppress camera shake if disabled (zero amplitude prevents shake math)
+    if (!flags.camera_shake && camera_.shake_active()) {
+        camera_.trigger_shake(0.0f, 0.0f, 0.0f);
+    }
     camera_.update(dt);
 
     vkWaitForFences(device, 1, &frame_sync.in_flight, VK_TRUE, UINT64_MAX);
@@ -398,6 +402,12 @@ void Renderer::draw_scene(Scene& scene,
     if (!flags.tone_mapping) pp_params.exposure = 1.0f;
     if (!flags.fog) pp_params.fog_density = 0.0f;
     pp_params.fade_amount = fade_amount_;
+    if (flags.screen_effects) {
+        pp_params.ca_intensity = ca_intensity_;
+        pp_params.flash_r = flash_r_;
+        pp_params.flash_g = flash_g_;
+        pp_params.flash_b = flash_b_;
+    }
 
     post_process_.record_post_process(cmd, image_index, pp_params);
 

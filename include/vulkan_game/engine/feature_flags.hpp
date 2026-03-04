@@ -24,6 +24,8 @@ struct FeatureFlags {
     bool water_reflections = true;
     bool y_sort_depth = true;
     bool sprite_outlines = true;
+    bool camera_shake = true;
+    bool screen_effects = true;
 
     // Gameplay
     bool npc_patrol = true;
@@ -44,7 +46,7 @@ struct FeatureFlags {
         bool FeatureFlags::* ptr;
     };
 
-    static constexpr std::array<Entry, 21> entries() {
+    static constexpr std::array<Entry, 23> entries() {
         return {{
             {"Parallax BG",    "24",  "RENDERING", &FeatureFlags::parallax_backgrounds},
             {"Point Lights",   "11",  "RENDERING", &FeatureFlags::point_lights},
@@ -61,6 +63,8 @@ struct FeatureFlags {
             {"Water Reflect.", "30",  "EFFECTS",   &FeatureFlags::water_reflections},
             {"Y-Sort Depth",  "33",  "EFFECTS",   &FeatureFlags::y_sort_depth},
             {"Sprite Outlines","34",  "EFFECTS",   &FeatureFlags::sprite_outlines},
+            {"Camera Shake",   "36",  "EFFECTS",   &FeatureFlags::camera_shake},
+            {"Screen FX",      "36",  "EFFECTS",   &FeatureFlags::screen_effects},
             {"NPC Patrol",     "8",   "GAMEPLAY",  &FeatureFlags::npc_patrol},
             {"Animation",      "4-6", "GAMEPLAY",  &FeatureFlags::animation},
             {"NPC Lights",     "11",  "GAMEPLAY",  &FeatureFlags::npc_lights},

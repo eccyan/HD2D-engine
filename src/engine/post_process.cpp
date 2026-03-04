@@ -626,12 +626,12 @@ void PostProcessPipeline::create_pipelines(VkDevice device) {
         }
     }
 
-    // Composite pipeline layout: composite_layout_ + 64B push constant
+    // Composite pipeline layout: composite_layout_ + 80B push constant
     {
         VkPushConstantRange push{};
         push.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         push.offset = 0;
-        push.size = 64;  // 4 × vec4 (bloom_params, dof_params, depth_params, fog_params)
+        push.size = 80;  // 5 × vec4 (bloom, dof, depth, fog, screen_effects)
 
         VkPipelineLayoutCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -860,7 +860,7 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, composite_pipeline_layout_,
                                 0, 1, &ds_composite_, 0, nullptr);
 
-        // 64B push constant: 4 × vec4
+        // 80B push constant: 5 × vec4
         float near = params.dof_near_plane;
         float far = params.dof_far_plane;
         struct {
@@ -872,6 +872,8 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
             float fog_density; float pad1;
             float fog_r; float fog_g;
             float fog_b; float fade_amount;
+            float ca_intensity; float flash_r;
+            float flash_g; float flash_b;
         } comp_pc;
         comp_pc.bloom_intensity = params.bloom_intensity;
         comp_pc.exposure = params.exposure;
@@ -889,8 +891,12 @@ void PostProcessPipeline::record_post_process(VkCommandBuffer cmd, uint32_t swap
         comp_pc.fog_g = params.fog_color_g;
         comp_pc.fog_b = params.fog_color_b;
         comp_pc.fade_amount = params.fade_amount;
+        comp_pc.ca_intensity = params.ca_intensity;
+        comp_pc.flash_r = params.flash_r;
+        comp_pc.flash_g = params.flash_g;
+        comp_pc.flash_b = params.flash_b;
         vkCmdPushConstants(cmd, composite_pipeline_layout_, VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, 64, &comp_pc);
+                           0, 80, &comp_pc);
 
         vkCmdDraw(cmd, 3, 1, 0, 0);
         // NOTE: render pass left open for UI drawing. Caller must end it.

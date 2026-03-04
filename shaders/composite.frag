@@ -24,15 +24,32 @@ layout(push_constant) uniform PushConstants {
     float depth_B;  // near * far / (far - near)
     float fog_density;
     float _pad1;
-    // vec4 3: fog color
+    // vec4 3: fog color + fade
     float fog_r;
     float fog_g;
     float fog_b;
     float fade_amount;
+    // vec4 4: screen effects
+    float ca_intensity;
+    float flash_r;
+    float flash_g;
+    float flash_b;
 } pc;
 
 void main() {
-    vec3 scene = texture(scene_tex, frag_uv).rgb;
+    // Chromatic aberration: radial R/B channel offset
+    vec3 scene;
+    if (pc.ca_intensity > 0.0001) {
+        vec2 center = frag_uv - 0.5;
+        float dist_from_center = length(center);
+        vec2 dir = (dist_from_center > 0.0001) ? normalize(center) * pc.ca_intensity * dist_from_center : vec2(0.0);
+        scene.r = texture(scene_tex, frag_uv + dir).r;
+        scene.g = texture(scene_tex, frag_uv).g;
+        scene.b = texture(scene_tex, frag_uv - dir).b;
+    } else {
+        scene = texture(scene_tex, frag_uv).rgb;
+    }
+
     vec3 bloom = texture(bloom_tex, frag_uv).rgb;
     vec3 dof_blurred = texture(dof_tex, frag_uv).rgb;
 
@@ -64,6 +81,9 @@ void main() {
 
     // Reinhard tone mapping
     color = vec3(1.0) - exp(-color * pc.exposure);
+
+    // Screen flash (additive, after tone mapping)
+    color += vec3(pc.flash_r, pc.flash_g, pc.flash_b);
 
     // Vignette
     vec2 uv_centered = frag_uv - 0.5;

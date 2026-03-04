@@ -19,6 +19,7 @@
 #include "vulkan_game/engine/scripting/script_system.hpp"
 #include "vulkan_game/engine/scripting/wren_bindings.hpp"
 #include "vulkan_game/engine/scene.hpp"
+#include "vulkan_game/engine/screen_effects.hpp"
 #include "vulkan_game/engine/weather_system.hpp"
 #include "vulkan_game/engine/text_renderer.hpp"
 #include "vulkan_game/engine/types.hpp"
@@ -110,6 +111,9 @@ public:
     // Weather system accessor
     WeatherSystem& weather_system() { return weather_system_; }
 
+    // Screen effects accessor
+    ScreenEffects& screen_effects() { return screen_effects_; }
+
 protected:
     void init_subsystems();
     void main_loop();
@@ -175,6 +179,9 @@ private:
     ParticleSystem particles_;
     size_t torch_emitter_ids_[4]{};
     WeatherSystem weather_system_;
+
+    // Screen effects
+    ScreenEffects screen_effects_;
 
     // Audio
     AudioSystem audio_;

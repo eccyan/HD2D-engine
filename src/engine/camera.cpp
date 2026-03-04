@@ -1,6 +1,7 @@
 #include "vulkan_game/engine/camera.hpp"
 
 #include <cmath>
+#include <random>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -45,6 +46,7 @@ void Camera::configure_hd2d(float aspect) {
     target_ = glm::vec3(0.0f);
     position_ = target_ + offset;
 
+    base_fov_ = 45.0f;
     set_perspective(45.0f, aspect, 0.1f, 100.0f);
 }
 
@@ -57,6 +59,23 @@ void Camera::set_follow_speed(float speed) {
     follow_speed_ = speed;
 }
 
+void Camera::trigger_shake(float amplitude, float frequency, float duration) {
+    shake_.amplitude = amplitude;
+    shake_.frequency = frequency;
+    // Compute decay rate so amplitude reaches ~1% at end of duration
+    shake_.decay_rate = (duration > 0.0f) ? (4.6f / duration) : 10.0f;
+    shake_.timer = 0.0f;
+    // Random phase offsets for natural feel
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_real_distribution<float> dist(0.0f, 6.2831853f);
+    shake_.phase_x = dist(rng);
+    shake_.phase_y = dist(rng);
+}
+
+void Camera::set_target_zoom(float z) {
+    target_zoom_ = z;
+}
+
 void Camera::update(float dt) {
     if (!has_follow_target_) return;
 
@@ -67,6 +86,33 @@ void Camera::update(float dt) {
     float t = 1.0f - std::exp(-follow_speed_ * dt);
     target_ = glm::mix(target_, follow_target_, t);
     position_ = target_ + offset;
+
+    // Camera shake
+    if (shake_.amplitude > 0.0f) {
+        shake_.timer += dt;
+        constexpr float kTwoPi = 6.2831853f;
+        float decay = std::exp(-shake_.decay_rate * shake_.timer);
+        float shake_x = std::sin(shake_.timer * shake_.frequency * kTwoPi + shake_.phase_x)
+                        * shake_.amplitude * decay;
+        float shake_y = std::sin(shake_.timer * shake_.frequency * kTwoPi + shake_.phase_y)
+                        * shake_.amplitude * decay;
+        position_.x += shake_x;
+        target_.x += shake_x;
+        position_.y += shake_y;
+        target_.y += shake_y;
+
+        // Stop when amplitude is negligible
+        if (decay < 0.01f) {
+            shake_.amplitude = 0.0f;
+        }
+    }
+
+    // Smooth zoom
+    if (std::abs(zoom_ - target_zoom_) > 0.001f) {
+        float zt = 1.0f - std::exp(-5.0f * dt);
+        zoom_ = zoom_ + (target_zoom_ - zoom_) * zt;
+        fov_ = base_fov_ / zoom_;
+    }
 }
 
 glm::mat4 Camera::view() const {
