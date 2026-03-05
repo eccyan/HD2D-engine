@@ -104,21 +104,19 @@ The server starts at `http://localhost:8188` by default. You can change the URL 
 
 LoRA (Low-Rank Adaptation) models specialize Stable Diffusion for a specific style. For pixel art, a LoRA dramatically improves output quality compared to prompt keywords alone.
 
-1. **Download a pixel art LoRA** — search for "pixel art" on [Civitai](https://civitai.com) or Hugging Face. Look for SD 1.5 compatible LoRA files (`.safetensors`). Popular choices include:
-   - "Pixel Art XL" style LoRAs
-   - "16-bit SNES" style LoRAs
-   - Any LoRA tagged `pixel art` + `SD 1.5`
-
-2. **Install the LoRA** — copy the `.safetensors` file into your ComfyUI installation:
+1. **Download a pixel art LoRA** — we recommend [PixelArtRedmond 1.5V](https://huggingface.co/artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5) (SD 1.5, ~26MB):
+   ```bash
+   cd ComfyUI/models/loras
+   curl -L -o PixelArtRedmond15V-PixelArt-PIXARFK.safetensors \
+     https://huggingface.co/artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5/resolve/main/PixelArtRedmond15V-PixelArt-PIXARFK.safetensors
    ```
-   ComfyUI/models/loras/pixel-art.safetensors
-   ```
+   Other options: search "pixel art SD 1.5 LoRA" on [Civitai](https://civitai.com) or Hugging Face.
 
-3. **Configure in Pixel Painter** — open the AI panel, expand **Advanced**, and enter the LoRA filename without the `.safetensors` extension:
-   - **LoRA Model:** `pixel-art`
+2. **Configure in Pixel Painter** — open the AI panel, expand **Advanced**, and enter the LoRA filename without the `.safetensors` extension:
+   - **LoRA Model:** `PixelArtRedmond15V-PixelArt-PIXARFK`
    - **Weight:** `0.8` (adjust 0.5–1.0 to taste; higher = stronger style effect)
 
-4. **Generate** — type a prompt like "stone floor tile, top-down, gray, rough texture" and click Generate (or Ctrl+Enter). A `LoraLoader` node is automatically inserted into the ComfyUI workflow.
+3. **Generate** — type a prompt like "stone floor tile, top-down, gray, rough texture" and click Generate (or Ctrl+Enter). A `LoraLoader` node is automatically inserted into the ComfyUI workflow. Include the trigger word `PixArFK` in your prompt for best results (or the trigger word specific to your chosen LoRA).
 
 ### Generation Workflow
 
@@ -151,6 +149,20 @@ LoRA (Low-Rank Adaptation) models specialize Stable Diffusion for a specific sty
 - For sprites: mention facing direction and character description
 
 Generation always targets the currently selected 16×16 tile or sprite cell. Full sheet generation is not supported.
+
+## Batch Generation (CLI Scripts)
+
+For generating entire tilesets or sprite sheets at once, use the Python scripts in `tools/scripts/`. These talk directly to ComfyUI's API and assemble the results into game-ready PNG files.
+
+```bash
+# Generate full 128x48 tileset (24 tiles, ~12 min on CPU)
+./tools/ComfyUI/venv/bin/python tools/scripts/generate_tileset.py
+
+# Generate full 64x192 player sprite sheet (48 frames, ~25 min on CPU)
+./tools/ComfyUI/venv/bin/python tools/scripts/generate_player_sheet.py
+```
+
+Both scripts use the PixelArtRedmond LoRA by default. Edit the `LORA_NAME`, `LORA_WEIGHT`, and `TILE_PROMPTS` / `CHARACTER_DESC` variables at the top of each script to customize. Seeds are deterministic for reproducible results.
 
 ## Export and Hot-Reload
 
