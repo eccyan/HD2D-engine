@@ -245,11 +245,17 @@ void Renderer::draw_scene(Scene& scene,
             for (size_t i = 0; i < scene.background_layers().size(); ++i) {
                 if (i >= bg_descriptor_sets_.size()) break;
 
+                const auto& bg_layer = scene.background_layers()[i];
                 sprite_batch_.begin();
-                auto draw_info = scene.background_layers()[i].generate_draw_info(cam_xy);
-                draw_info.position.z = -20.0f;  // behind everything in camera space
+                SpriteDrawInfo draw_info;
+                if (bg_layer.wall) {
+                    draw_info = bg_layer.generate_wall_draw_info(cam_xy);
+                } else {
+                    draw_info = bg_layer.generate_draw_info(cam_xy);
+                    draw_info.position.z = -20.0f;  // behind everything in camera space
+                }
                 sprite_batch_.draw(draw_info);
-                auto bg_flush = sprite_batch_.flush(current_frame_);
+                auto bg_flush = sprite_batch_.flush(current_frame_, bg_layer.wall);
                 if (bg_flush.index_count > 0) {
                     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                             sprite_pipeline_layout_, 0, 1,

@@ -88,7 +88,7 @@ void SpriteBatch::draw(const SpriteDrawInfo& info) {
     }
 }
 
-FlushResult SpriteBatch::flush(uint32_t frame_index) {
+FlushResult SpriteBatch::flush(uint32_t frame_index, bool as_wall) {
     if (pending_sprites_.empty()) {
         return {};
     }
@@ -118,11 +118,19 @@ FlushResult SpriteBatch::flush(uint32_t frame_index) {
         float hh = s.size.y * 0.5f;
 
         uint32_t vi = base + i * 4;
-        // TL, TR, BR, BL
-        verts[vi + 0] = {{cx - hw, cy + hh, cz}, {s.uv_min.x, s.uv_min.y}, s.color};
-        verts[vi + 1] = {{cx + hw, cy + hh, cz}, {s.uv_max.x, s.uv_min.y}, s.color};
-        verts[vi + 2] = {{cx + hw, cy - hh, cz}, {s.uv_max.x, s.uv_max.y}, s.color};
-        verts[vi + 3] = {{cx - hw, cy - hh, cz}, {s.uv_min.x, s.uv_max.y}, s.color};
+        if (as_wall) {
+            // XZ-plane quad (vertical wall): X=horizontal, Z=height, Y=depth
+            verts[vi + 0] = {{cx - hw, cy, cz + hh}, {s.uv_min.x, s.uv_min.y}, s.color};
+            verts[vi + 1] = {{cx + hw, cy, cz + hh}, {s.uv_max.x, s.uv_min.y}, s.color};
+            verts[vi + 2] = {{cx + hw, cy, cz - hh}, {s.uv_max.x, s.uv_max.y}, s.color};
+            verts[vi + 3] = {{cx - hw, cy, cz - hh}, {s.uv_min.x, s.uv_max.y}, s.color};
+        } else {
+            // XY-plane quad (flat sprite): existing behavior
+            verts[vi + 0] = {{cx - hw, cy + hh, cz}, {s.uv_min.x, s.uv_min.y}, s.color};
+            verts[vi + 1] = {{cx + hw, cy + hh, cz}, {s.uv_max.x, s.uv_min.y}, s.color};
+            verts[vi + 2] = {{cx + hw, cy - hh, cz}, {s.uv_max.x, s.uv_max.y}, s.color};
+            verts[vi + 3] = {{cx - hw, cy - hh, cz}, {s.uv_min.x, s.uv_max.y}, s.color};
+        }
     }
 
     uint32_t sprite_count = static_cast<uint32_t>(pending_sprites_.size());

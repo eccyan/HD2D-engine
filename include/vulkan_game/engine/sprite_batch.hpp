@@ -34,8 +34,9 @@ public:
     void begin();
     void draw(const SpriteDrawInfo& info);
     // Flush pending sprites into vertex buffer for given frame.
+    // When as_wall=true, generates XZ-plane (vertical wall) quads instead of XY-plane.
     // Returns index count and vertex offset for vkCmdDrawIndexed.
-    FlushResult flush(uint32_t frame_index);
+    FlushResult flush(uint32_t frame_index, bool as_wall = false);
     void bind(VkCommandBuffer cmd, uint32_t frame_index);
 
 private:

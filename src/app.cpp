@@ -1025,6 +1025,8 @@ void App::init_scene(const std::string& scene_path) {
             layer.uv_repeat_x = layer_data.uv_repeat_x;
             layer.uv_repeat_y = layer_data.uv_repeat_y;
             layer.tint = layer_data.tint;
+            layer.wall = layer_data.wall;
+            layer.wall_y_offset = layer_data.wall_y_offset;
             bg_layers.push_back(layer);
         }
         scene_.set_background_layers(std::move(bg_layers));

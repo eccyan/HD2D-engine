@@ -14,8 +14,11 @@ struct ParallaxLayer {
     float uv_repeat_x = 1.0f;
     float uv_repeat_y = 1.0f;
     glm::vec4 tint{1.0f};
+    bool wall = false;
+    float wall_y_offset = 15.0f;
 
     SpriteDrawInfo generate_draw_info(glm::vec2 camera_target_xy) const;
+    SpriteDrawInfo generate_wall_draw_info(glm::vec2 camera_target_xy) const;
 };
 
 }  // namespace vulkan_game

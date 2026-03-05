@@ -200,6 +200,8 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
             layer.uv_repeat_x = layer_j.value("uv_repeat_x", 1.0f);
             layer.uv_repeat_y = layer_j.value("uv_repeat_y", 1.0f);
             if (layer_j.contains("tint")) layer.tint = parse_vec4(layer_j["tint"]);
+            layer.wall = layer_j.value("wall", false);
+            layer.wall_y_offset = layer_j.value("wall_y_offset", 15.0f);
             data.background_layers.push_back(std::move(layer));
         }
     }

@@ -174,6 +174,42 @@
       "uv_repeat_x": 4.0,
       "uv_repeat_y": 1.0,
       "tint": [0.5, 0.6, 0.5, 0.9]
+    },
+    {
+      "texture": "bg_sky",
+      "z": 10.0,
+      "parallax_factor": 0.0,
+      "quad_width": 50.0,
+      "quad_height": 20.0,
+      "uv_repeat_x": 2.0,
+      "uv_repeat_y": 1.0,
+      "tint": [1.0, 1.0, 1.0, 1.0],
+      "wall": true,
+      "wall_y_offset": 22.0
+    },
+    {
+      "texture": "bg_mountains",
+      "z": 8.0,
+      "parallax_factor": 0.15,
+      "quad_width": 50.0,
+      "quad_height": 15.0,
+      "uv_repeat_x": 3.0,
+      "uv_repeat_y": 1.0,
+      "tint": [0.7, 0.7, 0.9, 1.0],
+      "wall": true,
+      "wall_y_offset": 18.0
+    },
+    {
+      "texture": "bg_trees",
+      "z": 5.0,
+      "parallax_factor": 0.4,
+      "quad_width": 45.0,
+      "quad_height": 10.0,
+      "uv_repeat_x": 4.0,
+      "uv_repeat_y": 1.0,
+      "tint": [0.5, 0.6, 0.5, 0.9],
+      "wall": true,
+      "wall_y_offset": 14.0
     }
   ],
   "portals": [

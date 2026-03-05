@@ -43,6 +43,8 @@ struct ParallaxLayerData {
     float uv_repeat_x = 1.0f;
     float uv_repeat_y = 1.0f;
     glm::vec4 tint{1.0f};
+    bool wall = false;
+    float wall_y_offset = 15.0f;
 };
 
 struct WeatherData {
