@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
+import { StableDiffusionWebUIClient } from '@vulkan-game-tools/ai-providers';
 import { usePainterStore, PixelData } from '../store/usePainterStore.js';
 
 // ---------------------------------------------------------------------------
@@ -48,10 +48,12 @@ export function AIGeneratePanel() {
   const { applyAIPixels, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow } = usePainterStore();
 
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('blurry, ugly, deformed, low quality, watermark');
-  const [comfyUrl, setComfyUrl] = useState(import.meta.env.VITE_COMFYUI_URL || 'http://localhost:8188');
+  const [negativePrompt, setNegativePrompt] = useState('smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, anti-aliasing, gradient, watercolor');
+  const [sdUrl, setSdUrl] = useState(import.meta.env.VITE_SD_WEBUI_URL || 'http://localhost:7860');
   const [steps, setSteps] = useState(20);
   const [seed, setSeed] = useState(-1); // -1 = random
+  const [cfgScale, setCfgScale] = useState(7);
+  const [samplerName, setSamplerName] = useState('Euler a');
   const [status, setStatus] = useState<GenStatus>({ kind: 'idle' });
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [pendingPixels, setPendingPixels] = useState<PixelData | null>(null);
@@ -70,17 +72,17 @@ export function AIGeneratePanel() {
       return;
     }
 
-    setStatus({ kind: 'generating', message: 'Checking ComfyUI…' });
+    setStatus({ kind: 'generating', message: 'Checking Forge...' });
     setPreviewDataUrl(null);
     setPendingPixels(null);
 
-    const client = new ComfyUIClient(comfyUrl);
+    const client = new StableDiffusionWebUIClient(sdUrl);
     const check = await client.checkAvailability().catch(() => ({
       available: false,
-      error: `Cannot reach ComfyUI at ${comfyUrl}. Start it with: python main.py --listen`,
+      error: `Cannot reach Forge at ${sdUrl}. Start it with: ./webui.sh --api`,
     }));
     if (!check.available) {
-      setStatus({ kind: 'error', message: check.error ?? 'ComfyUI unavailable' });
+      setStatus({ kind: 'error', message: check.error ?? 'SD WebUI unavailable' });
       return;
     }
 
@@ -91,12 +93,12 @@ export function AIGeneratePanel() {
       ? `16x16 pixel art tile, tile (${selectedTileCol},${selectedTileRow})`
       : `16x16 pixel art sprite frame, row ${selectedFrameRow} frame ${selectedFrameCol}`;
 
-    const fullPrompt = `${prompt}, ${target}, pixel art, 16x16, clean edges, game asset`;
+    const fullPrompt = `${prompt}, ${target}, pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset`;
     const fullNegative = negativePrompt
-      ? `${negativePrompt}, anti-aliasing, gradient, photorealistic`
-      : 'anti-aliasing, gradient, photorealistic';
+      ? `${negativePrompt}, watermark, text, signature`
+      : 'smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, watermark, text, signature';
 
-    setStatus({ kind: 'generating', message: 'Submitting to ComfyUI…' });
+    setStatus({ kind: 'generating', message: 'Generating with Forge...' });
 
     try {
       const pngBytes = await client.generateImage(fullPrompt, {
@@ -104,9 +106,12 @@ export function AIGeneratePanel() {
         height: 512,
         steps,
         seed: actualSeed,
+        negativePrompt: fullNegative,
+        cfgScale,
+        samplerName,
       });
 
-      setStatus({ kind: 'generating', message: 'Downscaling to 16×16…' });
+      setStatus({ kind: 'generating', message: 'Downscaling to 16x16...' });
 
       // Show full-res preview
       const blob = new Blob([pngBytes], { type: 'image/png' });
@@ -125,7 +130,7 @@ export function AIGeneratePanel() {
         setStatus({ kind: 'error', message: (err as Error).message ?? String(err) });
       }
     }
-  }, [prompt, negativePrompt, comfyUrl, steps, seed, status, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow]);
+  }, [prompt, negativePrompt, sdUrl, steps, seed, cfgScale, samplerName, status, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow]);
 
   const handleApply = useCallback(() => {
     if (!pendingPixels) return;
@@ -142,23 +147,23 @@ export function AIGeneratePanel() {
     error: '#e07070',
   };
 
-  // Prompt presets for common tile/sprite types
+  // Prompt presets for common tile/sprite types (pixel art style keywords)
   const PRESETS = [
-    'stone floor tile, gray, rough texture',
-    'brick wall tile, red-brown, medieval',
-    'water tile, blue, animated waves',
-    'lava tile, glowing orange, hot molten rock',
-    'torch wall sconce, warm flickering flame',
-    'player character, front-facing, RPG hero',
-    'fantasy NPC guard, armored, facing south',
-    'treasure chest, wooden, gold trim',
+    'stone floor tile, gray, rough texture, 16-bit, NES palette',
+    'brick wall tile, red-brown, medieval, 8-bit, limited palette',
+    'water tile, blue, animated waves, retro game, low-res',
+    'lava tile, glowing orange, hot molten rock, 16-bit, SNES style',
+    'torch wall sconce, warm flickering flame, pixel art, NES palette',
+    'player character, front-facing, RPG hero, 16-bit, SNES sprite',
+    'fantasy NPC guard, armored, facing south, 8-bit, retro',
+    'treasure chest, wooden, gold trim, low-res, pixel art',
   ];
 
   return (
     <div style={styles.wrapper}>
       {/* Header */}
       <div style={styles.header}>
-        AI Generate (Stable Diffusion)
+        AI Generate (SD Forge)
       </div>
 
       <div style={styles.body}>
@@ -179,7 +184,7 @@ export function AIGeneratePanel() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerate(); }}
-            placeholder="Describe the tile or sprite…"
+            placeholder="Describe the tile or sprite..."
             rows={3}
             style={styles.textarea}
           />
@@ -245,24 +250,54 @@ export function AIGeneratePanel() {
           </div>
         </div>
 
-        {/* Advanced: ComfyUI URL */}
+        {/* Advanced settings */}
         <div style={styles.field}>
           <button
             onClick={() => setShowAdvanced((v) => !v)}
             style={styles.advancedToggle}
           >
-            <span>{showAdvanced ? '▼' : '▶'}</span>
+            <span>{showAdvanced ? '\u25BC' : '\u25B6'}</span>
             Advanced
           </button>
           {showAdvanced && (
-            <div style={{ marginTop: 6 }}>
-              <div style={styles.fieldLabel}>ComfyUI URL</div>
-              <input
-                type="text"
-                value={comfyUrl}
-                onChange={(e) => setComfyUrl(e.target.value)}
-                style={styles.textInput}
-              />
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div>
+                <div style={styles.fieldLabel}>Forge URL</div>
+                <input
+                  type="text"
+                  value={sdUrl}
+                  onChange={(e) => setSdUrl(e.target.value)}
+                  style={styles.textInput}
+                />
+              </div>
+              <div style={styles.row}>
+                <div style={styles.fieldHalf}>
+                  <div style={styles.fieldLabel}>CFG Scale</div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    step={0.5}
+                    value={cfgScale}
+                    onChange={(e) => setCfgScale(parseFloat(e.target.value) || 7)}
+                    style={styles.numberInput}
+                  />
+                </div>
+                <div style={styles.fieldHalf}>
+                  <div style={styles.fieldLabel}>Sampler</div>
+                  <select
+                    value={samplerName}
+                    onChange={(e) => setSamplerName(e.target.value)}
+                    style={styles.selectInput}
+                  >
+                    <option value="Euler a">Euler a</option>
+                    <option value="Euler">Euler</option>
+                    <option value="DPM++ 2M Karras">DPM++ 2M Karras</option>
+                    <option value="DPM++ SDE Karras">DPM++ SDE Karras</option>
+                    <option value="DDIM">DDIM</option>
+                  </select>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -336,9 +371,10 @@ export function AIGeneratePanel() {
 
         {/* Help text */}
         <div style={styles.helpText}>
-          Requires ComfyUI running locally.<br />
-          Install: <span style={{ color: '#4a7ad0' }}>github.com/comfyanonymous/ComfyUI</span><br />
-          Workflow: default txt2img with SD v1.5
+          Requires SD WebUI Forge running locally.<br />
+          Install: <span style={{ color: '#4a7ad0' }}>github.com/lllyasviel/stable-diffusion-webui-forge</span><br />
+          Model: SD 1.5 based (&lt;4GB) recommended for pixel art.<br />
+          Start: ./webui.sh --api
         </div>
       </div>
     </div>
@@ -421,6 +457,18 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
   },
   numberInput: {
+    background: '#1a1a2a',
+    border: '1px solid #444',
+    borderRadius: 3,
+    color: '#ddd',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    padding: '4px 7px',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box' as const,
+  },
+  selectInput: {
     background: '#1a1a2a',
     border: '1px solid #444',
     borderRadius: 3,

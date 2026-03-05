@@ -88,12 +88,12 @@ header "Detecting AI providers"
 
 OLLAMA_URL="http://localhost:11434"
 OLLAMA_MODEL="llama3"
-COMFYUI_URL="http://localhost:8188"
-AUDIOCRAFT_URL="http://localhost:8001"
+SD_WEBUI_URL="http://localhost:7860"
+STABLE_AUDIO_URL="http://localhost:8001"
 
 OLLAMA_OK=false
-COMFYUI_OK=false
-AUDIOCRAFT_OK=false
+SD_WEBUI_OK=false
+STABLE_AUDIO_OK=false
 
 # --- Ollama ------------------------------------------------------------------
 check_ollama() {
@@ -224,48 +224,249 @@ fi
 
 echo ""
 
-# --- ComfyUI -----------------------------------------------------------------
-if curl -sf "${COMFYUI_URL}/system_stats" -o /dev/null --connect-timeout 2; then
-  COMFYUI_OK=true
-  success "ComfyUI is running at $COMFYUI_URL"
-else
-  warn "ComfyUI not detected at $COMFYUI_URL"
-  dim "ComfyUI provides Stable Diffusion for Pixel Painter AI generation."
-  dim "Install: https://github.com/comfyanonymous/ComfyUI"
-  dim "Start:   python main.py --listen"
+# --- SD WebUI Forge ----------------------------------------------------------
+FORGE_DEFAULT_DIR="${HOME}/stable-diffusion-webui-forge"
 
-  read -rp "    Enter custom ComfyUI URL (or press Enter to skip): " CUSTOM_COMFYUI
-  if [ -n "$CUSTOM_COMFYUI" ]; then
-    COMFYUI_URL="$CUSTOM_COMFYUI"
-    if curl -sf "${COMFYUI_URL}/system_stats" -o /dev/null --connect-timeout 2; then
-      COMFYUI_OK=true
-      success "ComfyUI found at $COMFYUI_URL"
+check_forge() {
+  if curl -sf "${SD_WEBUI_URL}/sdapi/v1/sd-models" -o /dev/null --connect-timeout 3; then
+    return 0
+  fi
+  return 1
+}
+
+# Find Forge installation directory
+find_forge_dir() {
+  for candidate in \
+    "${FORGE_DIR:-}" \
+    "${HOME}/stable-diffusion-webui-forge" \
+    "${HOME}/.local/share/stable-diffusion-webui-forge" \
+    "/opt/stable-diffusion-webui-forge"; do
+    if [ -n "$candidate" ] && [ -f "${candidate}/webui.sh" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+start_forge() {
+  local dir="$1"
+  info "Starting Forge in background (this may take a minute)..."
+  (cd "$dir" && nohup ./webui.sh --api --listen --skip-torch-cuda-test &>/dev/null &)
+  # Poll for startup — Forge takes a while
+  local attempts=0
+  while [ $attempts -lt 30 ]; do
+    sleep 3
+    if check_forge; then
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    echo -ne "    Waiting for Forge to start... (${attempts}/30)\r"
+  done
+  echo ""
+  return 1
+}
+
+if check_forge; then
+  SD_WEBUI_OK=true
+  success "Forge is running at $SD_WEBUI_URL"
+else
+  FOUND_FORGE_DIR=$(find_forge_dir 2>/dev/null || true)
+
+  if [ -n "$FOUND_FORGE_DIR" ]; then
+    success "Forge installation found at $FOUND_FORGE_DIR"
+
+    read -rp "    Start Forge now? (Y/n) " START_FORGE
+    if [[ "${START_FORGE:-y}" =~ ^[Yy]$ ]]; then
+      if start_forge "$FOUND_FORGE_DIR"; then
+        SD_WEBUI_OK=true
+        success "Forge is running at $SD_WEBUI_URL"
+      else
+        warn "Forge did not start in time. Start manually:"
+        dim "cd $FOUND_FORGE_DIR && ./webui.sh --api"
+      fi
+    fi
+  else
+    warn "Forge not installed"
+    echo ""
+    echo -e "    ${BOLD}SD WebUI Forge${NC} provides Stable Diffusion for Pixel Painter"
+    echo -e "    AI pixel art generation. Uses SD 1.5 models (<4GB)."
+    echo ""
+
+    # Check prerequisites
+    HAS_GIT=false
+    HAS_PYTHON3=false
+    if command -v git &>/dev/null; then HAS_GIT=true; fi
+    if command -v python3 &>/dev/null; then HAS_PYTHON3=true; fi
+
+    if ! $HAS_GIT; then
+      warn "git is required to install Forge"
+      dim "Install git first, then re-run this script."
+    elif ! $HAS_PYTHON3; then
+      warn "python3 is required to install Forge"
+      dim "Install Python 3.10+ first, then re-run this script."
     else
-      warn "ComfyUI not responding at $COMFYUI_URL (saved anyway)"
+      PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+      dim "Found: git, python3 ($PY_VER)"
+      echo ""
+      echo -e "    Install location: ${CYAN}${FORGE_DEFAULT_DIR}${NC}"
+      echo -e "    ${DIM}First run will download dependencies + base model (~4GB total).${NC}"
+      echo ""
+
+      read -rp "    Clone and install Forge? (Y/n) " INSTALL_FORGE
+      if [[ "${INSTALL_FORGE:-y}" =~ ^[Yy]$ ]]; then
+        info "Cloning Forge..."
+        git clone https://github.com/lllyasviel/stable-diffusion-webui-forge.git "$FORGE_DEFAULT_DIR"
+        success "Forge cloned to $FORGE_DEFAULT_DIR"
+
+        read -rp "    Start Forge now? First run downloads deps (~5-10min) (Y/n) " START_NOW
+        if [[ "${START_NOW:-y}" =~ ^[Yy]$ ]]; then
+          if start_forge "$FORGE_DEFAULT_DIR"; then
+            SD_WEBUI_OK=true
+            success "Forge is running at $SD_WEBUI_URL"
+          else
+            warn "Forge is still starting up. It may take longer on first run."
+            dim "Check manually: cd $FORGE_DEFAULT_DIR && ./webui.sh --api"
+          fi
+        else
+          dim "Start later with:"
+          dim "  cd $FORGE_DEFAULT_DIR && ./webui.sh --api"
+        fi
+      fi
+    fi
+
+    if ! $SD_WEBUI_OK; then
+      read -rp "    Enter custom Forge URL (or press Enter to skip): " CUSTOM_SD_WEBUI
+      if [ -n "$CUSTOM_SD_WEBUI" ]; then
+        SD_WEBUI_URL="$CUSTOM_SD_WEBUI"
+        if check_forge; then
+          SD_WEBUI_OK=true
+          success "Forge found at $SD_WEBUI_URL"
+        else
+          warn "Forge not responding at $SD_WEBUI_URL (saved anyway)"
+        fi
+      fi
     fi
   fi
 fi
 
 echo ""
 
-# --- AudioCraft ---------------------------------------------------------------
-if curl -sf "${AUDIOCRAFT_URL}/health" -o /dev/null --connect-timeout 2; then
-  AUDIOCRAFT_OK=true
-  success "AudioCraft is running at $AUDIOCRAFT_URL"
-else
-  warn "AudioCraft not detected at $AUDIOCRAFT_URL"
-  dim "AudioCraft provides music/SFX generation for Audio Composer & SFX Designer."
-  dim "Install: pip install audiocraft"
-  dim "Start:   python -m audiocraft.server"
+# --- Stable Audio Open Small --------------------------------------------------
+STABLE_AUDIO_SERVER="${SCRIPT_DIR}/scripts/stable-audio-server.py"
 
-  read -rp "    Enter custom AudioCraft URL (or press Enter to skip): " CUSTOM_AUDIOCRAFT
-  if [ -n "$CUSTOM_AUDIOCRAFT" ]; then
-    AUDIOCRAFT_URL="$CUSTOM_AUDIOCRAFT"
-    if curl -sf "${AUDIOCRAFT_URL}/health" -o /dev/null --connect-timeout 2; then
-      AUDIOCRAFT_OK=true
-      success "AudioCraft found at $AUDIOCRAFT_URL"
+check_stable_audio() {
+  if curl -sf "${STABLE_AUDIO_URL}/health" -o /dev/null --connect-timeout 3; then
+    return 0
+  fi
+  return 1
+}
+
+# Check if stable-audio-tools Python package is installed
+check_stable_audio_deps() {
+  python3 -c "import stable_audio_tools; import flask" &>/dev/null
+}
+
+start_stable_audio() {
+  info "Starting Stable Audio server in background..."
+  info "First run will download the model from HuggingFace (~500MB)."
+  nohup python3 "$STABLE_AUDIO_SERVER" --port 8001 &>/dev/null &
+  # Poll for startup — model loading can take a while
+  local attempts=0
+  while [ $attempts -lt 40 ]; do
+    sleep 3
+    if check_stable_audio; then
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    echo -ne "    Waiting for Stable Audio to start... (${attempts}/40)\r"
+  done
+  echo ""
+  return 1
+}
+
+if check_stable_audio; then
+  STABLE_AUDIO_OK=true
+  success "Stable Audio is running at $STABLE_AUDIO_URL"
+else
+  if command -v python3 &>/dev/null; then
+    PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+
+    if check_stable_audio_deps; then
+      success "Stable Audio dependencies installed (python3 $PY_VER)"
+
+      read -rp "    Start Stable Audio server now? (Y/n) " START_SA
+      if [[ "${START_SA:-y}" =~ ^[Yy]$ ]]; then
+        if start_stable_audio; then
+          STABLE_AUDIO_OK=true
+          success "Stable Audio is running at $STABLE_AUDIO_URL"
+        else
+          warn "Stable Audio is still loading the model. It may take longer on first run."
+          dim "Check manually: python3 $STABLE_AUDIO_SERVER"
+        fi
+      fi
     else
-      warn "AudioCraft not responding at $AUDIOCRAFT_URL (saved anyway)"
+      warn "Stable Audio dependencies not installed"
+      echo ""
+      echo -e "    ${BOLD}Stable Audio Open Small${NC} provides music/SFX generation for"
+      echo -e "    Audio Composer and SFX Designer. Max 11s, 44.1kHz stereo."
+      echo ""
+
+      # Check for pip
+      HAS_PIP=false
+      if python3 -m pip --version &>/dev/null; then HAS_PIP=true; fi
+
+      if ! $HAS_PIP; then
+        warn "pip is required to install Stable Audio dependencies"
+        dim "Install pip first: python3 -m ensurepip --upgrade"
+      else
+        dim "Found: python3 ($PY_VER), pip"
+        echo ""
+        echo -e "    Packages: ${CYAN}flask torch torchaudio einops stable-audio-tools${NC}"
+        echo -e "    ${DIM}First server run will download the model (~500MB).${NC}"
+        echo ""
+
+        read -rp "    Install Stable Audio dependencies via pip? (Y/n) " INSTALL_SA
+        if [[ "${INSTALL_SA:-y}" =~ ^[Yy]$ ]]; then
+          info "Installing Stable Audio dependencies (this may take a while)..."
+          python3 -m pip install flask torch torchaudio einops stable-audio-tools
+          success "Stable Audio dependencies installed"
+
+          read -rp "    Start Stable Audio server now? (Y/n) " START_SA_NOW
+          if [[ "${START_SA_NOW:-y}" =~ ^[Yy]$ ]]; then
+            if start_stable_audio; then
+              STABLE_AUDIO_OK=true
+              success "Stable Audio is running at $STABLE_AUDIO_URL"
+            else
+              warn "Stable Audio is still loading. Start manually later:"
+              dim "  python3 $STABLE_AUDIO_SERVER"
+            fi
+          else
+            dim "Start later with:"
+            dim "  python3 $STABLE_AUDIO_SERVER"
+          fi
+        fi
+      fi
+    fi
+  else
+    warn "python3 not found"
+    echo ""
+    echo -e "    ${BOLD}Stable Audio Open Small${NC} provides music/SFX generation for"
+    echo -e "    Audio Composer and SFX Designer."
+    echo ""
+    echo -e "    Requires Python 3.10+. Install Python first, then re-run this script."
+  fi
+
+  if ! $STABLE_AUDIO_OK; then
+    read -rp "    Enter custom Stable Audio URL (or press Enter to skip): " CUSTOM_STABLE_AUDIO
+    if [ -n "$CUSTOM_STABLE_AUDIO" ]; then
+      STABLE_AUDIO_URL="$CUSTOM_STABLE_AUDIO"
+      if check_stable_audio; then
+        STABLE_AUDIO_OK=true
+        success "Stable Audio found at $STABLE_AUDIO_URL"
+      else
+        warn "Stable Audio not responding at $STABLE_AUDIO_URL (saved anyway)"
+      fi
     fi
   fi
 fi
@@ -288,13 +489,13 @@ cat > "$ENV_FILE" <<EOF
 VITE_OLLAMA_URL=${OLLAMA_URL}
 VITE_OLLAMA_MODEL=${OLLAMA_MODEL}
 
-# --- ComfyUI (Stable Diffusion) ---------------------------------------------
+# --- SD WebUI Forge (Stable Diffusion) ---------------------------------------
 # Used by: Pixel Painter
-VITE_COMFYUI_URL=${COMFYUI_URL}
+VITE_SD_WEBUI_URL=${SD_WEBUI_URL}
 
-# --- AudioCraft (Music/SFX Generation) --------------------------------------
+# --- Stable Audio Open Small (Music/SFX Generation) -------------------------
 # Used by: Audio Composer, SFX Designer
-VITE_AUDIOCRAFT_URL=${AUDIOCRAFT_URL}
+VITE_STABLE_AUDIO_URL=${STABLE_AUDIO_URL}
 EOF
 
 success "Configuration written to tools/.env"
@@ -311,15 +512,15 @@ if $OLLAMA_OK; then
 else
   echo -e "    ${RED}*${NC} Ollama      ${DIM}not running${NC}  ${DIM}(Level Designer, Keyframe Animator, Particle Designer)${NC}"
 fi
-if $COMFYUI_OK; then
-  echo -e "    ${GREEN}*${NC} ComfyUI     ${GREEN}ready${NC}"
+if $SD_WEBUI_OK; then
+  echo -e "    ${GREEN}*${NC} Forge       ${GREEN}ready${NC}"
 else
-  echo -e "    ${RED}*${NC} ComfyUI     ${DIM}not running${NC}  ${DIM}(Pixel Painter)${NC}"
+  echo -e "    ${RED}*${NC} Forge       ${DIM}not running${NC}  ${DIM}(Pixel Painter)${NC}"
 fi
-if $AUDIOCRAFT_OK; then
-  echo -e "    ${GREEN}*${NC} AudioCraft  ${GREEN}ready${NC}"
+if $STABLE_AUDIO_OK; then
+  echo -e "    ${GREEN}*${NC} Stable Audio ${GREEN}ready${NC}"
 else
-  echo -e "    ${RED}*${NC} AudioCraft  ${DIM}not running${NC}  ${DIM}(Audio Composer, SFX Designer)${NC}"
+  echo -e "    ${RED}*${NC} Stable Audio ${DIM}not running${NC}  ${DIM}(Audio Composer, SFX Designer)${NC}"
 fi
 
 echo ""
@@ -335,11 +536,11 @@ echo -e "    ${CYAN}cd tools/apps/level-designer && pnpm dev${NC}"
 echo ""
 echo -e "  ${BOLD}All tools:${NC}"
 echo -e "    Level Designer       ${CYAN}http://localhost:5173${NC}  (Ollama)"
-echo -e "    Pixel Painter        ${CYAN}http://localhost:5174${NC}  (ComfyUI)"
+echo -e "    Pixel Painter        ${CYAN}http://localhost:5174${NC}  (Forge)"
 echo -e "    Keyframe Animator    ${CYAN}http://localhost:5175${NC}  (Ollama)"
 echo -e "    Particle Designer    ${CYAN}http://localhost:5176${NC}  (Ollama)"
-echo -e "    Audio Composer       ${CYAN}http://localhost:5177${NC}  (AudioCraft)"
-echo -e "    SFX Designer         ${CYAN}http://localhost:5178${NC}  (AudioCraft)"
+echo -e "    Audio Composer       ${CYAN}http://localhost:5177${NC}  (Stable Audio)"
+echo -e "    SFX Designer         ${CYAN}http://localhost:5178${NC}  (Stable Audio)"
 echo ""
 echo -e "  ${DIM}Edit tools/.env to change AI provider URLs/models.${NC}"
 echo ""

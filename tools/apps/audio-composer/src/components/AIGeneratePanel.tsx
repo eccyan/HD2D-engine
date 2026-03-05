@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { AudioCraftClient } from '@vulkan-game-tools/ai-providers';
+import { StableAudioClient } from '@vulkan-game-tools/ai-providers';
 import { useComposerStore, LayerId } from '../store/useComposerStore.js';
 import { AudioPlayerHandle } from './AudioPlayer.js';
 
@@ -64,8 +64,7 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
   const [prompt, setPrompt] = useState('');
   const [targetLayer, setTargetLayer] = useState<LayerId>('melody');
   const [duration, setDuration] = useState(5);
-  const [temperature, setTemperature] = useState(1.0);
-  const [serverUrl, setServerUrl] = useState(import.meta.env.VITE_AUDIOCRAFT_URL || 'http://localhost:8001');
+  const [serverUrl, setServerUrl] = useState(import.meta.env.VITE_STABLE_AUDIO_URL || 'http://localhost:8001');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<GenerationStatus>({ kind: 'idle' });
   const previewCtxRef = useRef<AudioContext | null>(null);
@@ -84,21 +83,21 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
 
     setStatus({ kind: 'checking' });
 
-    const client = new AudioCraftClient(serverUrl);
+    const client = new StableAudioClient(serverUrl);
     const check = await client.checkAvailability().catch(() => ({
       available: false,
-      error: `Cannot reach AudioCraft at ${serverUrl}. Start the AudioCraft REST server on port 8001.`,
+      error: `Cannot reach Stable Audio at ${serverUrl}. Start the server with: python tools/scripts/stable-audio-server.py`,
     }));
 
     if (!check.available) {
-      setStatus({ kind: 'error', message: check.error ?? 'AudioCraft unavailable' });
+      setStatus({ kind: 'error', message: check.error ?? 'Stable Audio unavailable' });
       return;
     }
 
     setStatus({ kind: 'generating', message: `Generating ${duration}s of audio…` });
 
     try {
-      const audioData = await client.generateAudio(prompt, { duration, temperature });
+      const audioData = await client.generateAudio(prompt, { duration, steps: 8, cfgScale: 1.0 });
       setStatus({ kind: 'ready', audioData });
 
       // Decode for preview
@@ -110,7 +109,7 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus({ kind: 'error', message: msg });
     }
-  }, [prompt, duration, temperature, serverUrl, status]);
+  }, [prompt, duration, serverUrl, status]);
 
   // -------------------------------------------------------------------------
   // Preview playback
@@ -167,7 +166,7 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
     <div style={styles.root}>
       <div style={styles.header}>
         AI Music Generation
-        <span style={{ fontSize: 10, color: '#555', marginLeft: 6 }}>MusicGen</span>
+        <span style={{ fontSize: 10, color: '#555', marginLeft: 6 }}>Stable Audio</span>
       </div>
 
       <div style={styles.body}>
@@ -243,14 +242,14 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
           <input
             type="range"
             min={1}
-            max={10}
+            max={11}
             step={1}
             value={duration}
             onChange={(e) => setDuration(parseInt(e.target.value))}
             style={styles.slider}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: 8, color: '#444' }}>
-            <span>1s</span><span>5s</span><span>10s</span>
+            <span>1s</span><span>5s</span><span>11s</span>
           </div>
         </div>
 
@@ -264,26 +263,9 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
           </button>
           {showAdvanced && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* Temperature */}
-              <div>
-                <div style={{ ...styles.fieldLabel, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Temperature</span>
-                  <span style={{ color: '#aaa' }}>{temperature.toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0.1}
-                  max={2}
-                  step={0.05}
-                  value={temperature}
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                  style={styles.slider}
-                />
-              </div>
-
               {/* Server URL */}
               <div>
-                <div style={styles.fieldLabel}>AudioCraft Server URL</div>
+                <div style={styles.fieldLabel}>Stable Audio Server URL</div>
                 <input
                   type="text"
                   value={serverUrl}
@@ -357,9 +339,10 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
 
         {/* Help */}
         <div style={styles.helpBox}>
-          Requires AudioCraft server running locally.<br />
-          <code style={{ color: '#4a7ad0' }}>pip install audiocraft</code><br />
-          <code style={{ color: '#4a7ad0' }}>python -m audiocraft.server</code>
+          Requires Stable Audio server running locally.<br />
+          <code style={{ color: '#4a7ad0' }}>pip install flask torch torchaudio einops stable-audio-tools</code><br />
+          <code style={{ color: '#4a7ad0' }}>python tools/scripts/stable-audio-server.py</code><br />
+          Model: stable-audio-open-small (max 11s, 44.1kHz stereo)
         </div>
       </div>
     </div>

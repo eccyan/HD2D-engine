@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { AudioCraftClient } from '@vulkan-game-tools/ai-providers';
+import { StableAudioClient } from '@vulkan-game-tools/ai-providers';
 import { useSfxStore } from '../store/useSfxStore.js';
 import { SFX_PRESETS } from '../audio/presets.js';
 import { renderSfx, SAMPLE_RATE } from '../audio/synth.js';
@@ -48,8 +48,7 @@ export function AIGeneratePanel() {
 
   const [prompt, setPrompt] = useState('');
   const [duration, setDuration] = useState(2);
-  const [temperature, setTemperature] = useState(1.0);
-  const [audioCraftUrl, setAudioCraftUrl] = useState(import.meta.env.VITE_AUDIOCRAFT_URL || 'http://localhost:8001');
+  const [serverUrl, setServerUrl] = useState(import.meta.env.VITE_STABLE_AUDIO_URL || 'http://localhost:8001');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<GenStatus>({ kind: 'idle' });
 
@@ -117,21 +116,21 @@ export function AIGeneratePanel() {
 
     setStatus({ kind: 'checking' });
 
-    const client = new AudioCraftClient(audioCraftUrl);
+    const client = new StableAudioClient(serverUrl);
 
     const check = await client.checkAvailability().catch(() => ({
       available: false,
-      error: `Cannot reach AudioCraft at ${audioCraftUrl}. Start the AudioCraft REST server on port 8001.`,
+      error: `Cannot reach Stable Audio at ${serverUrl}. Start the server with: python tools/scripts/stable-audio-server.py`,
     }));
     if (!check.available) {
-      setStatus({ kind: 'error', message: check.error ?? 'AudioCraft unavailable' });
+      setStatus({ kind: 'error', message: check.error ?? 'Stable Audio unavailable' });
       return;
     }
 
     setStatus({ kind: 'generating', message: `Generating "${prompt.trim()}"…` });
 
     try {
-      const buffer = await client.generateAudio(prompt.trim(), { duration, temperature });
+      const buffer = await client.generateAudio(prompt.trim(), { duration, steps: 8, cfgScale: 1.0 });
       store.setAiGeneratedBuffer(buffer);
       setStatus({ kind: 'done', message: `Generated ${duration}s of audio.` });
     } catch (e) {
@@ -140,7 +139,7 @@ export function AIGeneratePanel() {
         message: e instanceof Error ? e.message : String(e),
       });
     }
-  }, [prompt, duration, temperature, audioCraftUrl, status.kind, store]);
+  }, [prompt, duration, serverUrl, status.kind, store]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -176,7 +175,7 @@ export function AIGeneratePanel() {
     <div style={styles.panel}>
       <div style={styles.panelHeader}>
         <span style={styles.panelTitle}>AI GENERATE</span>
-        <span style={styles.panelSubtitle}>AudioCraft</span>
+        <span style={styles.panelSubtitle}>Stable Audio</span>
       </div>
 
       <div style={styles.body}>
@@ -203,7 +202,7 @@ export function AIGeneratePanel() {
         {/* AudioCraft generation                                            */}
         {/* ---------------------------------------------------------------- */}
         <div style={styles.section}>
-          <div style={styles.sectionLabel}>AUDIOCRAFT GENERATION</div>
+          <div style={styles.sectionLabel}>STABLE AUDIO GENERATION</div>
 
           {/* Prompt */}
           <div style={styles.fieldGroup}>
@@ -237,22 +236,12 @@ export function AIGeneratePanel() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={styles.fieldLabel}>Duration</span>
               <input
-                type="range" min={0.5} max={10} step={0.5}
+                type="range" min={0.5} max={11} step={0.5}
                 value={duration}
                 onChange={(e) => setDuration(parseFloat(e.target.value))}
                 style={{ flex: 1, accentColor: '#9080e0' }}
               />
               <span style={styles.valueLabel}>{duration.toFixed(1)}s</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-              <span style={styles.fieldLabel}>Temp</span>
-              <input
-                type="range" min={0.1} max={2.0} step={0.1}
-                value={temperature}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                style={{ flex: 1, accentColor: '#9080e0' }}
-              />
-              <span style={styles.valueLabel}>{temperature.toFixed(1)}</span>
             </div>
           </div>
 
@@ -266,11 +255,11 @@ export function AIGeneratePanel() {
             </button>
             {showAdvanced && (
               <div style={{ marginTop: 6 }}>
-                <div style={styles.fieldLabel}>AudioCraft URL</div>
+                <div style={styles.fieldLabel}>Stable Audio Server URL</div>
                 <input
                   type="text"
-                  value={audioCraftUrl}
-                  onChange={(e) => setAudioCraftUrl(e.target.value)}
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
                   style={styles.textInput}
                 />
                 <div style={{ ...styles.hint, marginTop: 4 }}>
@@ -292,7 +281,7 @@ export function AIGeneratePanel() {
               borderColor: isGenerating ? '#7a4ab0' : '#6a4ae0',
             }}
           >
-            {isGenerating ? 'Generating…' : 'Generate with AudioCraft'}
+            {isGenerating ? 'Generating…' : 'Generate with Stable Audio'}
           </button>
 
           {/* Status */}
@@ -326,13 +315,12 @@ export function AIGeneratePanel() {
 
         {/* Help */}
         <div style={styles.helpBox}>
-          <div style={styles.helpTitle}>Setup AudioCraft</div>
+          <div style={styles.helpTitle}>Setup Stable Audio</div>
           <div style={styles.helpText}>
-            Run a local AudioCraft server exposing:<br />
-            &nbsp;&nbsp;POST /generate &#123; prompt, duration, temperature &#125;<br />
-            &nbsp;&nbsp;GET  /health → &#123; status: "ok" &#125;<br />
+            <code style={{ color: '#6a6aa0' }}>pip install flask torch torchaudio einops stable-audio-tools</code><br />
+            <code style={{ color: '#6a6aa0' }}>python tools/scripts/stable-audio-server.py</code><br />
             <br />
-            Returns raw audio bytes or JSON with audio_data (base64) / url.
+            Model: stable-audio-open-small (max 11s, 44.1kHz stereo)
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import type { ProviderType, LLMProvider, ImageProvider, AudioProvider } from "./types.js";
 import { OllamaClient } from "./ollama.js";
-import { ComfyUIClient } from "./comfyui.js";
-import { AudioCraftClient } from "./audiocraft.js";
+import { StableDiffusionWebUIClient } from "./sd-webui.js";
+import { StableAudioClient } from "./stable-audio.js";
 
 /** Categories for registered providers. */
 export type ProviderCategory = "llm" | "image" | "audio" | "unknown";
@@ -35,8 +35,8 @@ function categorize(provider: ProviderType): ProviderCategory {
  *
  * Default providers are pre-registered:
  *   - "ollama"     → OllamaClient    (LLM,   http://localhost:11434)
- *   - "comfyui"    → ComfyUIClient   (Image, http://localhost:8188)
- *   - "audiocraft" → AudioCraftClient(Audio, http://localhost:8001)
+ *   - "sd-webui"   → StableDiffusionWebUIClient (Image, http://localhost:7860, Forge)
+ *   - "stable-audio" → StableAudioClient (Audio, http://localhost:8001)
  */
 export class ProviderRegistry {
   private readonly providers = new Map<string, ProviderType>();
@@ -44,8 +44,8 @@ export class ProviderRegistry {
   constructor() {
     // Register default providers pointing at their canonical local addresses
     this.register("ollama", new OllamaClient());
-    this.register("comfyui", new ComfyUIClient());
-    this.register("audiocraft", new AudioCraftClient());
+    this.register("sd-webui", new StableDiffusionWebUIClient());
+    this.register("stable-audio", new StableAudioClient());
   }
 
   /**

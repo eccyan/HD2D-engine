@@ -29,6 +29,12 @@ export interface ImageGenerateOptions {
   steps?: number;
   /** Random seed for reproducibility. */
   seed?: number;
+  /** Negative prompt — features to avoid in the generated image. */
+  negativePrompt?: string;
+  /** Classifier-free guidance scale (default varies by provider). */
+  cfgScale?: number;
+  /** Sampler/scheduler name (e.g. "Euler a", "DPM++ 2M Karras"). */
+  samplerName?: string;
 }
 
 /**
@@ -46,6 +52,10 @@ export interface AudioGenerateOptions {
   duration?: number;
   /** Sampling temperature for generation variety. */
   temperature?: number;
+  /** Number of diffusion steps (for diffusion-based models like Stable Audio). */
+  steps?: number;
+  /** Classifier-free guidance scale. */
+  cfgScale?: number;
 }
 
 /**
@@ -53,6 +63,14 @@ export interface AudioGenerateOptions {
  */
 export interface AudioProvider {
   generateAudio(prompt: string, opts?: AudioGenerateOptions): Promise<ArrayBuffer>;
+}
+
+/**
+ * Result of an availability check.
+ */
+export interface AvailabilityResult {
+  available: boolean;
+  error?: string;
 }
 
 /**
