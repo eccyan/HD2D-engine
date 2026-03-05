@@ -316,7 +316,7 @@ else
       read -rp "    Clone and install Forge? (Y/n) " INSTALL_FORGE
       if [[ "${INSTALL_FORGE:-y}" =~ ^[Yy]$ ]]; then
         info "Cloning Forge..."
-        git clone https://github.com/lllyasviel/stable-diffusion-webui-forge.git "$FORGE_DEFAULT_DIR"
+        git clone https://github.com/lllyasviel/stable-diffusion-webui-forge.git "$FORGE_DEFAULT_DIR" </dev/null
         success "Forge cloned to $FORGE_DEFAULT_DIR"
 
         read -rp "    Start Forge now? First run downloads deps (~5-10min) (Y/n) " START_NOW
@@ -357,7 +357,7 @@ STABLE_AUDIO_SERVER="${SCRIPT_DIR}/scripts/stable-audio-server.py"
 STABLE_AUDIO_VENV="${SCRIPT_DIR}/.venv/stable-audio"
 STABLE_AUDIO_PYTHON="python3"  # overridden below
 SA_REQUIRED_PY_MINOR_MIN=10    # Python 3.10
-SA_REQUIRED_PY_MINOR_MAX=12    # Python 3.12
+SA_REQUIRED_PY_MINOR_MAX=11    # Python 3.11 (pandas 2.0.2 has no wheel for 3.12+)
 
 check_stable_audio() {
   if curl -sf "${STABLE_AUDIO_URL}/health" -o /dev/null --connect-timeout 3; then
@@ -389,11 +389,12 @@ check_stable_audio_deps() {
   "$STABLE_AUDIO_PYTHON" -c "import stable_audio_tools; import flask" &>/dev/null
 }
 
-# Find a compatible Python (3.10–3.12). Sets SA_COMPAT_PYTHON if found.
+# Find a compatible Python (3.10–3.11). Sets SA_COMPAT_PYTHON if found.
 find_compatible_python() {
   SA_COMPAT_PYTHON=""
-  # Check explicit versioned binaries first
-  for minor in 12 11 10; do
+  # pandas 2.0.2 (pinned by stable-audio-tools) only has pre-built wheels
+  # for Python 3.8–3.11 and cannot compile from source on 3.12+.
+  for minor in 11 10; do
     for candidate in "python3.${minor}" "/opt/homebrew/bin/python3.${minor}" "/usr/local/bin/python3.${minor}"; do
       if command -v "$candidate" &>/dev/null; then
         SA_COMPAT_PYTHON="$candidate"
@@ -460,41 +461,41 @@ else
     else
       SA_NEED_INSTALL_PYTHON=true
       DEFAULT_PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "none")
-      warn "No compatible Python found (need 3.10–3.12, found $DEFAULT_PY_VER)"
+      warn "No compatible Python found (need 3.10–3.11, found $DEFAULT_PY_VER)"
       echo ""
-      echo -e "    ${BOLD}Stable Audio Open Small${NC} requires Python 3.10–3.12."
-      echo -e "    PyTorch and stable-audio-tools do not yet support Python 3.13+."
+      echo -e "    ${BOLD}Stable Audio Open Small${NC} requires Python 3.10 or 3.11."
+      echo -e "    stable-audio-tools pins pandas 2.0.2 which has no wheels for 3.12+."
       echo ""
 
       if command -v brew &>/dev/null; then
-        read -rp "    Install Python 3.12 via Homebrew? (Y/n) " INSTALL_PY
+        read -rp "    Install Python 3.11 via Homebrew? (Y/n) " INSTALL_PY
         if [[ "${INSTALL_PY:-y}" =~ ^[Yy]$ ]]; then
-          info "Installing python@3.12 via Homebrew..."
-          brew install python@3.12
+          info "Installing python@3.11 via Homebrew..."
+          brew install python@3.11 </dev/null
           # Homebrew installs to a versioned path
-          if command -v python3.12 &>/dev/null; then
-            SA_COMPAT_PYTHON="python3.12"
-          elif [ -x "/opt/homebrew/bin/python3.12" ]; then
-            SA_COMPAT_PYTHON="/opt/homebrew/bin/python3.12"
-          elif [ -x "/usr/local/bin/python3.12" ]; then
-            SA_COMPAT_PYTHON="/usr/local/bin/python3.12"
+          if command -v python3.11 &>/dev/null; then
+            SA_COMPAT_PYTHON="python3.11"
+          elif [ -x "/opt/homebrew/bin/python3.11" ]; then
+            SA_COMPAT_PYTHON="/opt/homebrew/bin/python3.11"
+          elif [ -x "/usr/local/bin/python3.11" ]; then
+            SA_COMPAT_PYTHON="/usr/local/bin/python3.11"
           fi
 
           if [ -n "$SA_COMPAT_PYTHON" ]; then
             SA_NEED_INSTALL_PYTHON=false
-            success "Python 3.12 installed: $SA_COMPAT_PYTHON"
+            success "Python 3.11 installed: $SA_COMPAT_PYTHON"
           else
-            warn "python3.12 not found in PATH after install"
-            dim "Try: brew link python@3.12"
+            warn "python3.11 not found in PATH after install"
+            dim "Try: brew link python@3.11"
           fi
         fi
       else
-        dim "Install Python 3.12:"
+        dim "Install Python 3.11:"
         if [[ "$OSTYPE" == "darwin"* ]]; then
-          dim "  brew install python@3.12"
+          dim "  brew install python@3.11"
         else
-          dim "  sudo apt install python3.12 python3.12-venv   (Debian/Ubuntu)"
-          dim "  sudo dnf install python3.12                   (Fedora)"
+          dim "  sudo apt install python3.11 python3.11-venv   (Debian/Ubuntu)"
+          dim "  sudo dnf install python3.11                   (Fedora)"
         fi
       fi
     fi
