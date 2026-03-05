@@ -1,4 +1,4 @@
-import type { LLMProvider, LLMGenerateOptions } from "./types.js";
+import type { LLMProvider, LLMGenerateOptions, AvailabilityResult } from "./types.js";
 
 interface OllamaGenerateRequest {
   model: string;
@@ -89,15 +89,46 @@ export class OllamaClient implements LLMProvider {
    * @returns true if the server returns a valid tags list, false otherwise
    */
   async isAvailable(): Promise<boolean> {
+    return (await this.checkAvailability()).available;
+  }
+
+  /**
+   * Check availability with a descriptive error message on failure.
+   */
+  async checkAvailability(): Promise<AvailabilityResult> {
     try {
       const response = await fetch(`${this.baseUrl}/api/tags`, {
         signal: AbortSignal.timeout(5000),
       });
-      if (!response.ok) return false;
+      if (!response.ok) {
+        return {
+          available: false,
+          error: `Ollama returned HTTP ${response.status}. Ensure Ollama is running at ${this.baseUrl}.`,
+        };
+      }
       const data = (await response.json()) as OllamaTagsResponse;
-      return Array.isArray(data.models);
+      if (!Array.isArray(data.models)) {
+        return { available: false, error: 'Ollama returned unexpected response format.' };
+      }
+      if (data.models.length === 0) {
+        return {
+          available: false,
+          error: `No models installed. Run: ollama pull ${this.model}`,
+        };
+      }
+      const hasModel = data.models.some((m) => m.name === this.model || m.name.startsWith(`${this.model}:`));
+      if (!hasModel) {
+        return {
+          available: false,
+          error: `Model "${this.model}" not found. Available: ${data.models.map((m) => m.name).join(', ')}. Run: ollama pull ${this.model}`,
+        };
+      }
+      return { available: true };
     } catch {
-      return false;
+      return {
+        available: false,
+        error: `Cannot reach Ollama at ${this.baseUrl}. Start it with: ollama serve`,
+      };
     }
   }
 }
