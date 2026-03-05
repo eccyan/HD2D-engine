@@ -93,6 +93,11 @@ Peak level in dBFS is shown below the waveform. A clip indicator lights red if t
 | `coin_pickup` | Two ascending sine tones, staccato |
 | `explosion` | White noise with high drive distortion and long reverb tail |
 | `sword_slash` | Fast high-frequency sweep with noise component |
+| `laser_shot` | Sci-fi laser beam — fast sine sweep down |
+| `magic_spell` | Rising ethereal sparkle with delay |
+| `water_splash` | Short water impact with reverb tail |
+| `powerup` | Rising sweep power-up jingle |
+| `alarm_beep` | Warning siren — oscillating square wave |
 
 Selecting a preset loads its full synthesis chain configuration. Modifications do not overwrite the preset until "Save Preset" is clicked.
 
@@ -102,9 +107,47 @@ Clicking "Export WAV" renders the full synthesis chain to a 44100 Hz 16-bit mono
 
 The filename defaults to the preset name. It can be overridden in the export dialog.
 
-### AI Generation
+### Smart Generate (Procedural)
 
-When AudioCraft is running at `localhost:8001`, the "AI Generate" button sends a text prompt to AudioCraft's SFX model. The returned audio is loaded as a new synthesis layer alongside any existing oscillators, allowing AI-generated texture to be blended with procedural synthesis.
+The "Smart Generate" panel converts a text description into synth parameters using keyword matching. No server or external AI model is required — everything runs in the browser.
+
+Type a description like `"deep explosion with echo"` or `"bright laser zap"` and click **Generate**. The system matches keywords against 15 built-in rules:
+
+| Keywords | Sound type |
+|---|---|
+| explosion, blast, boom | Noise + low saw, distortion, reverb |
+| laser, zap, beam | High sine sweep down, short |
+| coin, pickup, gem | Bright sine + triangle, short |
+| footstep, step, walk | Noise burst + bandpass |
+| water, splash, drip | Noise + lowpass sweep, reverb |
+| sword, slash, swing | Noise + highpass, fast attack |
+| magic, spell, enchant | Sine + delay + reverb, freq modulation |
+| fire, flame, torch | Noise + bandpass + distortion |
+| wind, whoosh, gust | Noise + bandpass sweep, slow attack |
+| click, ui, button | Short sine pulse |
+| bell, chime, ding | Sine harmonics, long release |
+| thunder, rumble | Low noise, long release, heavy reverb |
+| alarm, siren, alert | Square wave frequency oscillation |
+| powerup, levelup | Sine upward sweep |
+| hit, punch, thud | Noise + sine burst, very short |
+
+**Modifier keywords** adjust the base sound further:
+
+| Modifier | Effect |
+|---|---|
+| deep, low, bass | Halves all frequencies |
+| high, bright, sharp | Doubles all frequencies |
+| long, sustained, slow | Doubles duration and release |
+| short, quick, fast | Halves duration and release |
+| echo, reverb, spacious | Boosts reverb room size and mix |
+| distorted, dirty, gritty | Adds distortion |
+| delay, repeat | Enables delay effect |
+
+Quick-fill chips are provided for common SFX types. The generated parameters load into the synth editor so you can fine-tune them further.
+
+### AI Generation (Optional — Replicate)
+
+For cloud-based AI audio generation, you can optionally use the Replicate API. Set `VITE_REPLICATE_API_TOKEN` in `tools/.env` with your API token from [replicate.com](https://replicate.com/account/api-tokens). This is not required — the built-in procedural generation covers most game SFX needs.
 
 ## Keyboard Shortcuts
 

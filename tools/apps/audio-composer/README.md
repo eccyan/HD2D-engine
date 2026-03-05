@@ -78,11 +78,29 @@ music_percussion.wav
 
 State preset configuration is exported as `assets/audio/music_config.json` which the engine's `AudioSystem::init()` reads on startup.
 
-### AI Generation
+### Procedural Loop Generation
 
-When AudioCraft is running at `localhost:8001`, each lane shows an "AI Generate" button. Enter a prompt such as "dark ambient bass drone with slow LFO modulation" and AudioCraft's MusicGen model generates a short loop. The audio is returned as a WAV and loaded into the lane.
+The "Procedural Generation" panel generates music loops entirely in the browser using Web Audio's `OfflineAudioContext`. No server or external AI model is required.
 
-Generated clips are typically 5-30 seconds and loop seamlessly if the model is prompted accordingly.
+1. Select a **target layer** (Bass, Harmony, Melody, or Percussion)
+2. Pick a **style preset** from the list
+3. Set **duration** (1–16 seconds) — the BPM is read from the transport
+4. Click **Generate Loop**, then **Preview** and **Apply**
+
+Each layer type has 4 style presets:
+
+| Layer | Styles |
+|---|---|
+| **Bass** | Ambient Drone (sine + LFO), Pulse Bass (8th-note gated), Dark Rumble (triangle + noise), Walking Bass (note sequence) |
+| **Harmony** | Ethereal Pad (major triad, detuned), Dark Minor (minor triad, tremolo), Fifth Drone (open fifth), Mystery (sus4 chord) |
+| **Melody** | Pentatonic Flow (random walk), Arpeggiated (up/down pattern), Fantasy Motif (fixed phrase), Sparse Bells (irregular notes) |
+| **Percussion** | Subtle Pulse (kick + hi-hat), Tribal (kick + tom + shaker), Minimal (kick only), March (kick-snare) |
+
+Generated loops are rendered as 44100 Hz mono WAV and can be applied directly to any lane.
+
+### AI Generation (Optional — Replicate)
+
+For cloud-based AI music generation, you can optionally use the Replicate API. Set `VITE_REPLICATE_API_TOKEN` in `tools/.env` with your API token from [replicate.com](https://replicate.com/account/api-tokens). This is not required — the built-in procedural generation covers the engine's 4-layer music system.
 
 ## Keyboard Shortcuts
 
