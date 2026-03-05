@@ -84,13 +84,17 @@ cd ComfyUI
 $(pyenv prefix 3.10.17)/bin/python3.10 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 
-# 4. Download SD 1.5 checkpoint
-# Place v1-5-pruned-emaonly.safetensors into models/checkpoints/
-# (download from https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5)
+# 4. Download SD 1.5 checkpoint (~4.3 GB)
+cd models/checkpoints
+curl -L -o v1-5-pruned-emaonly.safetensors \
+  https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
+cd ../..
 
-# 5. Start ComfyUI in CPU mode
-./venv/bin/python main.py --cpu --listen
+# 5. Start ComfyUI in CPU mode with CORS enabled
+./venv/bin/python main.py --cpu --listen --enable-cors-header "*"
 ```
+
+> **Important:** The `--enable-cors-header "*"` flag is required so the Pixel Painter browser app (on `localhost:5174`) can reach the ComfyUI API (on `localhost:8188`).
 
 The server starts at `http://localhost:8188` by default. You can change the URL in the Pixel Painter's Advanced settings or via the `VITE_COMFYUI_URL` environment variable.
 
