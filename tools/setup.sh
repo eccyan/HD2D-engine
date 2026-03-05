@@ -519,7 +519,7 @@ else
         success "Virtual environment created"
 
         info "Installing Stable Audio dependencies (this may take a while)..."
-        "$STABLE_AUDIO_PYTHON" -m pip install --upgrade pip setuptools wheel
+        "$STABLE_AUDIO_PYTHON" -m pip install --upgrade pip 'setuptools<78' wheel
         "$STABLE_AUDIO_PYTHON" -m pip install flask torch torchaudio einops stable-audio-tools
         success "Stable Audio dependencies installed"
 
