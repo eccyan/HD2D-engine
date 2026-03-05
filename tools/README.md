@@ -32,17 +32,19 @@ Each tool app connects to the bridge proxy over WebSocket. The bridge relays JSO
 
 ```bash
 # From the project root:
-cd tools && pnpm install && pnpm build
+cd tools && pnpm install
 
 # Terminal 1: start the game engine (from its build directory)
 cd build/macos-debug && ./vulkan_game
 
-# Terminal 2: start the bridge proxy
-cd tools/apps/bridge && pnpm start
+# Terminal 2: start the bridge proxy (build required)
+cd tools/apps/bridge && pnpm build && pnpm start
 
 # Terminal 3: start any tool (example: level designer)
 cd tools/apps/level-designer && pnpm dev
 ```
+
+> **Note:** Vite apps resolve shared packages from TypeScript source directly — no need to build packages before `pnpm dev`. Only the bridge (Node.js) requires `pnpm build` first.
 
 Each tool prints its local URL after startup.
 

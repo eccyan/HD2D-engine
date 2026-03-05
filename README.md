@@ -208,12 +208,12 @@ Engine (Vulkan) ←→ Unix Socket ←→ Bridge Proxy (ws://localhost:9100) ←
 ```bash
 # Prerequisites: Node.js 18+, pnpm
 # From the project root:
-cd tools && pnpm install && pnpm build
+cd tools && pnpm install
 
-# Start the bridge (requires running game)
-cd tools/apps/bridge && pnpm start
+# Start the bridge (requires running game; build first)
+cd tools/apps/bridge && pnpm build && pnpm start
 
-# Start a tool (e.g., level designer)
+# Start a tool (e.g., level designer — no build needed)
 cd tools/apps/level-designer && pnpm dev
 ```
 
