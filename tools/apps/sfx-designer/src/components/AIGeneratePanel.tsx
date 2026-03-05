@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { ReplicateClient } from '@vulkan-game-tools/ai-providers';
+import { ReplicateClient, StableAudioClient } from '@vulkan-game-tools/ai-providers';
 import { useSfxStore } from '../store/useSfxStore.js';
 import { SFX_PRESETS } from '../audio/presets.js';
 import { renderSfx, SAMPLE_RATE } from '../audio/synth.js';
 import { smartGenerate, SmartGenerateResult } from '../audio/smart-generate.js';
 
+const STABLE_AUDIO_URL = (import.meta as any).env?.VITE_STABLE_AUDIO_URL as string | undefined;
 const REPLICATE_TOKEN = (import.meta as any).env?.VITE_REPLICATE_API_TOKEN as string | undefined;
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,13 @@ export function AIGeneratePanel() {
 
   const [prompt, setPrompt] = useState('');
   const [lastResult, setLastResult] = useState<SmartGenerateResult | null>(null);
+
+  // Stable Audio state (optional, local AI)
+  const [saPrompt, setSaPrompt] = useState('');
+  const [saDuration, setSaDuration] = useState(2);
+  const [saStatus, setSaStatus] = useState<
+    { kind: 'idle' } | { kind: 'generating' } | { kind: 'done' } | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
 
   // AI generation state (optional, only when VITE_REPLICATE_API_TOKEN is set)
   const [aiPrompt, setAiPrompt] = useState('');
@@ -122,6 +130,29 @@ export function AIGeneratePanel() {
     },
     [handleGenerate],
   );
+
+  // AI generation via Stable Audio (local)
+  const handleSaGenerate = useCallback(async () => {
+    if (!saPrompt.trim() || !STABLE_AUDIO_URL) return;
+    if (saStatus.kind === 'generating') return;
+
+    setSaStatus({ kind: 'generating' });
+    try {
+      const client = new StableAudioClient(STABLE_AUDIO_URL);
+      const buffer = await client.generateAudio(saPrompt.trim(), { duration: saDuration });
+
+      const audioCtx = new AudioContext();
+      const decoded = await audioCtx.decodeAudioData(buffer.slice(0));
+      const channelData = decoded.getChannelData(0);
+      const samples = new Float32Array(channelData.length);
+      samples.set(channelData);
+
+      store.setGeneratedSamples(samples);
+      setSaStatus({ kind: 'done' });
+    } catch (e) {
+      setSaStatus({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+    }
+  }, [saPrompt, saDuration, saStatus.kind, store]);
 
   // AI generation via Replicate
   const handleAiGenerate = useCallback(async () => {
@@ -250,6 +281,73 @@ export function AIGeneratePanel() {
         </div>
 
         {/* ---------------------------------------------------------------- */}
+        {/* AI Generation (optional — Stable Audio, local)                   */}
+        {/* ---------------------------------------------------------------- */}
+        {STABLE_AUDIO_URL && (
+          <>
+            <div style={styles.divider} />
+            <div style={styles.section}>
+              <div style={{ ...styles.sectionLabel, color: '#407050' }}>AI GENERATION (LOCAL — STABLE AUDIO)</div>
+
+              <div style={styles.fieldGroup}>
+                <div style={styles.fieldLabel}>Prompt</div>
+                <textarea
+                  value={saPrompt}
+                  onChange={(e) => setSaPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleSaGenerate();
+                    }
+                  }}
+                  placeholder="Describe the sound for local AI generation..."
+                  rows={2}
+                  style={styles.textarea}
+                />
+              </div>
+
+              <div style={styles.fieldGroup}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={styles.fieldLabel}>Duration</span>
+                  <input
+                    type="range" min={0.5} max={11} step={0.5}
+                    value={saDuration}
+                    onChange={(e) => setSaDuration(parseFloat(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ ...styles.hint, minWidth: 28, textAlign: 'right' as const }}>{saDuration}s</span>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSaGenerate}
+                disabled={saStatus.kind === 'generating' || !saPrompt.trim()}
+                style={{
+                  ...styles.generateBtn,
+                  background: '#1a2a1a',
+                  borderColor: '#2a5a2a',
+                  color: '#70c070',
+                  opacity: saStatus.kind === 'generating' || !saPrompt.trim() ? 0.6 : 1,
+                }}
+              >
+                {saStatus.kind === 'generating' ? 'Generating...' : 'Generate with Stable Audio'}
+              </button>
+
+              {saStatus.kind === 'done' && (
+                <div style={{ ...styles.statusBox, color: '#70d870', borderColor: '#70d87044' }}>
+                  AI audio loaded as waveform.
+                </div>
+              )}
+              {saStatus.kind === 'error' && (
+                <div style={{ ...styles.statusBox, color: '#e07070', borderColor: '#e0707044' }}>
+                  {saStatus.message}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
         {/* AI Generation (optional — Replicate)                             */}
         {/* ---------------------------------------------------------------- */}
         {REPLICATE_TOKEN && (
@@ -322,10 +420,11 @@ export function AIGeneratePanel() {
           <div style={styles.helpText}>
             Generates SFX from text description using keyword matching.<br />
             No server required — runs entirely in the browser.
-            {!REPLICATE_TOKEN && (
+            {!STABLE_AUDIO_URL && !REPLICATE_TOKEN && (
               <>
                 <br /><br />
-                Set <code style={{ color: '#6a6aa0' }}>VITE_REPLICATE_API_TOKEN</code> in tools/.env for optional AI generation via Replicate.
+                Set <code style={{ color: '#407050' }}>VITE_STABLE_AUDIO_URL</code> in tools/.env for local AI generation via Stable Audio,
+                or <code style={{ color: '#6a6aa0' }}>VITE_REPLICATE_API_TOKEN</code> for cloud AI via Replicate.
               </>
             )}
           </div>

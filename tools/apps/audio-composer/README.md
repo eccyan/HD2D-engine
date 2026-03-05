@@ -98,6 +98,16 @@ Each layer type has 4 style presets:
 
 Generated loops are rendered as 44100 Hz mono WAV and can be applied directly to any lane.
 
+### AI Generation (Optional — Stable Audio)
+
+For local AI music generation, you can run the Stable Audio server. This is recommended for studios with local GPU hardware:
+
+1. Install dependencies: `pip install flask stable-audio-tools`
+2. Start the server: `python tools/scripts/stable-audio-server.py`
+3. Set `VITE_STABLE_AUDIO_URL=http://localhost:8001` in `tools/.env`
+
+The server wraps `stable-audio-open-small` (up to 11 seconds, 44.1 kHz stereo). A CUDA GPU is recommended.
+
 ### AI Generation (Optional — Replicate)
 
 For cloud-based AI music generation, you can optionally use the Replicate API. Set `VITE_REPLICATE_API_TOKEN` in `tools/.env` with your API token from [replicate.com](https://replicate.com/account/api-tokens). This is not required — the built-in procedural generation covers the engine's 4-layer music system.

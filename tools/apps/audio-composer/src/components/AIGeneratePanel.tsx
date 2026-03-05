@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { ReplicateClient } from '@vulkan-game-tools/ai-providers';
+import { ReplicateClient, StableAudioClient } from '@vulkan-game-tools/ai-providers';
 import { useComposerStore, LayerId } from '../store/useComposerStore.js';
 import { AudioPlayerHandle } from './AudioPlayer.js';
 import { LOOP_PRESETS, MusicLoopPreset, LoopStyle } from '../audio/music-presets.js';
 import { generateLoop } from '../audio/loop-generator.js';
 
+const STABLE_AUDIO_URL = (import.meta as any).env?.VITE_STABLE_AUDIO_URL as string | undefined;
 const REPLICATE_TOKEN = (import.meta as any).env?.VITE_REPLICATE_API_TOKEN as string | undefined;
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,15 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
   const previewSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const [previewBuffer, setPreviewBuffer] = useState<AudioBuffer | null>(null);
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+
+  // Stable Audio state (optional, local AI)
+  const [saPrompt, setSaPrompt] = useState('');
+  const [saDuration, setSaDuration] = useState(5);
+  const [saStatus, setSaStatus] = useState<GenerationStatus>({ kind: 'idle' });
+  const saPreviewCtxRef = useRef<AudioContext | null>(null);
+  const saPreviewSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const [saPreviewBuffer, setSaPreviewBuffer] = useState<AudioBuffer | null>(null);
+  const [isSaPreviewPlaying, setIsSaPreviewPlaying] = useState(false);
 
   // AI generation state (optional)
   const [aiPrompt, setAiPrompt] = useState('');
@@ -120,6 +130,54 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
     setPreviewBuffer(null);
     setIsPreviewPlaying(false);
   }, [status, targetLayer, playerRef]);
+
+  // -------------------------------------------------------------------------
+  // AI generation via Stable Audio (local)
+  // -------------------------------------------------------------------------
+  const handleSaGenerate = useCallback(async () => {
+    if (!saPrompt.trim() || !STABLE_AUDIO_URL) return;
+    if (saStatus.kind === 'generating') return;
+
+    setSaStatus({ kind: 'generating', message: `Generating ${saDuration}s via Stable Audio...` });
+    try {
+      const client = new StableAudioClient(STABLE_AUDIO_URL);
+      const audioData = await client.generateAudio(saPrompt.trim(), { duration: saDuration });
+      setSaStatus({ kind: 'ready', audioData });
+
+      const ctx = new AudioContext();
+      saPreviewCtxRef.current = ctx;
+      const decoded = await ctx.decodeAudioData(audioData.slice(0));
+      setSaPreviewBuffer(decoded);
+    } catch (err) {
+      setSaStatus({ kind: 'error', message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [saPrompt, saDuration, saStatus.kind]);
+
+  const handleSaPreviewPlay = useCallback(() => {
+    if (!saPreviewBuffer || !saPreviewCtxRef.current) return;
+    if (isSaPreviewPlaying) {
+      saPreviewSourceRef.current?.stop();
+      setIsSaPreviewPlaying(false);
+      return;
+    }
+    const ctx = saPreviewCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+    const src = ctx.createBufferSource();
+    src.buffer = saPreviewBuffer;
+    src.connect(ctx.destination);
+    src.start();
+    src.onended = () => setIsSaPreviewPlaying(false);
+    saPreviewSourceRef.current = src;
+    setIsSaPreviewPlaying(true);
+  }, [saPreviewBuffer, isSaPreviewPlaying]);
+
+  const handleSaApplyToLane = useCallback(async () => {
+    if (saStatus.kind !== 'ready') return;
+    await playerRef.current?.loadLayerBuffer(targetLayer, saStatus.audioData);
+    setSaStatus({ kind: 'idle' });
+    setSaPreviewBuffer(null);
+    setIsSaPreviewPlaying(false);
+  }, [saStatus, targetLayer, playerRef]);
 
   // -------------------------------------------------------------------------
   // AI generation via Replicate
@@ -315,6 +373,96 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
         )}
 
         {/* ---------------------------------------------------------------- */}
+        {/* AI Generation (optional — Stable Audio, local)                   */}
+        {/* ---------------------------------------------------------------- */}
+        {STABLE_AUDIO_URL && (
+          <>
+            <div style={{ borderTop: '1px solid #2a2a2a', margin: '4px 0' }} />
+            <div style={styles.field}>
+              <div style={{ ...styles.fieldLabel, color: '#70a070' }}>AI GENERATION (LOCAL — STABLE AUDIO)</div>
+
+              <textarea
+                value={saPrompt}
+                onChange={(e) => setSaPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleSaGenerate();
+                  }
+                }}
+                placeholder={`Describe the ${LAYER_LABELS[targetLayer].toLowerCase()} sound for local AI...`}
+                rows={2}
+                style={styles.textarea}
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', ...styles.fieldLabel }}>
+                <span>Duration</span>
+                <span style={{ color: '#aaa' }}>{saDuration}s</span>
+              </div>
+              <input
+                type="range" min={1} max={11} step={1}
+                value={saDuration}
+                onChange={(e) => setSaDuration(parseInt(e.target.value))}
+                style={styles.slider}
+              />
+
+              <button
+                onClick={handleSaGenerate}
+                disabled={saStatus.kind === 'generating' || !saPrompt.trim()}
+                style={{
+                  ...styles.generateBtn,
+                  background: '#1a2a1a',
+                  borderColor: '#2a5a2a',
+                  color: '#70c070',
+                  opacity: saStatus.kind === 'generating' || !saPrompt.trim() ? 0.5 : 1,
+                }}
+              >
+                {saStatus.kind === 'generating' ? 'Generating via Stable Audio...' : 'Generate with Stable Audio'}
+              </button>
+
+              {saStatus.kind !== 'idle' && (
+                <div style={{
+                  ...styles.statusBox,
+                  borderColor: statusMeta[saStatus.kind].color + '44',
+                  color: statusMeta[saStatus.kind].color,
+                }}>
+                  {'message' in saStatus ? saStatus.message : saStatus.kind === 'ready' ? 'Stable Audio ready' : ''}
+                </div>
+              )}
+
+              {saStatus.kind === 'ready' && saPreviewBuffer && (
+                <div style={styles.previewRow}>
+                  <button
+                    onClick={handleSaPreviewPlay}
+                    style={{
+                      ...styles.previewBtn,
+                      background: isSaPreviewPlaying ? '#2a3a5a' : '#1a1a1a',
+                      borderColor: isSaPreviewPlaying ? '#4a6ab8' : '#333',
+                      color: isSaPreviewPlaying ? '#90b8f8' : '#888',
+                      flex: 1,
+                    }}
+                  >
+                    {isSaPreviewPlaying ? 'Stop' : 'Preview'}
+                  </button>
+                  <button
+                    onClick={handleSaApplyToLane}
+                    style={{
+                      ...styles.previewBtn,
+                      background: '#1a2a1a',
+                      borderColor: '#2a5a2a',
+                      color: '#70d070',
+                      flex: 1,
+                    }}
+                  >
+                    Apply to {LAYER_LABELS[targetLayer]}
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
         {/* AI Generation (optional — Replicate)                             */}
         {/* ---------------------------------------------------------------- */}
         {REPLICATE_TOKEN && (
@@ -408,10 +556,11 @@ export function AIGeneratePanel({ playerRef }: AIGeneratePanelProps) {
         <div style={styles.helpBox}>
           Generates loops procedurally in the browser.<br />
           No server required — uses OfflineAudioContext synthesis.
-          {!REPLICATE_TOKEN && (
+          {!STABLE_AUDIO_URL && !REPLICATE_TOKEN && (
             <>
               <br /><br />
-              Set <code style={{ color: '#4a7ad0' }}>VITE_REPLICATE_API_TOKEN</code> in tools/.env for optional AI generation via Replicate.
+              Set <code style={{ color: '#407050' }}>VITE_STABLE_AUDIO_URL</code> in tools/.env for local AI generation via Stable Audio,
+              or <code style={{ color: '#4a7ad0' }}>VITE_REPLICATE_API_TOKEN</code> for cloud AI via Replicate.
             </>
           )}
         </div>
@@ -535,6 +684,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 9,
     cursor: 'pointer',
     textAlign: 'center' as const,
+  },
+  textarea: {
+    background: '#1a1a2a',
+    border: '1px solid #333',
+    borderRadius: 4,
+    color: '#c0c0e0',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    padding: '6px 8px',
+    resize: 'vertical' as const,
+    outline: 'none',
+    lineHeight: 1.5,
+    minHeight: 48,
   },
   helpBox: {
     padding: '6px 8px',
