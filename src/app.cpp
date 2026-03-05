@@ -639,8 +639,12 @@ void App::generate_audio_assets() {
     constexpr uint32_t kRate = 44100;
     constexpr float kPi = 3.14159265358979323846f;
 
+    // Skip music WAV generation if external files already exist (e.g. from Stable Audio)
+    bool has_external_music = std::filesystem::exists("assets/audio/music_bass.wav")
+        && std::filesystem::file_size("assets/audio/music_bass.wav") > 500000;
+
     // 1. music_bass.wav — 4.0s low sine chord C2+G2 with tremolo
-    {
+    if (!has_external_music) {
         uint32_t len = kRate * 4;
         std::vector<int16_t> samples(len);
         for (uint32_t i = 0; i < len; ++i) {
@@ -660,7 +664,7 @@ void App::generate_audio_assets() {
     }
 
     // 2. music_harmony.wav — 4.0s warm pad C3+E3+G3
-    {
+    if (!has_external_music) {
         uint32_t len = kRate * 4;
         std::vector<int16_t> samples(len);
         for (uint32_t i = 0; i < len; ++i) {
@@ -680,7 +684,7 @@ void App::generate_audio_assets() {
     }
 
     // 3. music_melody.wav — 4.0s pentatonic arpeggio
-    {
+    if (!has_external_music) {
         uint32_t len = kRate * 4;
         std::vector<int16_t> samples(len);
         const float notes[] = {261.63f, 293.66f, 329.63f, 392.00f, 440.00f,
@@ -706,7 +710,7 @@ void App::generate_audio_assets() {
     }
 
     // 4. music_percussion.wav — 2.0s soft kick + hi-hat at 120 BPM
-    {
+    if (!has_external_music) {
         uint32_t len = kRate * 2;
         std::vector<int16_t> samples(len);
         const float beat_dur = 0.5f;  // 120 BPM

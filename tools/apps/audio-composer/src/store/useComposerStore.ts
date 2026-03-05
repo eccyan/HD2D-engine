@@ -28,6 +28,8 @@ export interface LoopRegion {
   endSec: number;
 }
 
+export type SaStatus = 'idle' | 'generating' | 'ready' | 'error';
+
 export interface ComposerStore {
   // Transport
   isPlaying: boolean;
@@ -52,6 +54,15 @@ export interface ComposerStore {
   // AI panel
   aiPanelOpen: boolean;
 
+  // Stable Audio remote generation state
+  saPrompt: string;
+  saDuration: number;
+  saTargetLayer: LayerId;
+  saStatus: SaStatus;
+  saError: string;
+  saGenerateRequestId: number;
+  saApplyRequestId: number;
+
   // Actions
   setPlaying: (v: boolean) => void;
   setPlayheadSec: (v: number) => void;
@@ -72,6 +83,14 @@ export interface ComposerStore {
   setEngineUrl: (url: string) => void;
   setEngineConnected: (v: boolean) => void;
   setAiPanelOpen: (v: boolean) => void;
+
+  // Stable Audio remote actions
+  setSaPrompt: (v: string) => void;
+  setSaDuration: (v: number) => void;
+  setSaTargetLayer: (v: LayerId) => void;
+  setSaStatus: (status: SaStatus, error?: string) => void;
+  requestSaGenerate: () => void;
+  requestSaApply: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +143,14 @@ export const useComposerStore = create<ComposerStore>((set) => ({
 
   aiPanelOpen: false,
 
+  saPrompt: '',
+  saDuration: 8,
+  saTargetLayer: 'bass' as LayerId,
+  saStatus: 'idle' as SaStatus,
+  saError: '',
+  saGenerateRequestId: 0,
+  saApplyRequestId: 0,
+
   setPlaying: (v) => set({ isPlaying: v }),
   setPlayheadSec: (v) => set({ playheadSec: v }),
   setBpm: (v) => set({ bpm: v }),
@@ -166,4 +193,11 @@ export const useComposerStore = create<ComposerStore>((set) => ({
   setEngineUrl: (url) => set({ engineUrl: url }),
   setEngineConnected: (v) => set({ engineConnected: v }),
   setAiPanelOpen: (v) => set({ aiPanelOpen: v }),
+
+  setSaPrompt: (v) => set({ saPrompt: v }),
+  setSaDuration: (v) => set({ saDuration: v }),
+  setSaTargetLayer: (v) => set({ saTargetLayer: v }),
+  setSaStatus: (status, error) => set({ saStatus: status, saError: error ?? '' }),
+  requestSaGenerate: () => set((s) => ({ saGenerateRequestId: s.saGenerateRequestId + 1 })),
+  requestSaApply: () => set((s) => ({ saApplyRequestId: s.saApplyRequestId + 1 })),
 }));

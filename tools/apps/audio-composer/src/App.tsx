@@ -4,6 +4,7 @@ import { TrackTimeline } from './components/TrackTimeline.js';
 import { MusicStateEditor } from './components/MusicStateEditor.js';
 import { AIGeneratePanel } from './components/AIGeneratePanel.js';
 import { AudioPlayer, AudioPlayerHandle } from './components/AudioPlayer.js';
+import { useSaRemoteGeneration } from './hooks/useSaRemoteGeneration.js';
 
 // ---------------------------------------------------------------------------
 // App
@@ -33,6 +34,9 @@ export function App() {
   } = useComposerStore();
 
   const [rightTab, setRightTab] = useState<'states' | 'ai'>('states');
+
+  // Remote Stable Audio generation via test harness WebSocket
+  useSaRemoteGeneration(playerRef);
 
   // -------------------------------------------------------------------------
   // Playback controls
