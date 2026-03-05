@@ -354,6 +354,8 @@ echo ""
 
 # --- Stable Audio Open Small --------------------------------------------------
 STABLE_AUDIO_SERVER="${SCRIPT_DIR}/scripts/stable-audio-server.py"
+STABLE_AUDIO_VENV="${SCRIPT_DIR}/.venv/stable-audio"
+STABLE_AUDIO_PYTHON="python3"  # overridden if venv exists
 
 check_stable_audio() {
   if curl -sf "${STABLE_AUDIO_URL}/health" -o /dev/null --connect-timeout 3; then
@@ -362,15 +364,26 @@ check_stable_audio() {
   return 1
 }
 
-# Check if stable-audio-tools Python package is installed
+# Use venv python if the venv exists
+activate_stable_audio_venv() {
+  if [ -f "${STABLE_AUDIO_VENV}/bin/python" ]; then
+    STABLE_AUDIO_PYTHON="${STABLE_AUDIO_VENV}/bin/python"
+    return 0
+  fi
+  return 1
+}
+
+# Check if stable-audio-tools Python package is installed (in venv or system)
 check_stable_audio_deps() {
-  python3 -c "import stable_audio_tools; import flask" &>/dev/null
+  activate_stable_audio_venv 2>/dev/null || true
+  "$STABLE_AUDIO_PYTHON" -c "import stable_audio_tools; import flask" &>/dev/null
 }
 
 start_stable_audio() {
+  activate_stable_audio_venv 2>/dev/null || true
   info "Starting Stable Audio server in background..."
   info "First run will download the model from HuggingFace (~500MB)."
-  nohup python3 "$STABLE_AUDIO_SERVER" --port 8001 &>/dev/null &
+  nohup "$STABLE_AUDIO_PYTHON" "$STABLE_AUDIO_SERVER" --port 8001 &>/dev/null &
   # Poll for startup — model loading can take a while
   local attempts=0
   while [ $attempts -lt 40 ]; do
@@ -402,7 +415,7 @@ else
           success "Stable Audio is running at $STABLE_AUDIO_URL"
         else
           warn "Stable Audio is still loading the model. It may take longer on first run."
-          dim "Check manually: python3 $STABLE_AUDIO_SERVER"
+          dim "Check manually: $STABLE_AUDIO_PYTHON $STABLE_AUDIO_SERVER"
         fi
       fi
     else
@@ -412,39 +425,38 @@ else
       echo -e "    Audio Composer and SFX Designer. Max 11s, 44.1kHz stereo."
       echo ""
 
-      # Check for pip
-      HAS_PIP=false
-      if python3 -m pip --version &>/dev/null; then HAS_PIP=true; fi
+      dim "Found: python3 ($PY_VER)"
+      echo ""
+      echo -e "    Packages: ${CYAN}flask torch torchaudio einops stable-audio-tools${NC}"
+      echo -e "    Installs into a venv at: ${CYAN}${STABLE_AUDIO_VENV}${NC}"
+      echo -e "    ${DIM}First server run will download the model (~500MB).${NC}"
+      echo ""
 
-      if ! $HAS_PIP; then
-        warn "pip is required to install Stable Audio dependencies"
-        dim "Install pip first: python3 -m ensurepip --upgrade"
-      else
-        dim "Found: python3 ($PY_VER), pip"
-        echo ""
-        echo -e "    Packages: ${CYAN}flask torch torchaudio einops stable-audio-tools${NC}"
-        echo -e "    ${DIM}First server run will download the model (~500MB).${NC}"
-        echo ""
+      read -rp "    Create venv and install Stable Audio dependencies? (Y/n) " INSTALL_SA
+      if [[ "${INSTALL_SA:-y}" =~ ^[Yy]$ ]]; then
+        info "Creating virtual environment at ${STABLE_AUDIO_VENV}..."
+        mkdir -p "$(dirname "$STABLE_AUDIO_VENV")"
+        python3 -m venv "$STABLE_AUDIO_VENV"
+        STABLE_AUDIO_PYTHON="${STABLE_AUDIO_VENV}/bin/python"
+        success "Virtual environment created"
 
-        read -rp "    Install Stable Audio dependencies via pip? (Y/n) " INSTALL_SA
-        if [[ "${INSTALL_SA:-y}" =~ ^[Yy]$ ]]; then
-          info "Installing Stable Audio dependencies (this may take a while)..."
-          python3 -m pip install flask torch torchaudio einops stable-audio-tools
-          success "Stable Audio dependencies installed"
+        info "Installing Stable Audio dependencies (this may take a while)..."
+        "$STABLE_AUDIO_PYTHON" -m pip install --upgrade pip
+        "$STABLE_AUDIO_PYTHON" -m pip install flask torch torchaudio einops stable-audio-tools
+        success "Stable Audio dependencies installed"
 
-          read -rp "    Start Stable Audio server now? (Y/n) " START_SA_NOW
-          if [[ "${START_SA_NOW:-y}" =~ ^[Yy]$ ]]; then
-            if start_stable_audio; then
-              STABLE_AUDIO_OK=true
-              success "Stable Audio is running at $STABLE_AUDIO_URL"
-            else
-              warn "Stable Audio is still loading. Start manually later:"
-              dim "  python3 $STABLE_AUDIO_SERVER"
-            fi
+        read -rp "    Start Stable Audio server now? (Y/n) " START_SA_NOW
+        if [[ "${START_SA_NOW:-y}" =~ ^[Yy]$ ]]; then
+          if start_stable_audio; then
+            STABLE_AUDIO_OK=true
+            success "Stable Audio is running at $STABLE_AUDIO_URL"
           else
-            dim "Start later with:"
-            dim "  python3 $STABLE_AUDIO_SERVER"
+            warn "Stable Audio is still loading. Start manually later:"
+            dim "  $STABLE_AUDIO_PYTHON $STABLE_AUDIO_SERVER"
           fi
+        else
+          dim "Start later with:"
+          dim "  $STABLE_AUDIO_PYTHON $STABLE_AUDIO_SERVER"
         fi
       fi
     fi
