@@ -90,15 +90,19 @@ curl -L -o v1-5-pruned-emaonly.safetensors \
   https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors
 cd ../..
 
-# 5. Start ComfyUI in CPU mode with CORS enabled
-./venv/bin/python main.py --cpu --listen --enable-cors-header "*"
+# 5. Start ComfyUI with CORS enabled
+# Apple Silicon (MPS backend — recommended, ~30s per image at 20 steps):
+./venv/bin/python main.py --listen --enable-cors-header "*" --cpu-vae
+
+# CPU-only fallback (slower, ~2–5 min per image):
+# ./venv/bin/python main.py --cpu --listen --enable-cors-header "*"
 ```
 
 > **Important:** The `--enable-cors-header "*"` flag is required so the Pixel Painter browser app (on `localhost:5174`) can reach the ComfyUI API (on `localhost:8188`).
 
-The server starts at `http://localhost:8188` by default. You can change the URL in the Pixel Painter's Advanced settings or via the `VITE_COMFYUI_URL` environment variable.
+> **Apple Silicon note:** Use `--cpu-vae` instead of `--cpu` to run the diffusion model on the MPS (Metal) GPU while keeping the VAE on CPU (avoids MPS float16 VAE issues). The `euler` sampler is recommended — other samplers may produce poor results on MPS.
 
-> **Note:** CPU inference is slower than GPU. Expect 1–5 minutes per image at 20 steps on an Apple Silicon Mac. Reducing steps to 10–15 gives faster results with slightly lower quality.
+The server starts at `http://localhost:8188` by default. You can change the URL in the Pixel Painter's Advanced settings or via the `VITE_COMFYUI_URL` environment variable.
 
 ### Using a Pixel Art LoRA
 
@@ -118,7 +122,9 @@ LoRA (Low-Rank Adaptation) models specialize Stable Diffusion for a specific sty
 
 3. **Generate** — type a prompt like "stone floor tile, top-down, gray, rough texture" and click Generate (or Ctrl+Enter). A `LoraLoader` node is automatically inserted into the ComfyUI workflow. Include the trigger word `PixArFK` in your prompt for best results (or the trigger word specific to your chosen LoRA).
 
-### Generation Workflow
+### Generation Modes
+
+#### Single Frame Mode
 
 1. Enter a text prompt describing the desired tile or sprite
 2. (Optional) Use a **Quick Preset** button for common game asset prompts
@@ -127,6 +133,23 @@ LoRA (Low-Rank Adaptation) models specialize Stable Diffusion for a specific sty
 5. A **16×16 nearest-neighbor downscale** preview shows the final pixel art result
 6. Click **Apply to Canvas** to place the result on the current tile/sprite cell
 7. Refine manually with the drawing tools as needed
+
+#### Row Mode (Sprite Sheet)
+
+When editing a sprite sheet, a **Single / Row** toggle appears in the AI panel. Row mode generates all frames for an animation row at once with visual consistency:
+
+1. Switch to **Row** mode — the panel shows the current row info (e.g. "idle_S, 4 frames")
+2. Enter a character description prompt
+3. Click **Generate Row** — frame 0 is generated via **txt2img** as the reference character, then frames 1–N are generated via **img2img** from that reference with low denoise (default 0.4) for consistent variation
+4. Per-frame thumbnails appear in the preview area
+5. Click **Apply to Row** to write all frames to the sprite sheet
+
+The img2img approach ensures all frames share the same character appearance (colors, proportions, style) while allowing slight pose variation per frame. Each frame that produces blank output is automatically retried up to 3 times.
+
+Row generation is also available via remote command:
+```json
+{"cmd": "ai_generate_row", "prompt": "medieval knight, green tunic", "row": 0, "seed": 42, "denoise": 0.4}
+```
 
 ### Settings Reference
 
@@ -138,6 +161,7 @@ LoRA (Low-Rank Adaptation) models specialize Stable Diffusion for a specific sty
 | Sampler | euler | Sampling algorithm (euler, euler_ancestral, dpmpp_2m, ddim, uni_pc) |
 | LoRA Model | (empty) | LoRA filename without extension |
 | LoRA Weight | 0.8 | LoRA influence strength (0–1.5) |
+| Denoise | 0.4 | img2img variation strength for row mode (0=identical, 1=full regen) |
 | ComfyUI URL | localhost:8188 | ComfyUI server address |
 
 ### Prompt Tips
@@ -148,7 +172,7 @@ LoRA (Low-Rank Adaptation) models specialize Stable Diffusion for a specific sty
 - For tiles: mention "top-down", "seamless", "tile" for better tiling results
 - For sprites: mention facing direction and character description
 
-Generation always targets the currently selected 16×16 tile or sprite cell. Full sheet generation is not supported.
+Single mode targets the currently selected 16×16 tile or sprite cell. Row mode generates all frames for a sprite sheet animation row at once.
 
 ## Batch Generation (CLI Scripts)
 
