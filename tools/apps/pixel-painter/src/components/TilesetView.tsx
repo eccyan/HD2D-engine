@@ -11,7 +11,7 @@ export function TilesetView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedTileCol, selectedTileRow, tilesetPixels, selectTile, editTarget, setEditTarget, manifest } = usePainterStore();
+  const { selectedTileCol, selectedTileRow, tilesetPixels, tilesetHeightmaps, selectTile, editTarget, setEditTarget, manifest, activeLayer } = usePainterStore();
 
   const [loadedImage, setLoadedImage] = useState<ImageData | null>(null);
   const [hoveredTile, setHoveredTile] = useState<[number, number]>([-1, -1]);
@@ -43,13 +43,37 @@ export function TilesetView() {
         const y = row * CELL_DISPLAY;
         const key = `${col},${row}`;
 
-        if (loadedImage) {
+        if (loadedImage && activeLayer === 'diffuse') {
           const offscreen = document.createElement('canvas');
           offscreen.width = TILE_W;
           offscreen.height = TILE_H;
           const offCtx = offscreen.getContext('2d')!;
           offCtx.putImageData(loadedImage, -(col * TILE_W), -(row * TILE_H));
           ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
+        } else if (activeLayer === 'heightmap') {
+          // Show grayscale heightmap thumbnail
+          const hmData = tilesetHeightmaps.get(key);
+          if (hmData) {
+            const rgbaData = new Uint8ClampedArray(TILE_W * TILE_H * 4);
+            for (let i = 0; i < TILE_W * TILE_H; i++) {
+              const h = hmData[i];
+              rgbaData[i * 4] = h;
+              rgbaData[i * 4 + 1] = h;
+              rgbaData[i * 4 + 2] = h;
+              rgbaData[i * 4 + 3] = 255;
+            }
+            const imgData = new ImageData(rgbaData, TILE_W, TILE_H);
+            const offscreen = document.createElement('canvas');
+            offscreen.width = TILE_W;
+            offscreen.height = TILE_H;
+            const offCtx = offscreen.getContext('2d')!;
+            offCtx.putImageData(imgData, 0, 0);
+            ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
+          } else {
+            // Show mid-gray for blank heightmap
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(x, y, CELL_DISPLAY, CELL_DISPLAY);
+          }
         } else {
           const tilePixels = tilesetPixels.get(key);
           if (tilePixels) {
@@ -88,7 +112,7 @@ export function TilesetView() {
         }
       }
     }
-  }, [tilesetPixels, selectedTileCol, selectedTileRow, editTarget, hoveredTile, loadedImage, totalWidth, totalHeight, COLS, ROWS, TILE_W, TILE_H]);
+  }, [tilesetPixels, tilesetHeightmaps, selectedTileCol, selectedTileRow, editTarget, hoveredTile, loadedImage, totalWidth, totalHeight, COLS, ROWS, TILE_W, TILE_H, activeLayer]);
 
   const getCell = useCallback((e: React.MouseEvent<HTMLCanvasElement>): [number, number] => {
     const canvas = canvasRef.current!;

@@ -22,6 +22,15 @@ function makeBlankPixels(w: number, h: number): PixelData {
 // Minimal mock store
 // ---------------------------------------------------------------------------
 
+type ActiveLayer = 'diffuse' | 'heightmap';
+type HeightmapData = Uint8ClampedArray;
+
+function makeBlankHeightmap(w: number, h: number): HeightmapData {
+  const data = new Uint8ClampedArray(w * h);
+  data.fill(128);
+  return data;
+}
+
 interface MockStore {
   manifest: AssetManifest;
   editTarget: EditTarget;
@@ -38,8 +47,13 @@ interface MockStore {
   pixels: PixelData;
   tilesetPixels: Map<string, PixelData>;
   spritesheetPixels: Map<string, PixelData>;
-  history: Array<{ pixels: PixelData }>;
+  history: Array<{ pixels: PixelData; heightmapPixels?: HeightmapData }>;
   historyIndex: number;
+  activeLayer: ActiveLayer;
+  heightValue: number;
+  heightmapPixels: HeightmapData;
+  tilesetHeightmaps: Map<string, HeightmapData>;
+  spritesheetHeightmaps: Map<string, HeightmapData>;
 
   setManifest: (m: AssetManifest) => void;
   setEditTarget: (t: EditTarget) => void;
@@ -53,6 +67,9 @@ interface MockStore {
   setActiveTool: (tool: DrawingTool) => void;
   setFgColor: (c: RGBA) => void;
   setBgColor: (c: RGBA) => void;
+  setActiveLayer: (layer: ActiveLayer) => void;
+  setHeightValue: (v: number) => void;
+  setHeightmapPixels: (hm: HeightmapData) => void;
 }
 
 function createMockStore(): MockStore {
@@ -74,6 +91,11 @@ function createMockStore(): MockStore {
     spritesheetPixels: new Map(),
     history: [],
     historyIndex: -1,
+    activeLayer: 'diffuse',
+    heightValue: 128,
+    heightmapPixels: makeBlankHeightmap(16, 16),
+    tilesetHeightmaps: new Map(),
+    spritesheetHeightmaps: new Map(),
 
     setManifest(m: AssetManifest) { store.manifest = m; },
     setEditTarget(t: EditTarget) { store.editTarget = t; },
@@ -97,24 +119,36 @@ function createMockStore(): MockStore {
     },
     setPixels(px: PixelData) { store.pixels = new Uint8ClampedArray(px) as PixelData; },
     pushHistory() {
-      store.history.push({ pixels: new Uint8ClampedArray(store.pixels) as PixelData });
+      store.history.push({
+        pixels: new Uint8ClampedArray(store.pixels) as PixelData,
+        heightmapPixels: new Uint8ClampedArray(store.heightmapPixels) as HeightmapData,
+      });
       store.historyIndex = store.history.length - 1;
     },
     undo() {
       if (store.historyIndex > 0) {
         store.historyIndex--;
         store.pixels = new Uint8ClampedArray(store.history[store.historyIndex].pixels) as PixelData;
+        if (store.history[store.historyIndex].heightmapPixels) {
+          store.heightmapPixels = new Uint8ClampedArray(store.history[store.historyIndex].heightmapPixels!) as HeightmapData;
+        }
       }
     },
     redo() {
       if (store.historyIndex < store.history.length - 1) {
         store.historyIndex++;
         store.pixels = new Uint8ClampedArray(store.history[store.historyIndex].pixels) as PixelData;
+        if (store.history[store.historyIndex].heightmapPixels) {
+          store.heightmapPixels = new Uint8ClampedArray(store.history[store.historyIndex].heightmapPixels!) as HeightmapData;
+        }
       }
     },
     setActiveTool(tool: DrawingTool) { store.activeTool = tool; },
     setFgColor(c: RGBA) { store.fgColor = c; },
     setBgColor(c: RGBA) { store.bgColor = c; },
+    setActiveLayer(layer: ActiveLayer) { store.activeLayer = layer; },
+    setHeightValue(v: number) { store.heightValue = Math.max(0, Math.min(255, Math.round(v))); },
+    setHeightmapPixels(hm: HeightmapData) { store.heightmapPixels = new Uint8ClampedArray(hm) as HeightmapData; },
   };
   return store;
 }
@@ -140,6 +174,46 @@ function base64ToPixels(b64: string): PixelData {
     arr[i] = buf[i];
   }
   return arr as PixelData;
+}
+
+function heightmapToBase64(hm: HeightmapData): string {
+  let binary = '';
+  for (let i = 0; i < hm.length; i++) {
+    binary += String.fromCharCode(hm[i]);
+  }
+  return Buffer.from(binary, 'binary').toString('base64');
+}
+
+function base64ToHeightmap(b64: string): HeightmapData {
+  const buf = Buffer.from(b64, 'base64');
+  const arr = new Uint8ClampedArray(buf.length);
+  for (let i = 0; i < buf.length; i++) {
+    arr[i] = buf[i];
+  }
+  return arr as HeightmapData;
+}
+
+function heightmapToNormalMap(heightmap: HeightmapData, w: number, h: number): Uint8ClampedArray {
+  const output = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const xm = Math.max(0, x - 1);
+      const xp = Math.min(w - 1, x + 1);
+      const ym = Math.max(0, y - 1);
+      const yp = Math.min(h - 1, y + 1);
+      const dhdx = heightmap[y * w + xp] - heightmap[y * w + xm];
+      const dhdy = heightmap[yp * w + x] - heightmap[ym * w + x];
+      let nx = -dhdx, ny = -dhdy, nz = 1.0;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      nx /= len; ny /= len; nz /= len;
+      const idx = (y * w + x) * 4;
+      output[idx + 0] = Math.round(Math.max(0, Math.min(255, (nx * 0.5 + 0.5) * 255)));
+      output[idx + 1] = Math.round(Math.max(0, Math.min(255, (ny * 0.5 + 0.5) * 255)));
+      output[idx + 2] = Math.round(Math.max(0, Math.min(255, (nz * 0.5 + 0.5) * 255)));
+      output[idx + 3] = 255;
+    }
+  }
+  return output;
 }
 
 function pixelDims(store: MockStore): { w: number; h: number } {
@@ -174,6 +248,9 @@ function handleCommand(
           pixelWidth: w,
           pixelHeight: h,
           pixels: pixelsToBase64(store.pixels),
+          activeLayer: store.activeLayer,
+          heightValue: store.heightValue,
+          heightmap: heightmapToBase64(store.heightmapPixels),
         },
       };
     }
@@ -254,6 +331,35 @@ function handleCommand(
     }
     case 'redo': {
       store.redo();
+      return { response: { ok: true } };
+    }
+    case 'get_heightmap': {
+      const { w, h } = pixelDims(store);
+      return { response: { heightmap: heightmapToBase64(store.heightmapPixels), width: w, height: h } };
+    }
+    case 'set_heightmap': {
+      const b64 = params['heightmap'] as string | undefined;
+      if (!b64) return { error: 'missing heightmap param' };
+      const newHm = base64ToHeightmap(b64);
+      store.pushHistory();
+      store.setHeightmapPixels(newHm);
+      return { response: { ok: true } };
+    }
+    case 'get_normal_map': {
+      const { w, h } = pixelDims(store);
+      const normalMap = heightmapToNormalMap(store.heightmapPixels, w, h);
+      return { response: { normal_map: pixelsToBase64(normalMap), width: w, height: h } };
+    }
+    case 'set_layer': {
+      const layer = params['layer'] as string | undefined;
+      if (!layer || (layer !== 'diffuse' && layer !== 'heightmap')) return { error: 'invalid layer' };
+      store.setActiveLayer(layer);
+      return { response: { ok: true } };
+    }
+    case 'set_height_value': {
+      const value = params['value'] as number | undefined;
+      if (value === undefined) return { error: 'missing value' };
+      store.setHeightValue(value);
       return { response: { ok: true } };
     }
     default:
@@ -448,6 +554,87 @@ test('unknown command returns error', () => {
   const result = handleCommand('nonexistent', {}, store);
   assert('error' in result, 'Should return error');
   assert((result as { error: string }).error.includes('nonexistent'), 'Error includes cmd name');
+});
+
+// ---------------------------------------------------------------------------
+// Heightmap / Normal map command tests
+// ---------------------------------------------------------------------------
+
+test('get_state includes heightmap fields', () => {
+  const store = createMockStore();
+  const result = handleCommand('get_state', {}, store);
+  assert('response' in result, 'Should return response');
+  const resp = result.response as Record<string, unknown>;
+  assertEqual(resp['activeLayer'], 'diffuse', 'activeLayer');
+  assertEqual(resp['heightValue'], 128, 'heightValue');
+  assert(typeof resp['heightmap'] === 'string', 'heightmap is base64 string');
+});
+
+test('get_heightmap returns base64 heightmap with dimensions', () => {
+  const store = createMockStore();
+  // Set a specific heightmap value
+  store.heightmapPixels[0] = 200;
+  const result = handleCommand('get_heightmap', {}, store);
+  assert('response' in result, 'Should return response');
+  const resp = result.response as Record<string, unknown>;
+  assertEqual(resp['width'], 16, 'width');
+  assertEqual(resp['height'], 16, 'height');
+  const hm = base64ToHeightmap(resp['heightmap'] as string);
+  assertEqual(hm[0], 200, 'First pixel height');
+  assertEqual(hm[1], 128, 'Second pixel height (default)');
+});
+
+test('set_heightmap writes base64 heightmap', () => {
+  const store = createMockStore();
+  const testHm = makeBlankHeightmap(16, 16);
+  testHm[0] = 42;
+  testHm[255] = 200;
+  const b64 = heightmapToBase64(testHm);
+  const result = handleCommand('set_heightmap', { heightmap: b64 }, store);
+  assert('response' in result, 'Should return response');
+  assertEqual(store.heightmapPixels[0], 42, 'Heightmap pixel 0');
+  assertEqual(store.heightmapPixels[255], 200, 'Heightmap pixel 255');
+});
+
+test('get_normal_map returns computed RGBA normal map', () => {
+  const store = createMockStore();
+  // Flat heightmap → all normals should be (128, 128, 255, 255)
+  const result = handleCommand('get_normal_map', {}, store);
+  assert('response' in result, 'Should return response');
+  const resp = result.response as Record<string, unknown>;
+  assertEqual(resp['width'], 16, 'width');
+  assertEqual(resp['height'], 16, 'height');
+  const nm = base64ToPixels(resp['normal_map'] as string);
+  assertEqual(nm.length, 16 * 16 * 4, 'Normal map size');
+  assertEqual(nm[0], 128, 'R for flat normal');
+  assertEqual(nm[1], 128, 'G for flat normal');
+  assertEqual(nm[2], 255, 'B for flat normal');
+  assertEqual(nm[3], 255, 'A');
+});
+
+test('set_layer switches active layer', () => {
+  const store = createMockStore();
+  assertEqual(store.activeLayer, 'diffuse', 'starts as diffuse');
+  handleCommand('set_layer', { layer: 'heightmap' }, store);
+  assertEqual(store.activeLayer, 'heightmap', 'switched to heightmap');
+  handleCommand('set_layer', { layer: 'diffuse' }, store);
+  assertEqual(store.activeLayer, 'diffuse', 'switched back to diffuse');
+});
+
+test('set_layer rejects invalid layer', () => {
+  const store = createMockStore();
+  const result = handleCommand('set_layer', { layer: 'invalid' }, store);
+  assert('error' in result, 'Should return error');
+});
+
+test('set_height_value sets brush height', () => {
+  const store = createMockStore();
+  handleCommand('set_height_value', { value: 200 }, store);
+  assertEqual(store.heightValue, 200, 'Height value');
+  handleCommand('set_height_value', { value: 300 }, store);
+  assertEqual(store.heightValue, 255, 'Clamped to 255');
+  handleCommand('set_height_value', { value: -10 }, store);
+  assertEqual(store.heightValue, 0, 'Clamped to 0');
 });
 
 test('base64 round-trip preserves pixel data', () => {

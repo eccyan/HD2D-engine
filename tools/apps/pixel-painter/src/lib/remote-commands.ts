@@ -1,5 +1,6 @@
-import type { PainterState, RGBA, PixelData, EditTarget, DrawingTool } from '../store/usePainterStore.js';
+import type { PainterState, RGBA, PixelData, EditTarget, DrawingTool, ActiveLayer, HeightmapData } from '../store/usePainterStore.js';
 import { pixelDims, makeBlankPixels } from '../store/usePainterStore.js';
+import { heightmapToNormalMap } from './normal-map.js';
 import type { AssetManifest } from '@vulkan-game-tools/asset-types';
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,23 @@ function base64ToPixels(b64: string): PixelData {
     arr[i] = binary.charCodeAt(i);
   }
   return arr as PixelData;
+}
+
+function heightmapToBase64(hm: HeightmapData): string {
+  let binary = '';
+  for (let i = 0; i < hm.length; i++) {
+    binary += String.fromCharCode(hm[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToHeightmap(b64: string): HeightmapData {
+  const binary = atob(b64);
+  const arr = new Uint8ClampedArray(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    arr[i] = binary.charCodeAt(i);
+  }
+  return arr as HeightmapData;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +72,9 @@ export function handleCommand(
           pixelWidth: w,
           pixelHeight: h,
           pixels: pixelsToBase64(store.pixels),
+          activeLayer: store.activeLayer,
+          heightValue: store.heightValue,
+          heightmap: heightmapToBase64(store.heightmapPixels),
         },
       };
     }
@@ -197,6 +218,40 @@ export function handleCommand(
 
     case 'redo': {
       store.redo();
+      return { response: { ok: true } };
+    }
+
+    case 'get_heightmap': {
+      const { w, h } = pixelDims(store);
+      return { response: { heightmap: heightmapToBase64(store.heightmapPixels), width: w, height: h } };
+    }
+
+    case 'set_heightmap': {
+      const b64 = params['heightmap'] as string | undefined;
+      if (!b64) return { error: 'missing heightmap param' };
+      const newHm = base64ToHeightmap(b64);
+      store.pushHistory();
+      store.setHeightmapPixels(newHm);
+      return { response: { ok: true } };
+    }
+
+    case 'get_normal_map': {
+      const { w, h } = pixelDims(store);
+      const normalMap = heightmapToNormalMap(store.heightmapPixels, w, h);
+      return { response: { normal_map: pixelsToBase64(normalMap), width: w, height: h } };
+    }
+
+    case 'set_layer': {
+      const layer = params['layer'] as ActiveLayer | undefined;
+      if (!layer || (layer !== 'diffuse' && layer !== 'heightmap')) return { error: 'invalid layer' };
+      store.setActiveLayer(layer);
+      return { response: { ok: true } };
+    }
+
+    case 'set_height_value': {
+      const value = params['value'] as number | undefined;
+      if (value === undefined) return { error: 'missing value' };
+      store.setHeightValue(value);
       return { response: { ok: true } };
     }
 

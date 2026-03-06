@@ -271,6 +271,90 @@ export function runPixelPainterScenarios(runner: TestRunner): void {
   });
 
   // -----------------------------------------------------------------------
+  // Scenario: Heightmap editing workflow
+  // -----------------------------------------------------------------------
+  runner.test('[Scenario] Heightmap editing workflow', async (client) => {
+    // 1. Switch to heightmap layer
+    await client.dispatch('setActiveLayer', 'heightmap');
+    await assertStateHas<string>(
+      client,
+      'activeLayer',
+      (v) => v === 'heightmap',
+      'Active layer should be heightmap',
+    );
+
+    // 2. Set height value
+    await client.dispatch('setHeightValue', 200);
+    const hv = await client.getStateSelector('heightValue');
+    assertEqual(hv as number, 200, 'Height value set to 200');
+
+    // 3. Paint a heightmap pixel
+    await client.dispatch('pushHistory');
+    await client.dispatch('setHeightmapPixel', 5, 5, 200);
+    const hm = (await client.getStateSelector('heightmapPixels')) as Record<string, number>;
+    const hmIdx = 5 * 16 + 5; // assuming 16-wide
+    assertEqual(hm[hmIdx], 200, 'Heightmap pixel at (5,5) = 200');
+
+    // 4. Switch tile, switch back → heightmap preserved
+    await client.dispatch('selectTile', 1, 0);
+    await client.dispatch('selectTile', 0, 0);
+    const hmAfter = (await client.getStateSelector('heightmapPixels')) as Record<string, number>;
+    assertEqual(hmAfter[hmIdx], 200, 'Heightmap pixel at (5,5) persists after tile round-trip');
+
+    // 5. Switch back to diffuse
+    await client.dispatch('setActiveLayer', 'diffuse');
+    await assertStateHas<string>(
+      client,
+      'activeLayer',
+      (v) => v === 'diffuse',
+      'Active layer should be diffuse',
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // Scenario: Dual layer round-trip
+  // -----------------------------------------------------------------------
+  runner.test('[Scenario] Dual layer round-trip', async (client) => {
+    // 1. Paint diffuse pixel
+    await client.dispatch('setEditTarget', 'tileset');
+    await client.dispatch('selectTile', 0, 0);
+    await client.dispatch('pushHistory');
+    await client.dispatch('setPixel', 3, 3, [255, 0, 0, 255]);
+
+    // 2. Switch to heightmap layer, paint height
+    await client.dispatch('setActiveLayer', 'heightmap');
+    await client.dispatch('pushHistory');
+    await client.dispatch('setHeightmapPixel', 3, 3, 255);
+
+    // 3. Switch back to diffuse
+    await client.dispatch('setActiveLayer', 'diffuse');
+
+    // 4. Verify diffuse pixel intact
+    const pixels = (await client.getStateSelector('pixels')) as Record<string, number>;
+    const idx = (3 * 16 + 3) * 4;
+    assertEqual(pixels[idx], 255, 'Diffuse R at (3,3) intact');
+    assertEqual(pixels[idx + 1], 0, 'Diffuse G at (3,3) intact');
+
+    // 5. Verify heightmap pixel also intact
+    const hm = (await client.getStateSelector('heightmapPixels')) as Record<string, number>;
+    const hmIdx = 3 * 16 + 3;
+    assertEqual(hm[hmIdx], 255, 'Heightmap at (3,3) intact');
+  });
+
+  // -----------------------------------------------------------------------
+  // Scenario: Normal preview toggle
+  // -----------------------------------------------------------------------
+  runner.test('[Scenario] Normal preview toggle', async (client) => {
+    await client.dispatch('setShowNormalPreview', true);
+    let show = await client.getStateSelector('showNormalPreview');
+    assertEqual(show, true, 'Normal preview shown');
+
+    await client.dispatch('setShowNormalPreview', false);
+    show = await client.getStateSelector('showNormalPreview');
+    assertEqual(show, false, 'Normal preview hidden');
+  });
+
+  // -----------------------------------------------------------------------
   // Scenario: Spritesheet frame selection with manifest row metadata
   // -----------------------------------------------------------------------
   runner.test('[Scenario] Spritesheet frames use manifest row count', async (client) => {

@@ -16,6 +16,7 @@ export function SpriteSheetView() {
     selectedFrameCol,
     selectedFrameRow,
     spritesheetPixels,
+    spritesheetHeightmaps,
     selectFrame,
     editTarget,
     setEditTarget,
@@ -24,6 +25,7 @@ export function SpriteSheetView() {
     setAnimPreviewFps,
     setAnimPreviewPlaying,
     manifest,
+    activeLayer,
   } = usePainterStore();
 
   const { frame_width: FRAME_W, frame_height: FRAME_H, columns: COLS, rows: rowDefs } = manifest.spritesheet;
@@ -56,13 +58,35 @@ export function SpriteSheetView() {
         const y = row * CELL_DISPLAY;
         const key = `${col},${row}`;
 
-        if (loadedImage) {
+        if (loadedImage && activeLayer === 'diffuse') {
           const offscreen = document.createElement('canvas');
           offscreen.width = FRAME_W;
           offscreen.height = FRAME_H;
           const offCtx = offscreen.getContext('2d')!;
           offCtx.putImageData(loadedImage, -(col * FRAME_W), -(row * FRAME_H));
           ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
+        } else if (activeLayer === 'heightmap') {
+          const hmData = spritesheetHeightmaps.get(key);
+          if (hmData) {
+            const rgbaData = new Uint8ClampedArray(FRAME_W * FRAME_H * 4);
+            for (let i = 0; i < FRAME_W * FRAME_H; i++) {
+              const hv = hmData[i];
+              rgbaData[i * 4] = hv;
+              rgbaData[i * 4 + 1] = hv;
+              rgbaData[i * 4 + 2] = hv;
+              rgbaData[i * 4 + 3] = 255;
+            }
+            const imgData = new ImageData(rgbaData, FRAME_W, FRAME_H);
+            const offscreen = document.createElement('canvas');
+            offscreen.width = FRAME_W;
+            offscreen.height = FRAME_H;
+            const offCtx = offscreen.getContext('2d')!;
+            offCtx.putImageData(imgData, 0, 0);
+            ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
+          } else {
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(x, y, CELL_DISPLAY, CELL_DISPLAY);
+          }
         } else {
           const framePixels = spritesheetPixels.get(key);
           if (framePixels) {
@@ -106,7 +130,7 @@ export function SpriteSheetView() {
         }
       }
     }
-  }, [spritesheetPixels, selectedFrameCol, selectedFrameRow, editTarget, hoveredCell, animFrame, animPreviewPlaying, loadedImage, totalWidth, totalHeight, COLS, ROWS, FRAME_W, FRAME_H]);
+  }, [spritesheetPixels, spritesheetHeightmaps, selectedFrameCol, selectedFrameRow, editTarget, hoveredCell, animFrame, animPreviewPlaying, loadedImage, totalWidth, totalHeight, COLS, ROWS, FRAME_W, FRAME_H, activeLayer]);
 
   // Animation timer — use per-row frame count
   useEffect(() => {

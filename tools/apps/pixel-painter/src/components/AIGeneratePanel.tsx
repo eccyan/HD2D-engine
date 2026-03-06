@@ -45,7 +45,7 @@ async function downscaleToPixelData(pngBytes: Uint8Array, targetW: number, targe
 // ---------------------------------------------------------------------------
 
 export function AIGeneratePanel() {
-  const { applyAIPixels, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, manifest } = usePainterStore();
+  const { applyAIPixels, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, manifest, activeLayer, setHeightmapPixels, pushHistory } = usePainterStore();
   const { w: targetW, h: targetH } = pixelDims({ editTarget, manifest });
 
   const [prompt, setPrompt] = useState('');
@@ -99,7 +99,10 @@ export function AIGeneratePanel() {
       ? `${targetW}x${targetH} pixel art tile, tile (${selectedTileCol},${selectedTileRow})${slotLabel ? ` "${slotLabel}"` : ''}`
       : `${targetW}x${targetH} pixel art sprite frame, ${slotLabel ?? `row ${selectedFrameRow}`} frame ${selectedFrameCol}`;
 
-    const fullPrompt = `${prompt}, ${target}, pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset`;
+    const heightmapSuffix = activeLayer === 'heightmap'
+      ? ', height map, white=high black=low, grayscale, depth map'
+      : ', pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset';
+    const fullPrompt = `${prompt}, ${target}${heightmapSuffix}`;
     const fullNegative = negativePrompt
       ? `${negativePrompt}, watermark, text, signature`
       : 'smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, watermark, text, signature';
@@ -145,9 +148,20 @@ export function AIGeneratePanel() {
 
   const handleApply = useCallback(() => {
     if (!pendingPixels) return;
-    applyAIPixels(pendingPixels);
-    setStatus({ kind: 'success', message: 'Applied to canvas!' });
-  }, [pendingPixels, applyAIPixels]);
+    if (activeLayer === 'heightmap') {
+      // Convert RGBA to single-channel heightmap (use R channel as luminance)
+      const hm = new Uint8ClampedArray(targetW * targetH);
+      for (let i = 0; i < targetW * targetH; i++) {
+        hm[i] = pendingPixels[i * 4]; // R channel
+      }
+      pushHistory();
+      setHeightmapPixels(hm);
+      setStatus({ kind: 'success', message: 'Applied heightmap to canvas!' });
+    } else {
+      applyAIPixels(pendingPixels);
+      setStatus({ kind: 'success', message: 'Applied to canvas!' });
+    }
+  }, [pendingPixels, applyAIPixels, activeLayer, targetW, targetH, setHeightmapPixels, pushHistory]);
 
   const isGenerating = status.kind === 'generating';
 
@@ -185,6 +199,7 @@ export function AIGeneratePanel() {
             {editTarget === 'tileset'
               ? `Tileset tile (${selectedTileCol},${selectedTileRow})`
               : `Sprite row ${selectedFrameRow} frame ${selectedFrameCol}`}
+            {activeLayer === 'heightmap' && ' (heightmap)'}
           </span>
         </div>
 

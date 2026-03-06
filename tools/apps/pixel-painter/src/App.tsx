@@ -6,6 +6,7 @@ import { SpriteSheetView } from './components/SpriteSheetView.js';
 import { ColorPalettePanel } from './components/ColorPalettePanel.js';
 import { AIGeneratePanel } from './components/AIGeneratePanel.js';
 import { ManifestSettings } from './components/ManifestSettings.js';
+import { NormalPreview } from './components/NormalPreview.js';
 import { useRemoteControl } from './hooks/useRemoteControl.js';
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,10 @@ export function App() {
     editTarget,
     fgColor,
     bgColor,
+    activeLayer,
+    heightValue,
+    showNormalPreview,
+    heightmapOpacity,
     setActiveTool,
     setMirrorMode,
     setZoom,
@@ -94,6 +99,10 @@ export function App() {
     setShowAIPanel,
     setShowManifestSettings,
     setEditTarget,
+    setActiveLayer,
+    setHeightValue,
+    setShowNormalPreview,
+    setHeightmapOpacity,
     undo,
     redo,
   } = usePainterStore();
@@ -125,11 +134,13 @@ export function App() {
         case 'h': toggleGrid(); break;
         case 'a': setShowAIPanel(!showAIPanel); break;
         case 's': setShowManifestSettings(!showManifestSettings); break;
+        case 'd': setActiveLayer('diffuse'); break;
+        case 'n': setShowNormalPreview(!showNormalPreview); break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, setActiveTool, setZoom, zoom, toggleGrid, setShowAIPanel, showAIPanel, setShowManifestSettings, showManifestSettings]);
+  }, [undo, redo, setActiveTool, setZoom, zoom, toggleGrid, setShowAIPanel, showAIPanel, setShowManifestSettings, showManifestSettings, setActiveLayer, setShowNormalPreview, showNormalPreview]);
 
   const tools: Array<{ tool: DrawingTool; label: string; shortcut: string }> = [
     { tool: 'pencil', label: 'Pencil', shortcut: 'P' },
@@ -180,6 +191,66 @@ export function App() {
             Sprites
           </button>
         </div>
+
+        <div style={styles.toolbarDivider} />
+
+        {/* Layer toggle */}
+        <div style={styles.toolbarGroup}>
+          <button
+            onClick={() => setActiveLayer('diffuse')}
+            style={{
+              ...styles.targetBtn,
+              background: activeLayer === 'diffuse' ? '#2a2a4a' : 'transparent',
+              borderColor: activeLayer === 'diffuse' ? '#6a6af8' : '#444',
+              color: activeLayer === 'diffuse' ? '#a0a0f8' : '#666',
+            }}
+            title="Diffuse layer [D]"
+          >
+            Diffuse
+          </button>
+          <button
+            onClick={() => setActiveLayer('heightmap')}
+            style={{
+              ...styles.targetBtn,
+              background: activeLayer === 'heightmap' ? '#2a3a2a' : 'transparent',
+              borderColor: activeLayer === 'heightmap' ? '#5ab85a' : '#444',
+              color: activeLayer === 'heightmap' ? '#80e080' : '#666',
+            }}
+            title="Heightmap layer"
+          >
+            Height
+          </button>
+        </div>
+
+        {/* Height value slider (visible in heightmap mode) */}
+        {activeLayer === 'heightmap' && (
+          <>
+            <div style={styles.toolbarDivider} />
+            <div style={styles.toolbarGroup}>
+              <span style={styles.toolbarLabel}>H:</span>
+              <input
+                type="range"
+                min={0}
+                max={255}
+                value={heightValue}
+                onChange={(e) => setHeightValue(parseInt(e.target.value))}
+                style={{ width: 60, accentColor: '#5ab85a' }}
+                title={`Height value: ${heightValue}`}
+              />
+              <span style={{ ...styles.zoomValue, minWidth: 22 }}>{heightValue}</span>
+              <span style={styles.toolbarLabel}>Op:</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(heightmapOpacity * 100)}
+                onChange={(e) => setHeightmapOpacity(parseInt(e.target.value) / 100)}
+                style={{ width: 40, accentColor: '#5ab85a' }}
+                title={`Heightmap overlay opacity: ${Math.round(heightmapOpacity * 100)}%`}
+              />
+            </div>
+          </>
+        )}
 
         <div style={styles.toolbarDivider} />
 
@@ -291,6 +362,20 @@ export function App() {
           AI Gen
         </button>
 
+        {/* Normal preview toggle */}
+        <button
+          onClick={() => setShowNormalPreview(!showNormalPreview)}
+          style={{
+            ...styles.iconBtn,
+            background: showNormalPreview ? '#1a2e1a' : 'transparent',
+            borderColor: showNormalPreview ? '#3a8a3a' : '#444',
+            color: showNormalPreview ? '#70d870' : '#666',
+          }}
+          title="Normal map preview [N]"
+        >
+          Normals
+        </button>
+
         {/* Settings toggle */}
         <button
           onClick={() => setShowManifestSettings(!showManifestSettings)}
@@ -358,7 +443,8 @@ export function App() {
         {/* RIGHT: Color palette + AI panel + Settings */}
         <div style={styles.rightPanel}>
           <div style={styles.rightScroll}>
-            <ColorPalettePanel />
+            {activeLayer === 'diffuse' && <ColorPalettePanel />}
+            {showNormalPreview && <NormalPreview />}
             {showAIPanel && <AIGeneratePanel />}
             {showManifestSettings && <ManifestSettings />}
           </div>
@@ -378,7 +464,7 @@ export function App() {
 // ---------------------------------------------------------------------------
 
 function StatusBar() {
-  const { activeTool, mirrorMode, zoom, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, fgColor, manifest } = usePainterStore();
+  const { activeTool, mirrorMode, zoom, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, fgColor, manifest, activeLayer, heightValue } = usePainterStore();
 
   const [r, g, b, a] = fgColor;
   const { w, h } = pixelDims({ editTarget, manifest });
@@ -397,8 +483,14 @@ function StatusBar() {
       <span style={styles.statusSep}>|</span>
       <span style={styles.statusItem}>{tileInfo}</span>
       <span style={styles.statusSep}>|</span>
+      <span style={styles.statusSep}>|</span>
+      <span style={styles.statusItem}>Layer: <strong>{activeLayer}</strong></span>
+      <span style={styles.statusSep}>|</span>
       <span style={styles.statusItem}>
-        FG: <span style={{ color: `rgb(${r},${g},${b})` }}>rgba({r},{g},{b},{(a / 255).toFixed(2)})</span>
+        {activeLayer === 'heightmap'
+          ? `Height: ${heightValue}`
+          : <span>FG: <span style={{ color: `rgb(${r},${g},${b})` }}>rgba({r},{g},{b},{(a / 255).toFixed(2)})</span></span>
+        }
       </span>
       <div style={{ flex: 1 }} />
       <span style={styles.statusItem}>{w}x{h} Pixel Art Editor</span>

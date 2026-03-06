@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { usePainterStore, RGBA, PixelData, pixelDims } from '../store/usePainterStore.js';
+import { usePainterStore, RGBA, PixelData, HeightmapData, pixelDims } from '../store/usePainterStore.js';
+import { heightmapToNormalMap } from '../lib/normal-map.js';
 
 // ---------------------------------------------------------------------------
 // Drawing helpers
@@ -106,6 +107,9 @@ function renderToCanvas(
   canvasH: number,
   pixW: number,
   pixH: number,
+  heightmapMode?: boolean,
+  heightmapPixels?: HeightmapData,
+  heightmapOpacity?: number,
 ): void {
   ctx.clearRect(0, 0, canvasW, canvasH);
 
@@ -119,21 +123,52 @@ function renderToCanvas(
     }
   }
 
-  // Draw pixels
-  for (let py = 0; py < pixH; py++) {
-    for (let px = 0; px < pixW; px++) {
-      const idx = (py * pixW + px) * 4;
-      const r = pixels[idx];
-      const g = pixels[idx + 1];
-      const b = pixels[idx + 2];
-      const a = pixels[idx + 3];
-      if (a === 0) continue;
-      ctx.globalAlpha = a / 255;
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+  if (heightmapMode && heightmapPixels) {
+    // In heightmap mode, draw diffuse at reduced opacity first
+    const diffuseAlpha = 1 - (heightmapOpacity ?? 0.5);
+    if (diffuseAlpha > 0.01) {
+      ctx.globalAlpha = diffuseAlpha;
+      for (let py = 0; py < pixH; py++) {
+        for (let px = 0; px < pixW; px++) {
+          const idx = (py * pixW + px) * 4;
+          const r = pixels[idx];
+          const g = pixels[idx + 1];
+          const b = pixels[idx + 2];
+          const a = pixels[idx + 3];
+          if (a === 0) continue;
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+        }
+      }
     }
+
+    // Draw heightmap as grayscale overlay
+    ctx.globalAlpha = heightmapOpacity ?? 0.5;
+    for (let py = 0; py < pixH; py++) {
+      for (let px = 0; px < pixW; px++) {
+        const h = heightmapPixels[py * pixW + px];
+        ctx.fillStyle = `rgb(${h},${h},${h})`;
+        ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+      }
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    // Normal diffuse rendering
+    for (let py = 0; py < pixH; py++) {
+      for (let px = 0; px < pixW; px++) {
+        const idx = (py * pixW + px) * 4;
+        const r = pixels[idx];
+        const g = pixels[idx + 1];
+        const b = pixels[idx + 2];
+        const a = pixels[idx + 3];
+        if (a === 0) continue;
+        ctx.globalAlpha = a / 255;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(px * zoom, py * zoom, zoom, zoom);
+      }
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
   // Grid overlay
   if (showGrid && zoom >= 4) {
@@ -183,11 +218,17 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     bgColor,
     manifest,
     editTarget,
+    activeLayer,
+    heightValue,
+    heightmapPixels,
+    heightmapOpacity,
     setPixels,
     setFgColor,
     pushHistory,
     setActiveTool,
     addRecentColor,
+    setHeightmapPixels,
+    setHeightValue,
   } = usePainterStore();
 
   const { w: pixW, h: pixH } = pixelDims({ editTarget, manifest });
@@ -218,12 +259,40 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     return result;
   }, [mirrorMode, pixW, pixH]);
 
+  const isHeightmapMode = activeLayer === 'heightmap';
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    renderToCanvas(ctx, pixels, zoom, showGrid, hoverPos[0], hoverPos[1], width, height, pixW, pixH);
-  }, [pixels, zoom, showGrid, hoverPos, width, height, pixW, pixH]);
+    renderToCanvas(ctx, pixels, zoom, showGrid, hoverPos[0], hoverPos[1], width, height, pixW, pixH, isHeightmapMode, heightmapPixels, heightmapOpacity);
+  }, [pixels, zoom, showGrid, hoverPos, width, height, pixW, pixH, isHeightmapMode, heightmapPixels, heightmapOpacity]);
+
+  // Heightmap paint helper
+  const paintHeightmapPixel = useCallback((hm: HeightmapData, x: number, y: number, h: number): HeightmapData => {
+    const result = new Uint8ClampedArray(hm) as HeightmapData;
+    const positions = getMirroredPositions(x, y, mirrorMode, pixW, pixH);
+    for (const [mx, my] of positions) {
+      result[my * pixW + mx] = h;
+    }
+    return result;
+  }, [mirrorMode, pixW, pixH]);
+
+  // Heightmap flood fill
+  const heightmapFloodFill = useCallback((hm: HeightmapData, startX: number, startY: number, fillH: number, w: number, h: number): HeightmapData => {
+    const result = new Uint8ClampedArray(hm) as HeightmapData;
+    const targetH = result[startY * w + startX];
+    if (targetH === fillH) return result;
+    const stack: [number, number][] = [[startX, startY]];
+    while (stack.length > 0) {
+      const [sx, sy] = stack.pop()!;
+      if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
+      if (result[sy * w + sx] !== targetH) continue;
+      result[sy * w + sx] = fillH;
+      stack.push([sx + 1, sy], [sx - 1, sy], [sx, sy + 1], [sx, sy - 1]);
+    }
+    return result;
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -232,6 +301,39 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     const color = isRight ? bgColor : fgColor;
     const eraserColor: RGBA = [0, 0, 0, 0];
 
+    // Heightmap mode
+    if (isHeightmapMode) {
+      if (activeTool === 'eyedropper') {
+        const picked = heightmapPixels[y * pixW + x];
+        setHeightValue(picked);
+        setActiveTool('pencil');
+        return;
+      }
+
+      pushHistory();
+      setIsDrawing(true);
+
+      const brushH = activeTool === 'eraser' ? 128 : heightValue;
+
+      if (activeTool === 'fill') {
+        const filled = heightmapFloodFill(heightmapPixels, x, y, brushH, pixW, pixH);
+        setHeightmapPixels(filled);
+        setIsDrawing(false);
+        return;
+      }
+
+      if (activeTool === 'line' || activeTool === 'rect') {
+        drawStartRef.current = [x, y];
+        drawBasePixelsRef.current = new Uint8ClampedArray(heightmapPixels) as unknown as PixelData;
+        return;
+      }
+
+      const newHm = paintHeightmapPixel(heightmapPixels, x, y, brushH);
+      setHeightmapPixels(newHm);
+      return;
+    }
+
+    // Diffuse mode
     if (activeTool === 'eyedropper') {
       const picked = getPixelAt(pixels, x, y, pixW);
       if (isRight) {
@@ -265,13 +367,49 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     const newPixels = paintPixel(pixels, x, y, drawColor);
     setPixels(newPixels);
     if (activeTool !== 'eraser') addRecentColor(color);
-  }, [activeTool, fgColor, bgColor, pixels, pixW, pixH, getCell, paintPixel, pushHistory, setPixels, setFgColor, addRecentColor, setActiveTool]);
+  }, [activeTool, fgColor, bgColor, pixels, pixW, pixH, getCell, paintPixel, pushHistory, setPixels, setFgColor, addRecentColor, setActiveTool, isHeightmapMode, heightValue, heightmapPixels, setHeightmapPixels, setHeightValue, paintHeightmapPixel, heightmapFloodFill]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const [x, y] = getCell(e);
     setHoverPos([x, y]);
 
     if (!isDrawing) return;
+
+    // Heightmap mode
+    if (isHeightmapMode) {
+      const brushH = activeTool === 'eraser' ? 128 : heightValue;
+
+      if ((activeTool === 'line' || activeTool === 'rect') && drawStartRef.current && drawBasePixelsRef.current) {
+        // For line/rect in heightmap mode, use grayscale color rendering on the base
+        const baseHm = drawBasePixelsRef.current as unknown as HeightmapData;
+        const hmColor: RGBA = [brushH, brushH, brushH, 255];
+        // Convert heightmap to fake RGBA for line/rect drawing, then extract back
+        const fakeRGBA = new Uint8ClampedArray(pixW * pixH * 4) as PixelData;
+        for (let i = 0; i < pixW * pixH; i++) {
+          fakeRGBA[i * 4] = baseHm[i];
+          fakeRGBA[i * 4 + 1] = baseHm[i];
+          fakeRGBA[i * 4 + 2] = baseHm[i];
+          fakeRGBA[i * 4 + 3] = 255;
+        }
+        const drawn = activeTool === 'line'
+          ? drawLine(fakeRGBA, drawStartRef.current[0], drawStartRef.current[1], x, y, hmColor, pixW, pixH)
+          : drawRect(fakeRGBA, drawStartRef.current[0], drawStartRef.current[1], x, y, hmColor, pixW, pixH);
+        const newHm = new Uint8ClampedArray(pixW * pixH) as HeightmapData;
+        for (let i = 0; i < pixW * pixH; i++) {
+          newHm[i] = drawn[i * 4];
+        }
+        setHeightmapPixels(newHm);
+        return;
+      }
+
+      if (activeTool === 'pencil' || activeTool === 'eraser') {
+        const newHm = paintHeightmapPixel(heightmapPixels, x, y, brushH);
+        setHeightmapPixels(newHm);
+      }
+      return;
+    }
+
+    // Diffuse mode
     const isRight = e.buttons === 2;
     const color = isRight ? bgColor : fgColor;
     const eraserColor: RGBA = [0, 0, 0, 0];
@@ -301,7 +439,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       const newPixels = paintPixel(pixels, x, y, drawColor);
       setPixels(newPixels);
     }
-  }, [isDrawing, activeTool, fgColor, bgColor, pixels, pixW, pixH, getCell, paintPixel, setPixels]);
+  }, [isDrawing, activeTool, fgColor, bgColor, pixels, pixW, pixH, getCell, paintPixel, setPixels, isHeightmapMode, heightValue, heightmapPixels, setHeightmapPixels, paintHeightmapPixel]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDrawing(false);
@@ -324,18 +462,35 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     offscreen.width = pixW;
     offscreen.height = pixH;
     const ctx = offscreen.getContext('2d')!;
-    const imageData = new ImageData(new Uint8ClampedArray(pixels), pixW, pixH);
-    ctx.putImageData(imageData, 0, 0);
-    offscreen.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'pixel_art.png';
-      a.click();
-      URL.revokeObjectURL(url);
-    }, 'image/png');
-  }, [pixels, pixW, pixH]);
+
+    if (isHeightmapMode) {
+      // Export computed normal map
+      const normalMap = heightmapToNormalMap(heightmapPixels, pixW, pixH);
+      const imageData = new ImageData(new Uint8ClampedArray(normalMap), pixW, pixH);
+      ctx.putImageData(imageData, 0, 0);
+      offscreen.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'normal_map.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } else {
+      const imageData = new ImageData(new Uint8ClampedArray(pixels), pixW, pixH);
+      ctx.putImageData(imageData, 0, 0);
+      offscreen.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pixel_art.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    }
+  }, [pixels, pixW, pixH, isHeightmapMode, heightmapPixels]);
 
   const canvasPixelW = pixW * zoom;
   const canvasPixelH = pixH * zoom;
@@ -345,17 +500,19 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       {/* Toolbar above canvas */}
       <div style={styles.canvasToolbar}>
         <button onClick={handleExport} style={styles.exportBtn} title={`Export as PNG (${pixW}x${pixH})`}>
-          Export PNG
+          {isHeightmapMode ? 'Export Normal Map' : 'Export PNG'}
         </button>
         <span style={styles.canvasInfo}>
           {hoverPos[0] >= 0 ? `${hoverPos[0]}, ${hoverPos[1]}` : '--'}
         </span>
         <span style={styles.canvasInfo}>
           {hoverPos[0] >= 0
-            ? (() => {
-                const [r, g, b, a] = getPixelAt(pixels, hoverPos[0], hoverPos[1], pixW);
-                return `rgba(${r},${g},${b},${(a / 255).toFixed(2)})`;
-              })()
+            ? isHeightmapMode
+              ? `height: ${heightmapPixels[hoverPos[1] * pixW + hoverPos[0]]}`
+              : (() => {
+                  const [r, g, b, a] = getPixelAt(pixels, hoverPos[0], hoverPos[1], pixW);
+                  return `rgba(${r},${g},${b},${(a / 255).toFixed(2)})`;
+                })()
             : ''}
         </span>
       </div>

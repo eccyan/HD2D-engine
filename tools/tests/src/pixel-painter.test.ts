@@ -132,6 +132,64 @@ export function runPixelPainterTests(runner: TestRunner): void {
     assertEqual(show, false, 'Settings hidden');
   });
 
+  // -------------------------------------------------------------------------
+  // Heightmap layer tests
+  // -------------------------------------------------------------------------
+
+  runner.test('Layer switching', async (client) => {
+    await client.dispatch('setActiveLayer', 'heightmap');
+    let layer = await client.getStateSelector('activeLayer');
+    assertEqual(layer, 'heightmap', 'Active layer: heightmap');
+
+    await client.dispatch('setActiveLayer', 'diffuse');
+    layer = await client.getStateSelector('activeLayer');
+    assertEqual(layer, 'diffuse', 'Active layer: diffuse');
+  });
+
+  runner.test('Height value set', async (client) => {
+    await client.dispatch('setHeightValue', 200);
+    let v = await client.getStateSelector('heightValue') as number;
+    assertEqual(v, 200, 'Height value 200');
+
+    await client.dispatch('setHeightValue', 300);
+    v = await client.getStateSelector('heightValue') as number;
+    assertEqual(v, 255, 'Height value clamped to 255');
+
+    await client.dispatch('setHeightValue', -10);
+    v = await client.getStateSelector('heightValue') as number;
+    assertEqual(v, 0, 'Height value clamped to 0');
+
+    // Reset
+    await client.dispatch('setHeightValue', 128);
+  });
+
+  runner.test('Heightmap pixel set', async (client) => {
+    await client.dispatch('pushHistory');
+    await client.dispatch('setHeightmapPixel', 5, 5, 200);
+    const hm = (await client.getStateSelector('heightmapPixels')) as Record<string, number>;
+    const idx = 5 * 16 + 5;
+    assertEqual(hm[idx], 200, 'Heightmap pixel at (5,5)');
+  });
+
+  runner.test('Normal preview toggle', async (client) => {
+    await client.dispatch('setShowNormalPreview', true);
+    let show = await client.getStateSelector('showNormalPreview');
+    assertEqual(show, true, 'Normal preview shown');
+
+    await client.dispatch('setShowNormalPreview', false);
+    show = await client.getStateSelector('showNormalPreview');
+    assertEqual(show, false, 'Normal preview hidden');
+  });
+
+  runner.test('Heightmap opacity', async (client) => {
+    await client.dispatch('setHeightmapOpacity', 0.7);
+    const opacity = await client.getStateSelector('heightmapOpacity') as number;
+    // Floating point comparison with tolerance
+    assert(Math.abs(opacity - 0.7) < 0.01, `Opacity is ~0.7, got ${opacity}`);
+
+    await client.dispatch('setHeightmapOpacity', 0.5); // reset
+  });
+
   runner.test('setManifest updates manifest', async (client) => {
     const orig = await client.getStateSelector('manifest') as Record<string, unknown>;
     const tileset = orig['tileset'] as Record<string, unknown>;

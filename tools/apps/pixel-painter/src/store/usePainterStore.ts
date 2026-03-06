@@ -8,6 +8,7 @@ import { AssetManifest, DEFAULT_ASSET_MANIFEST } from '@vulkan-game-tools/asset-
 export type DrawingTool = 'pencil' | 'eraser' | 'line' | 'rect' | 'fill' | 'eyedropper';
 export type MirrorMode = 'none' | 'horizontal' | 'vertical' | 'both';
 export type EditTarget = 'tileset' | 'spritesheet';
+export type ActiveLayer = 'diffuse' | 'heightmap';
 
 /** RGBA color as [r, g, b, a] with values 0-255 */
 export type RGBA = [number, number, number, number];
@@ -15,8 +16,12 @@ export type RGBA = [number, number, number, number];
 /** Pixel canvas stored as flat RGBA array (4 bytes per pixel) */
 export type PixelData = Uint8ClampedArray;
 
+/** Single-channel heightmap data (1 byte per pixel) */
+export type HeightmapData = Uint8ClampedArray;
+
 export interface HistoryEntry {
   pixels: PixelData;
+  heightmapPixels?: HeightmapData;
 }
 
 export interface PainterState {
@@ -58,6 +63,15 @@ export interface PainterState {
   animPreviewFps: number;
   animPreviewPlaying: boolean;
 
+  // --- Heightmap / Normal map layer ---
+  activeLayer: ActiveLayer;
+  heightValue: number;
+  tilesetHeightmaps: Map<string, HeightmapData>;
+  spritesheetHeightmaps: Map<string, HeightmapData>;
+  heightmapPixels: HeightmapData;
+  showNormalPreview: boolean;
+  heightmapOpacity: number;
+
   // --- UI state ---
   showAIPanel: boolean;
   showManifestSettings: boolean;
@@ -85,6 +99,12 @@ export interface PainterState {
   setShowAIPanel: (show: boolean) => void;
   setShowManifestSettings: (show: boolean) => void;
   applyAIPixels: (pixels: PixelData) => void;
+  setActiveLayer: (layer: ActiveLayer) => void;
+  setHeightValue: (v: number) => void;
+  setHeightmapPixel: (x: number, y: number, height: number) => void;
+  setHeightmapPixels: (data: HeightmapData) => void;
+  setShowNormalPreview: (show: boolean) => void;
+  setHeightmapOpacity: (opacity: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +113,16 @@ export interface PainterState {
 
 export function makeBlankPixels(w: number, h: number): PixelData {
   return new Uint8ClampedArray(w * h * 4);
+}
+
+export function makeBlankHeightmap(w: number, h: number): HeightmapData {
+  const data = new Uint8ClampedArray(w * h);
+  data.fill(128);
+  return data;
+}
+
+function cloneHeightmap(src: HeightmapData): HeightmapData {
+  return new Uint8ClampedArray(src);
 }
 
 function clonePixels(src: PixelData): PixelData {
@@ -157,6 +187,14 @@ export const usePainterStore = create<PainterState>((set, get) => ({
   animPreviewFps: 8,
   animPreviewPlaying: false,
 
+  activeLayer: 'diffuse',
+  heightValue: 128,
+  tilesetHeightmaps: new Map(),
+  spritesheetHeightmaps: new Map(),
+  heightmapPixels: makeBlankHeightmap(DEFAULT_ASSET_MANIFEST.tileset.tile_width, DEFAULT_ASSET_MANIFEST.tileset.tile_height),
+  showNormalPreview: false,
+  heightmapOpacity: 0.5,
+
   showAIPanel: false,
   showManifestSettings: false,
 
@@ -175,9 +213,11 @@ export const usePainterStore = create<PainterState>((set, get) => ({
 
     if (tileChanged) {
       newState.tilesetPixels = new Map();
+      newState.tilesetHeightmaps = new Map();
     }
     if (frameChanged) {
       newState.spritesheetPixels = new Map();
+      newState.spritesheetHeightmaps = new Map();
     }
 
     // Reset current canvas if active target's dims changed
@@ -185,6 +225,7 @@ export const usePainterStore = create<PainterState>((set, get) => ({
     if (activeDimsChanged) {
       const d = state.editTarget === 'tileset' ? newTileDims : newFrameDims;
       newState.pixels = makeBlankPixels(d.w, d.h);
+      newState.heightmapPixels = makeBlankHeightmap(d.w, d.h);
       newState.history = [];
       newState.historyIndex = -1;
     }
@@ -196,47 +237,64 @@ export const usePainterStore = create<PainterState>((set, get) => ({
   setEditTarget: (target) => {
     const state = get();
     const dims = pixelDims(state);
-    // Save current pixels back into map before switching
+    // Save current pixels + heightmap back into map before switching
     if (state.editTarget === 'tileset') {
       const key = getTileKey(state.selectedTileCol, state.selectedTileRow);
       const newMap = new Map(state.tilesetPixels);
       newMap.set(key, clonePixels(state.pixels));
-      const newKey = getTileKey(state.selectedTileCol, state.selectedTileRow);
-      set({ editTarget: target, tilesetPixels: newMap, pixels: clonePixels(newMap.get(newKey) ?? makeBlankPixels(dims.w, dims.h)) });
+      const newHmMap = new Map(state.tilesetHeightmaps);
+      newHmMap.set(key, cloneHeightmap(state.heightmapPixels));
+      set({ editTarget: target, tilesetPixels: newMap, tilesetHeightmaps: newHmMap });
     } else {
       const key = getTileKey(state.selectedFrameCol, state.selectedFrameRow);
       const newMap = new Map(state.spritesheetPixels);
       newMap.set(key, clonePixels(state.pixels));
-      set({ editTarget: target, spritesheetPixels: newMap, pixels: clonePixels(newMap.get(key) ?? makeBlankPixels(dims.w, dims.h)) });
+      const newHmMap = new Map(state.spritesheetHeightmaps);
+      newHmMap.set(key, cloneHeightmap(state.heightmapPixels));
+      set({ editTarget: target, spritesheetPixels: newMap, spritesheetHeightmaps: newHmMap });
     }
-    // Load the appropriate canvas
+    // Load the appropriate canvas + heightmap
     const newDims = pixelDims({ editTarget: target, manifest: state.manifest });
     if (target === 'tileset') {
       const key = getTileKey(state.selectedTileCol, state.selectedTileRow);
-      set({ pixels: clonePixels(get().tilesetPixels.get(key) ?? makeBlankPixels(newDims.w, newDims.h)), history: [], historyIndex: -1 });
+      const s = get();
+      set({
+        pixels: clonePixels(s.tilesetPixels.get(key) ?? makeBlankPixels(newDims.w, newDims.h)),
+        heightmapPixels: cloneHeightmap(s.tilesetHeightmaps.get(key) ?? makeBlankHeightmap(newDims.w, newDims.h)),
+        history: [], historyIndex: -1,
+      });
     } else {
       const key = getTileKey(state.selectedFrameCol, state.selectedFrameRow);
-      set({ pixels: clonePixels(get().spritesheetPixels.get(key) ?? makeBlankPixels(newDims.w, newDims.h)), history: [], historyIndex: -1 });
+      const s = get();
+      set({
+        pixels: clonePixels(s.spritesheetPixels.get(key) ?? makeBlankPixels(newDims.w, newDims.h)),
+        heightmapPixels: cloneHeightmap(s.spritesheetHeightmaps.get(key) ?? makeBlankHeightmap(newDims.w, newDims.h)),
+        history: [], historyIndex: -1,
+      });
     }
   },
 
   // -------------------------------------------------------------------------
   selectTile: (col, row) => {
     const state = get();
-    const dims = pixelDims(state);
     const newDims = pixelDims({ editTarget: 'tileset', manifest: state.manifest });
-    // Save current canvas back
+    // Save current canvas + heightmap back
     const oldKey = getTileKey(state.selectedTileCol, state.selectedTileRow);
     const newMap = new Map(state.tilesetPixels);
     newMap.set(oldKey, clonePixels(state.pixels));
+    const newHmMap = new Map(state.tilesetHeightmaps);
+    newHmMap.set(oldKey, cloneHeightmap(state.heightmapPixels));
     // Load new tile
     const newKey = getTileKey(col, row);
     const newPixels = clonePixels(newMap.get(newKey) ?? makeBlankPixels(newDims.w, newDims.h));
+    const newHm = cloneHeightmap(newHmMap.get(newKey) ?? makeBlankHeightmap(newDims.w, newDims.h));
     set({
       selectedTileCol: col,
       selectedTileRow: row,
       tilesetPixels: newMap,
+      tilesetHeightmaps: newHmMap,
       pixels: newPixels,
+      heightmapPixels: newHm,
       history: [],
       historyIndex: -1,
     });
@@ -248,13 +306,18 @@ export const usePainterStore = create<PainterState>((set, get) => ({
     const oldKey = getTileKey(state.selectedFrameCol, state.selectedFrameRow);
     const newMap = new Map(state.spritesheetPixels);
     newMap.set(oldKey, clonePixels(state.pixels));
+    const newHmMap = new Map(state.spritesheetHeightmaps);
+    newHmMap.set(oldKey, cloneHeightmap(state.heightmapPixels));
     const newKey = getTileKey(col, row);
     const newPixels = clonePixels(newMap.get(newKey) ?? makeBlankPixels(newDims.w, newDims.h));
+    const newHm = cloneHeightmap(newHmMap.get(newKey) ?? makeBlankHeightmap(newDims.w, newDims.h));
     set({
       selectedFrameCol: col,
       selectedFrameRow: row,
       spritesheetPixels: newMap,
+      spritesheetHeightmaps: newHmMap,
       pixels: newPixels,
+      heightmapPixels: newHm,
       history: [],
       historyIndex: -1,
     });
@@ -281,7 +344,10 @@ export const usePainterStore = create<PainterState>((set, get) => ({
   // -------------------------------------------------------------------------
   pushHistory: () => {
     const state = get();
-    const newEntry: HistoryEntry = { pixels: clonePixels(state.pixels) };
+    const newEntry: HistoryEntry = {
+      pixels: clonePixels(state.pixels),
+      heightmapPixels: cloneHeightmap(state.heightmapPixels),
+    };
     const truncated = state.history.slice(0, state.historyIndex + 1);
     const newHistory = [...truncated, newEntry].slice(-MAX_HISTORY);
     set({ history: newHistory, historyIndex: newHistory.length - 1 });
@@ -292,7 +358,9 @@ export const usePainterStore = create<PainterState>((set, get) => ({
     if (state.historyIndex <= 0) return;
     const newIndex = state.historyIndex - 1;
     const entry = state.history[newIndex];
-    set({ pixels: clonePixels(entry.pixels), historyIndex: newIndex });
+    const updates: Partial<PainterState> = { pixels: clonePixels(entry.pixels), historyIndex: newIndex };
+    if (entry.heightmapPixels) updates.heightmapPixels = cloneHeightmap(entry.heightmapPixels);
+    set(updates);
   },
 
   redo: () => {
@@ -300,7 +368,9 @@ export const usePainterStore = create<PainterState>((set, get) => ({
     if (state.historyIndex >= state.history.length - 1) return;
     const newIndex = state.historyIndex + 1;
     const entry = state.history[newIndex];
-    set({ pixels: clonePixels(entry.pixels), historyIndex: newIndex });
+    const updates: Partial<PainterState> = { pixels: clonePixels(entry.pixels), historyIndex: newIndex };
+    if (entry.heightmapPixels) updates.heightmapPixels = cloneHeightmap(entry.heightmapPixels);
+    set(updates);
   },
 
   // -------------------------------------------------------------------------
@@ -330,9 +400,33 @@ export const usePainterStore = create<PainterState>((set, get) => ({
 
   applyAIPixels: (pixels) => {
     const state = get();
-    const newEntry: HistoryEntry = { pixels: clonePixels(state.pixels) };
+    const newEntry: HistoryEntry = {
+      pixels: clonePixels(state.pixels),
+      heightmapPixels: cloneHeightmap(state.heightmapPixels),
+    };
     const truncated = state.history.slice(0, state.historyIndex + 1);
     const newHistory = [...truncated, newEntry].slice(-MAX_HISTORY);
     set({ pixels: clonePixels(pixels), history: newHistory, historyIndex: newHistory.length - 1 });
   },
+
+  setActiveLayer: (layer) => set({ activeLayer: layer }),
+
+  setHeightValue: (v) => set({ heightValue: Math.max(0, Math.min(255, Math.round(v))) }),
+
+  setHeightmapPixel: (x, y, height) => {
+    const state = get();
+    const { w, h } = pixelDims(state);
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    const newHm = cloneHeightmap(state.heightmapPixels);
+    newHm[y * w + x] = Math.max(0, Math.min(255, Math.round(height)));
+    set({ heightmapPixels: newHm });
+  },
+
+  setHeightmapPixels: (data) => {
+    set({ heightmapPixels: cloneHeightmap(data) });
+  },
+
+  setShowNormalPreview: (show) => set({ showNormalPreview: show }),
+
+  setHeightmapOpacity: (opacity) => set({ heightmapOpacity: Math.max(0, Math.min(1, opacity)) }),
 }));
