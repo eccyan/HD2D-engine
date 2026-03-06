@@ -26,7 +26,7 @@ export function useRemoteControl(bridgeUrl: string): void {
           ws.send(JSON.stringify({ type: 'register_tool', name: 'pixel-painter' }));
         };
 
-        ws.onmessage = (event) => {
+        ws.onmessage = async (event) => {
           let parsed: Record<string, unknown>;
           try {
             parsed = JSON.parse(event.data as string);
@@ -45,7 +45,10 @@ export function useRemoteControl(bridgeUrl: string): void {
 
           const bridgeId = parsed['_bridge_id'] as string | undefined;
           const store = usePainterStore.getState();
-          const result = handleCommand(cmd, parsed as Record<string, unknown>, store);
+          const resultOrPromise = handleCommand(cmd, parsed as Record<string, unknown>, store);
+
+          // Support both sync and async command results
+          const result = resultOrPromise instanceof Promise ? await resultOrPromise : resultOrPromise;
 
           // Send response back with bridge correlation ID
           const response: Record<string, unknown> = 'error' in result

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
 import { usePainterStore, PixelData, pixelDims } from '../store/usePainterStore.js';
+import { buildFullPrompt, buildNegativePrompt, downscaleToPixelData, pixelsToHeightmap, DEFAULT_NEGATIVE_PROMPT } from '../lib/ai-generate-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,34 +14,6 @@ type GenStatus =
   | { kind: 'error'; message: string };
 
 // ---------------------------------------------------------------------------
-// Downscale helper: nearest-neighbor to 16x16 RGBA
-// ---------------------------------------------------------------------------
-
-async function downscaleToPixelData(pngBytes: Uint8Array, targetW: number, targetH: number): Promise<PixelData> {
-  const blob = new Blob([pngBytes], { type: 'image/png' });
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = new Image();
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Failed to load generated image'));
-      img.src = url;
-    });
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width = targetW;
-    offscreen.height = targetH;
-    const ctx = offscreen.getContext('2d')!;
-    ctx.imageSmoothingEnabled = false; // nearest-neighbor
-    ctx.drawImage(img, 0, 0, targetW, targetH);
-    const imgData = ctx.getImageData(0, 0, targetW, targetH);
-    return new Uint8ClampedArray(imgData.data) as PixelData;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -49,7 +22,7 @@ export function AIGeneratePanel() {
   const { w: targetW, h: targetH } = pixelDims({ editTarget, manifest });
 
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, anti-aliasing, gradient, watercolor');
+  const [negativePrompt, setNegativePrompt] = useState(DEFAULT_NEGATIVE_PROMPT);
   const [comfyUrl, setComfyUrl] = useState(import.meta.env.VITE_COMFYUI_URL || 'http://localhost:8188');
   const [steps, setSteps] = useState(20);
   const [seed, setSeed] = useState(-1); // -1 = random
@@ -91,21 +64,10 @@ export function AIGeneratePanel() {
 
     const actualSeed = seed === -1 ? Math.floor(Math.random() * 2 ** 31) : seed;
 
-    // Build descriptive context for tile/sprite generation
-    const slotLabel = editTarget === 'tileset'
-      ? manifest.tileset.slots.find((s) => s.id === selectedTileRow * manifest.tileset.columns + selectedTileCol)?.label
-      : manifest.spritesheet.rows.find((r) => r.row === selectedFrameRow)?.label;
-    const target = editTarget === 'tileset'
-      ? `${targetW}x${targetH} pixel art tile, tile (${selectedTileCol},${selectedTileRow})${slotLabel ? ` "${slotLabel}"` : ''}`
-      : `${targetW}x${targetH} pixel art sprite frame, ${slotLabel ?? `row ${selectedFrameRow}`} frame ${selectedFrameCol}`;
-
-    const heightmapSuffix = activeLayer === 'heightmap'
-      ? ', height map, white=high black=low, grayscale, depth map'
-      : ', pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset';
-    const fullPrompt = `${prompt}, ${target}${heightmapSuffix}`;
-    const fullNegative = negativePrompt
-      ? `${negativePrompt}, watermark, text, signature`
-      : 'smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, watermark, text, signature';
+    const col = editTarget === 'tileset' ? selectedTileCol : selectedFrameCol;
+    const row = editTarget === 'tileset' ? selectedTileRow : selectedFrameRow;
+    const fullPrompt = buildFullPrompt({ prompt, editTarget, manifest, col, row, targetW, targetH, activeLayer });
+    const fullNegative = buildNegativePrompt(negativePrompt);
 
     setStatus({ kind: 'generating', message: 'Generating with ComfyUI...' });
 
@@ -149,11 +111,7 @@ export function AIGeneratePanel() {
   const handleApply = useCallback(() => {
     if (!pendingPixels) return;
     if (activeLayer === 'heightmap') {
-      // Convert RGBA to single-channel heightmap (use R channel as luminance)
-      const hm = new Uint8ClampedArray(targetW * targetH);
-      for (let i = 0; i < targetW * targetH; i++) {
-        hm[i] = pendingPixels[i * 4]; // R channel
-      }
+      const hm = pixelsToHeightmap(pendingPixels, targetW, targetH);
       pushHistory();
       setHeightmapPixels(hm);
       setStatus({ kind: 'success', message: 'Applied heightmap to canvas!' });

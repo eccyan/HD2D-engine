@@ -2,6 +2,15 @@ import type { PainterState, RGBA, PixelData, EditTarget, DrawingTool, ActiveLaye
 import { pixelDims, makeBlankPixels } from '../store/usePainterStore.js';
 import { heightmapToNormalMap } from './normal-map.js';
 import type { AssetManifest } from '@vulkan-game-tools/asset-types';
+import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
+import {
+  buildFullPrompt,
+  buildNegativePrompt,
+  downscaleToPixelData,
+  pixelsToHeightmap,
+  SAMPLER_NAMES,
+  DEFAULT_NEGATIVE_PROMPT,
+} from './ai-generate-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Base64 RGBA helpers
@@ -51,7 +60,7 @@ export function handleCommand(
   cmd: string,
   params: Record<string, unknown>,
   store: PainterState,
-): CommandResult {
+): CommandResult | Promise<CommandResult> {
   switch (cmd) {
     case 'get_state': {
       const { w, h } = pixelDims(store);
@@ -255,7 +264,194 @@ export function handleCommand(
       return { response: { ok: true } };
     }
 
+    // -----------------------------------------------------------------------
+    // AI generation commands (async)
+    // -----------------------------------------------------------------------
+
+    case 'ai_check': {
+      const comfyUrl = (params['comfy_url'] as string | undefined) ?? getComfyUrl();
+      const client = new ComfyUIClient(comfyUrl);
+      return client.checkAvailability()
+        .then((result) => ({ response: { available: result.available, ...(result.error ? { error: result.error } : {}) } }))
+        .catch((err) => ({ response: { available: false, error: String(err) } }));
+    }
+
+    case 'ai_get_config': {
+      return {
+        response: {
+          comfy_url: getComfyUrl(),
+          default_negative_prompt: DEFAULT_NEGATIVE_PROMPT,
+          samplers: [...SAMPLER_NAMES],
+          default_steps: 20,
+          default_cfg: 7,
+          default_sampler: 'euler',
+        },
+      };
+    }
+
+    case 'ai_generate': {
+      return handleAiGenerate(params, store);
+    }
+
+    case 'ai_generate_batch': {
+      return handleAiGenerateBatch(params, store);
+    }
+
     default:
       return { error: `unknown command: ${cmd}` };
   }
+}
+
+// ---------------------------------------------------------------------------
+// AI helpers
+// ---------------------------------------------------------------------------
+
+function getComfyUrl(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (import.meta as any).env?.VITE_COMFYUI_URL || 'http://localhost:8188';
+  } catch {
+    return 'http://localhost:8188';
+  }
+}
+
+async function handleAiGenerate(
+  params: Record<string, unknown>,
+  store: PainterState,
+): Promise<CommandResult> {
+  const prompt = params['prompt'] as string | undefined;
+  if (!prompt) return { error: 'missing prompt param' };
+
+  const comfyUrl = (params['comfy_url'] as string | undefined) ?? getComfyUrl();
+  const client = new ComfyUIClient(comfyUrl);
+
+  const check = await client.checkAvailability().catch(() => ({
+    available: false as const,
+    error: `Cannot reach ComfyUI at ${comfyUrl}`,
+  }));
+  if (!check.available) {
+    return { error: check.error ?? 'ComfyUI unavailable' };
+  }
+
+  const negativePrompt = params['negative_prompt'] as string | undefined;
+  const steps = (params['steps'] as number | undefined) ?? 20;
+  const seedParam = (params['seed'] as number | undefined) ?? -1;
+  const cfg = (params['cfg'] as number | undefined) ?? 7;
+  const sampler = (params['sampler'] as string | undefined) ?? 'euler';
+  const loras = (params['loras'] as Array<{ name: string; weight?: number }> | undefined) ?? [];
+  const apply = (params['apply'] as boolean | undefined) ?? true;
+
+  const actualSeed = seedParam === -1 ? Math.floor(Math.random() * 2 ** 31) : seedParam;
+  const { w: targetW, h: targetH } = pixelDims(store);
+  const col = store.editTarget === 'tileset' ? store.selectedTileCol : store.selectedFrameCol;
+  const row = store.editTarget === 'tileset' ? store.selectedTileRow : store.selectedFrameRow;
+
+  const fullPrompt = buildFullPrompt({
+    prompt,
+    editTarget: store.editTarget,
+    manifest: store.manifest,
+    col,
+    row,
+    targetW,
+    targetH,
+    activeLayer: store.activeLayer,
+  });
+  const fullNegative = buildNegativePrompt(negativePrompt);
+
+  try {
+    const pngBytes = await client.generateImage(fullPrompt, {
+      width: 512,
+      height: 512,
+      steps,
+      seed: actualSeed,
+      negativePrompt: fullNegative,
+      cfgScale: cfg,
+      samplerName: sampler,
+      loras,
+    });
+
+    const pixels = await downscaleToPixelData(pngBytes, targetW, targetH);
+
+    if (apply) {
+      if (store.activeLayer === 'heightmap') {
+        const hm = pixelsToHeightmap(pixels, targetW, targetH);
+        store.pushHistory();
+        store.setHeightmapPixels(hm);
+      } else {
+        store.pushHistory();
+        store.setPixels(pixels);
+      }
+    }
+
+    return {
+      response: {
+        pixels: pixelsToBase64(pixels),
+        width: targetW,
+        height: targetH,
+        seed: actualSeed,
+        applied: apply,
+      },
+    };
+  } catch (err) {
+    return { error: (err as Error).message ?? String(err) };
+  }
+}
+
+async function handleAiGenerateBatch(
+  params: Record<string, unknown>,
+  store: PainterState,
+): Promise<CommandResult> {
+  const targets = params['targets'] as Array<Record<string, unknown>> | undefined;
+  if (!targets || !Array.isArray(targets) || targets.length === 0) {
+    return { error: 'missing or empty targets array' };
+  }
+
+  const comfyUrl = (params['comfy_url'] as string | undefined) ?? getComfyUrl();
+  const defaults = {
+    negative_prompt: params['negative_prompt'] as string | undefined,
+    steps: params['steps'] as number | undefined,
+    seed: params['seed'] as number | undefined,
+    cfg: params['cfg'] as number | undefined,
+    sampler: params['sampler'] as string | undefined,
+    loras: params['loras'] as Array<{ name: string; weight?: number }> | undefined,
+  };
+
+  const results: Array<{ ok: boolean; seed?: number; error?: string }> = [];
+
+  for (const target of targets) {
+    const targetType = target['target'] as EditTarget | undefined;
+    const col = target['col'] as number | undefined;
+    const row = target['row'] as number | undefined;
+
+    // Select the target tile/frame
+    if (targetType === 'tileset' && col !== undefined && row !== undefined) {
+      if (store.editTarget !== 'tileset') store.setEditTarget('tileset');
+      store.selectTile(col, row);
+    } else if (targetType === 'spritesheet' && col !== undefined && row !== undefined) {
+      if (store.editTarget !== 'spritesheet') store.setEditTarget('spritesheet');
+      store.selectFrame(col, row);
+    }
+
+    const merged: Record<string, unknown> = {
+      prompt: target['prompt'] ?? params['prompt'],
+      negative_prompt: target['negative_prompt'] ?? defaults.negative_prompt,
+      steps: target['steps'] ?? defaults.steps,
+      seed: target['seed'] ?? defaults.seed,
+      cfg: target['cfg'] ?? defaults.cfg,
+      sampler: target['sampler'] ?? defaults.sampler,
+      loras: target['loras'] ?? defaults.loras,
+      comfy_url: comfyUrl,
+      apply: target['apply'] ?? true,
+    };
+
+    const result = await handleAiGenerate(merged, store);
+    if ('error' in result) {
+      results.push({ ok: false, error: result.error });
+    } else {
+      const resp = result.response as Record<string, unknown>;
+      results.push({ ok: true, seed: resp['seed'] as number });
+    }
+  }
+
+  return { response: { results } };
 }

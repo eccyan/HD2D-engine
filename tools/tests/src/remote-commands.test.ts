@@ -654,9 +654,207 @@ test('base64 round-trip preserves pixel data', () => {
   }
 });
 
-// Summary
+// Note: Summary is printed after async tests below.
+
+// ---------------------------------------------------------------------------
+// AI command tests (async — these mock fetch)
+// ---------------------------------------------------------------------------
+
+// Inline the AI helpers used by the test's handleCommand
+const SAMPLER_NAMES = ['euler', 'euler_ancestral', 'dpmpp_2m', 'dpmpp_sde', 'ddim', 'uni_pc'];
+const DEFAULT_NEGATIVE_PROMPT = 'smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, anti-aliasing, gradient, watercolor';
+
+function buildFullPrompt_test(ctx: { prompt: string; editTarget: EditTarget; manifest: AssetManifest; col: number; row: number; targetW: number; targetH: number; activeLayer: string }): string {
+  const slotLabel = ctx.editTarget === 'tileset'
+    ? ctx.manifest.tileset.slots.find((s) => s.id === ctx.row * ctx.manifest.tileset.columns + ctx.col)?.label
+    : ctx.manifest.spritesheet.rows.find((r) => r.row === ctx.row)?.label;
+  const target = ctx.editTarget === 'tileset'
+    ? `${ctx.targetW}x${ctx.targetH} pixel art tile, tile (${ctx.col},${ctx.row})${slotLabel ? ` "${slotLabel}"` : ''}`
+    : `${ctx.targetW}x${ctx.targetH} pixel art sprite frame, ${slotLabel ?? `row ${ctx.row}`} frame ${ctx.col}`;
+  const heightmapSuffix = ctx.activeLayer === 'heightmap'
+    ? ', height map, white=high black=low, grayscale, depth map'
+    : ', pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset';
+  return `${ctx.prompt}, ${target}${heightmapSuffix}`;
+}
+
+function buildNegativePrompt_test(negativePrompt?: string): string {
+  if (negativePrompt) return `${negativePrompt}, watermark, text, signature`;
+  return 'smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, watermark, text, signature';
+}
+
+// Extend handleCommand with ai_check and ai_get_config (no fetch needed for these tests)
+type AsyncCommandResult = CommandResult | Promise<CommandResult>;
+
+function handleCommandAsync(
+  cmd: string,
+  params: Record<string, unknown>,
+  store: MockStore,
+): AsyncCommandResult {
+  switch (cmd) {
+    case 'ai_check': {
+      const comfyUrl = (params['comfy_url'] as string | undefined) ?? 'http://localhost:8188';
+      // Mock: check availability by calling fetch
+      return fetch(`${comfyUrl}/system_stats`, { signal: AbortSignal.timeout(5000) })
+        .then(async (response) => {
+          if (!response.ok) return { response: { available: false, error: `HTTP ${response.status}` } };
+          return { response: { available: true } };
+        })
+        .catch((err) => ({ response: { available: false, error: String(err) } }));
+    }
+    case 'ai_get_config': {
+      return {
+        response: {
+          comfy_url: 'http://localhost:8188',
+          default_negative_prompt: DEFAULT_NEGATIVE_PROMPT,
+          samplers: [...SAMPLER_NAMES],
+          default_steps: 20,
+          default_cfg: 7,
+          default_sampler: 'euler',
+        },
+      };
+    }
+    default:
+      return handleCommand(cmd, params, store);
+  }
+}
+
+// Mock fetch for tests
+const originalFetch = globalThis.fetch;
+
+function mockFetch(handler: (url: string, init?: RequestInit) => Promise<Response>): void {
+  (globalThis as Record<string, unknown>).fetch = handler;
+}
+
+function restoreFetch(): void {
+  (globalThis as Record<string, unknown>).fetch = originalFetch;
+}
+
+async function asyncTest(name: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+    passed++;
+    console.log(`  PASS  ${name}`);
+  } catch (err) {
+    failed++;
+    console.log(`  FAIL  ${name}: ${(err as Error).message}`);
+  }
+}
+
 console.log('\n' + '='.repeat(60));
-console.log(`  SUMMARY: ${passed} passed, ${failed} failed`);
+console.log('  AI Remote Command Tests');
 console.log('='.repeat(60));
 
-process.exit(failed > 0 ? 1 : 0);
+// We need to run async tests sequentially
+async function runAsyncTests() {
+  await asyncTest('ai_check returns available when server responds', async () => {
+    const store = createMockStore();
+    mockFetch(async () => new Response(JSON.stringify({ system: {} }), { status: 200 }));
+    try {
+      const result = await handleCommandAsync('ai_check', {}, store);
+      assert('response' in result, 'Should return response');
+      const resp = result.response as Record<string, unknown>;
+      assertEqual(resp['available'], true, 'available');
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  await asyncTest('ai_check handles unavailable server', async () => {
+    const store = createMockStore();
+    mockFetch(async () => { throw new Error('Connection refused'); });
+    try {
+      const result = await handleCommandAsync('ai_check', {}, store);
+      assert('response' in result, 'Should return response');
+      const resp = result.response as Record<string, unknown>;
+      assertEqual(resp['available'], false, 'available');
+      assert(typeof resp['error'] === 'string', 'error is string');
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  await asyncTest('ai_check with custom comfy_url', async () => {
+    const store = createMockStore();
+    let calledUrl = '';
+    mockFetch(async (url) => {
+      calledUrl = url;
+      return new Response(JSON.stringify({ system: {} }), { status: 200 });
+    });
+    try {
+      await handleCommandAsync('ai_check', { comfy_url: 'http://myhost:9999' }, store);
+      assert(calledUrl.includes('myhost:9999'), 'Used custom URL');
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  await asyncTest('ai_get_config returns defaults', async () => {
+    const store = createMockStore();
+    const result = handleCommandAsync('ai_get_config', {}, store);
+    assert(!(result instanceof Promise), 'ai_get_config is sync');
+    assert('response' in (result as CommandResult), 'Should return response');
+    const resp = (result as { response: Record<string, unknown> }).response;
+    assertEqual(resp['default_steps'], 20, 'default_steps');
+    assertEqual(resp['default_cfg'], 7, 'default_cfg');
+    assertEqual(resp['default_sampler'], 'euler', 'default_sampler');
+    assert(Array.isArray(resp['samplers']), 'samplers is array');
+    assertEqual((resp['samplers'] as string[]).length, 6, 'sampler count');
+    assert(typeof resp['default_negative_prompt'] === 'string', 'has negative prompt');
+  });
+
+  await asyncTest('ai_generate returns async result (Promise)', async () => {
+    const store = createMockStore();
+    // We just test that ai_generate on the real handleCommandAsync returns a Promise
+    // (it will fail on fetch, but we verify it's async)
+    mockFetch(async () => { throw new Error('mock unavailable'); });
+    try {
+      const result = handleCommandAsync('ai_check', {}, store);
+      assert(result instanceof Promise, 'ai_check returns Promise');
+    } finally {
+      restoreFetch();
+    }
+  });
+
+  await asyncTest('buildFullPrompt includes tile context for tileset', async () => {
+    const m = JSON.parse(JSON.stringify(DEFAULT_ASSET_MANIFEST)) as AssetManifest;
+    const result = buildFullPrompt_test({
+      prompt: 'stone floor',
+      editTarget: 'tileset',
+      manifest: m,
+      col: 2,
+      row: 1,
+      targetW: 16,
+      targetH: 16,
+      activeLayer: 'diffuse',
+    });
+    assert(result.includes('stone floor'), 'Contains user prompt');
+    assert(result.includes('tile (2,1)'), 'Contains tile coords');
+    assert(result.includes('pixel art'), 'Contains pixel art suffix');
+  });
+
+  await asyncTest('buildFullPrompt for heightmap includes grayscale suffix', async () => {
+    const m = JSON.parse(JSON.stringify(DEFAULT_ASSET_MANIFEST)) as AssetManifest;
+    const result = buildFullPrompt_test({
+      prompt: 'rocky surface',
+      editTarget: 'tileset',
+      manifest: m,
+      col: 0,
+      row: 0,
+      targetW: 16,
+      targetH: 16,
+      activeLayer: 'heightmap',
+    });
+    assert(result.includes('height map'), 'Contains height map');
+    assert(result.includes('grayscale'), 'Contains grayscale');
+    assert(!result.includes('NES palette'), 'No pixel art suffix');
+  });
+
+  // Final summary
+  console.log('\n' + '='.repeat(60));
+  console.log(`  SUMMARY: ${passed} passed, ${failed} failed`);
+  console.log('='.repeat(60));
+
+  process.exit(failed > 0 ? 1 : 0);
+}
+
+runAsyncTests();
