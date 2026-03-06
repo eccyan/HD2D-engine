@@ -21,7 +21,7 @@ export function DashboardView() {
         <button onClick={() => refreshCharacters()} style={styles.refreshBtn} title="Refresh">
           Refresh
         </button>
-        <button onClick={() => setShowCreate(true)} style={styles.createBtn}>
+        <button onClick={() => setShowCreate(true)} style={styles.createBtn} data-testid="new-character-btn">
           + New Character
         </button>
       </div>

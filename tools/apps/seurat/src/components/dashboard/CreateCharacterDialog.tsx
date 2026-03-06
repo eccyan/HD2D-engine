@@ -29,8 +29,8 @@ export function CreateCharacterDialog({ open, onClose }: Props) {
   };
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.dialog} onClick={(e) => e.stopPropagation()}>
+    <div style={styles.overlay} onClick={onClose} data-testid="create-dialog-overlay">
+      <div style={styles.dialog} onClick={(e) => e.stopPropagation()} data-testid="create-dialog">
         <div style={styles.title}>New Character</div>
 
         <label style={styles.label}>Character ID (snake_case)</label>
@@ -40,6 +40,7 @@ export function CreateCharacterDialog({ open, onClose }: Props) {
           placeholder="town_guard"
           style={styles.input}
           autoFocus
+          data-testid="char-id-input"
         />
 
         <label style={styles.label}>Display Name</label>
@@ -48,11 +49,12 @@ export function CreateCharacterDialog({ open, onClose }: Props) {
           onChange={(e) => setName(e.target.value)}
           placeholder="Town Guard"
           style={styles.input}
+          data-testid="char-name-input"
         />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={styles.cancelBtn}>Cancel</button>
-          <button onClick={handleCreate} disabled={!id.trim() || creating} style={styles.createBtn}>
+          <button onClick={onClose} style={styles.cancelBtn} data-testid="cancel-btn">Cancel</button>
+          <button onClick={handleCreate} disabled={!id.trim() || creating} style={styles.createBtn} data-testid="create-btn">
             {creating ? 'Creating...' : 'Create'}
           </button>
         </div>

@@ -26,6 +26,7 @@ export function Sidebar() {
           <button
             key={section}
             onClick={() => !disabled && setActiveSection(section)}
+            data-testid={`nav-${section}`}
             style={{
               ...styles.navBtn,
               background: active ? '#1e2a42' : 'transparent',
