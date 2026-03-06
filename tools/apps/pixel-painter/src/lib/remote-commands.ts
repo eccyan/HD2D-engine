@@ -509,34 +509,46 @@ async function handleAiGenerateRow(
 
   // Generate each frame as a separate 512x512 image using the same seed
   // for visual consistency, then downscale to target size.
-  // Retry up to 2 times per frame on ComfyUI empty-output failures.
-  const maxRetries = 2;
+  // Retry up to 3 times per frame on ComfyUI failures or blank output.
+  const maxRetries = 3;
   try {
     const frames: PixelData[] = [];
 
     for (let i = 0; i < frameCount; i++) {
-      let pngBytes: Uint8Array | null = null;
+      let pixels: PixelData | null = null;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          pngBytes = await client.generateImage(framePrompts[i], {
+          const pngBytes = await client.generateImage(framePrompts[i], {
             width: 512,
             height: 512,
             steps,
-            seed: actualSeed,
+            seed: actualSeed + (attempt > 0 ? attempt : 0),
             negativePrompt: fullNegative,
             cfgScale: cfg,
             samplerName: sampler,
             loras,
           });
+          const candidate = await downscaleToPixelData(pngBytes, fw, fh);
+          // Check for blank output (all pixels have zero RGB)
+          let hasContent = false;
+          for (let p = 0; p < candidate.length; p += 4) {
+            if (candidate[p] > 0 || candidate[p + 1] > 0 || candidate[p + 2] > 0) {
+              hasContent = true;
+              break;
+            }
+          }
+          if (!hasContent && attempt < maxRetries) {
+            await new Promise((r) => setTimeout(r, 500));
+            continue;
+          }
+          pixels = candidate;
           break;
         } catch (e) {
           if (attempt === maxRetries) throw e;
-          // Brief pause before retry
           await new Promise((r) => setTimeout(r, 500));
         }
       }
-      const pixels = await downscaleToPixelData(pngBytes!, fw, fh);
-      frames.push(pixels);
+      frames.push(pixels!);
     }
 
     if (apply) {
