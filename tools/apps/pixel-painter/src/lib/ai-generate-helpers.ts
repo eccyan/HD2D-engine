@@ -109,7 +109,7 @@ export function buildRowPrompt(ctx: RowPromptContext): string {
     ? ', height map, white=high black=low, grayscale, depth map'
     : ', pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset';
 
-  return `${prompt}, pixel art sprite sheet strip, ${frameCount} animation frames, ${rowDef.state} ${rowDef.direction}, ${frameWidth}x${frameHeight} per frame, horizontal strip, consistent character, evenly spaced${heightmapSuffix}`;
+  return `${prompt}, pixel art sprite sheet, ${frameCount} frames in a row, ${rowDef.state} animation facing ${rowDef.direction}, ${frameCount}x1 grid layout, consistent character across all frames, white background, evenly spaced, side by side${heightmapSuffix}`;
 }
 
 // ---------------------------------------------------------------------------

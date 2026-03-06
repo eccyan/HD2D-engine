@@ -508,9 +508,10 @@ async function handleAiGenerateRow(
   });
   const fullNegative = buildNegativePrompt(negativePrompt);
 
-  // Generate at 512 x (512/frameCount) — strip aspect ratio
+  // Generate at 512x512 — SD 1.5 produces noise at extreme aspect ratios.
+  // The prompt asks for a horizontal strip; sliceStripToFrames handles slicing.
   const genWidth = 512;
-  const genHeight = Math.max(64, Math.round(512 / frameCount));
+  const genHeight = 512;
 
   try {
     const pngBytes = await client.generateImage(fullPrompt, {

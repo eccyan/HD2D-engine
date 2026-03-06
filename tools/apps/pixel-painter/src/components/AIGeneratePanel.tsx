@@ -165,7 +165,7 @@ export function AIGeneratePanel() {
     const actualSeed = seed === -1 ? Math.floor(Math.random() * 2 ** 31) : seed;
     const frameCount = rowDef.frames;
     const genWidth = 512;
-    const genHeight = Math.max(64, Math.round(512 / frameCount));
+    const genHeight = 512;
 
     const fullPrompt = buildRowPrompt({
       prompt,
