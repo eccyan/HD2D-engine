@@ -193,7 +193,7 @@ export function AIGeneratePanel() {
               width: 512,
               height: 512,
               steps,
-              seed: actualSeed + (attempt > 0 ? attempt : 0),
+              seed: actualSeed + (attempt > 0 ? attempt * 1000 : 0),
               negativePrompt: fullNegative,
               cfgScale,
               samplerName,
