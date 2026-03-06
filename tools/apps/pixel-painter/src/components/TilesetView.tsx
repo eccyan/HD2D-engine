@@ -1,30 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { usePainterStore } from '../store/usePainterStore.js';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Tileset layout: 128×48 total, each tile 16×16 */
-const TILESET_COLS = 8;
-const TILESET_ROWS = 3;
-const TILE_SIZE = 16;
-
 const CELL_DISPLAY = 20; // pixels per tile cell in the sheet view
-
-// Tile ID labels
-const TILE_LABELS: Record<string, string> = {
-  '0,0': '0\nfloor',
-  '1,0': '1\nwall',
-  '2,0': '2\nwater',
-  '3,0': '3\nwater',
-  '4,0': '4\nwater',
-  '5,0': '5\nlava',
-  '6,0': '6\nlava',
-  '7,0': '7\nlava',
-  '0,1': '8\ntorch',
-  '1,1': '9\ntorch',
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -34,13 +11,21 @@ export function TilesetView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { selectedTileCol, selectedTileRow, tilesetPixels, selectTile, editTarget, setEditTarget } = usePainterStore();
+  const { selectedTileCol, selectedTileRow, tilesetPixels, selectTile, editTarget, setEditTarget, manifest } = usePainterStore();
 
   const [loadedImage, setLoadedImage] = useState<ImageData | null>(null);
   const [hoveredTile, setHoveredTile] = useState<[number, number]>([-1, -1]);
 
-  const totalWidth = TILESET_COLS * CELL_DISPLAY;
-  const totalHeight = TILESET_ROWS * CELL_DISPLAY;
+  const { tile_width: TILE_W, tile_height: TILE_H, columns: COLS, rows: ROWS, slots } = manifest.tileset;
+
+  const totalWidth = COLS * CELL_DISPLAY;
+  const totalHeight = ROWS * CELL_DISPLAY;
+
+  // Build label lookup from manifest slots
+  const slotLabels = new Map<number, string>();
+  for (const slot of slots) {
+    slotLabels.set(slot.id, slot.label);
+  }
 
   // Render the tileset view
   useEffect(() => {
@@ -49,44 +34,33 @@ export function TilesetView() {
     const ctx = canvas.getContext('2d')!;
 
     ctx.clearRect(0, 0, totalWidth, totalHeight);
-
-    // Background
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-    // Draw each tile cell
-    for (let row = 0; row < TILESET_ROWS; row++) {
-      for (let col = 0; col < TILESET_COLS; col++) {
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
         const x = col * CELL_DISPLAY;
         const y = row * CELL_DISPLAY;
         const key = `${col},${row}`;
 
-        // Try to draw from loaded image first, then from painted pixels
         if (loadedImage) {
-          // Crop tile from loaded image
           const offscreen = document.createElement('canvas');
-          offscreen.width = TILE_SIZE;
-          offscreen.height = TILE_SIZE;
+          offscreen.width = TILE_W;
+          offscreen.height = TILE_H;
           const offCtx = offscreen.getContext('2d')!;
-          offCtx.putImageData(
-            loadedImage,
-            -(col * TILE_SIZE),
-            -(row * TILE_SIZE)
-          );
+          offCtx.putImageData(loadedImage, -(col * TILE_W), -(row * TILE_H));
           ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
         } else {
           const tilePixels = tilesetPixels.get(key);
           if (tilePixels) {
-            // Draw from painted pixels
-            const imgData = new ImageData(new Uint8ClampedArray(tilePixels), TILE_SIZE, TILE_SIZE);
+            const imgData = new ImageData(new Uint8ClampedArray(tilePixels), TILE_W, TILE_H);
             const offscreen = document.createElement('canvas');
-            offscreen.width = TILE_SIZE;
-            offscreen.height = TILE_SIZE;
+            offscreen.width = TILE_W;
+            offscreen.height = TILE_H;
             const offCtx = offscreen.getContext('2d')!;
             offCtx.putImageData(imgData, 0, 0);
             ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
           } else {
-            // Checkerboard for empty
             const checkSize = 4;
             for (let cy = 0; cy < CELL_DISPLAY; cy += checkSize) {
               for (let cx = 0; cx < CELL_DISPLAY; cx += checkSize) {
@@ -98,26 +72,23 @@ export function TilesetView() {
           }
         }
 
-        // Grid lines
         ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 0.5;
         ctx.strokeRect(x + 0.5, y + 0.5, CELL_DISPLAY - 1, CELL_DISPLAY - 1);
 
-        // Selected highlight
         if (col === selectedTileCol && row === selectedTileRow && editTarget === 'tileset') {
           ctx.strokeStyle = '#4a9ef8';
           ctx.lineWidth = 2;
           ctx.strokeRect(x + 1, y + 1, CELL_DISPLAY - 2, CELL_DISPLAY - 2);
         }
 
-        // Hover highlight
         if (col === hoveredTile[0] && row === hoveredTile[1]) {
           ctx.fillStyle = 'rgba(255,255,255,0.1)';
           ctx.fillRect(x, y, CELL_DISPLAY, CELL_DISPLAY);
         }
       }
     }
-  }, [tilesetPixels, selectedTileCol, selectedTileRow, editTarget, hoveredTile, loadedImage, totalWidth, totalHeight]);
+  }, [tilesetPixels, selectedTileCol, selectedTileRow, editTarget, hoveredTile, loadedImage, totalWidth, totalHeight, COLS, ROWS, TILE_W, TILE_H]);
 
   const getCell = useCallback((e: React.MouseEvent<HTMLCanvasElement>): [number, number] => {
     const canvas = canvasRef.current!;
@@ -125,10 +96,10 @@ export function TilesetView() {
     const col = Math.floor((e.clientX - rect.left) / CELL_DISPLAY);
     const row = Math.floor((e.clientY - rect.top) / CELL_DISPLAY);
     return [
-      Math.max(0, Math.min(TILESET_COLS - 1, col)),
-      Math.max(0, Math.min(TILESET_ROWS - 1, row)),
+      Math.max(0, Math.min(COLS - 1, col)),
+      Math.max(0, Math.min(ROWS - 1, row)),
     ];
-  }, []);
+  }, [COLS, ROWS]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const [col, row] = getCell(e);
@@ -152,29 +123,29 @@ export function TilesetView() {
       const img = new Image();
       img.onload = () => {
         const offscreen = document.createElement('canvas');
-        offscreen.width = TILESET_COLS * TILE_SIZE;
-        offscreen.height = TILESET_ROWS * TILE_SIZE;
+        offscreen.width = COLS * TILE_W;
+        offscreen.height = ROWS * TILE_H;
         const ctx = offscreen.getContext('2d')!;
         ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, TILESET_COLS * TILE_SIZE, TILESET_ROWS * TILE_SIZE);
+        const data = ctx.getImageData(0, 0, COLS * TILE_W, ROWS * TILE_H);
         setLoadedImage(data);
       };
       img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [COLS, ROWS, TILE_W, TILE_H]);
 
-  const tileId = selectedTileRow * TILESET_COLS + selectedTileCol;
+  const tileId = selectedTileRow * COLS + selectedTileCol;
+  const totalPixelW = COLS * TILE_W;
+  const totalPixelH = ROWS * TILE_H;
 
   return (
     <div style={styles.wrapper}>
-      {/* Header */}
       <div style={styles.header}>
         <span style={styles.title}>Tileset</span>
-        <span style={styles.subtitle}>128×48 / 8×3 tiles</span>
+        <span style={styles.subtitle}>{totalPixelW}x{totalPixelH} / {COLS}x{ROWS} tiles</span>
       </div>
 
-      {/* Canvas */}
       <canvas
         ref={canvasRef}
         width={totalWidth}
@@ -185,7 +156,6 @@ export function TilesetView() {
         onMouseLeave={handleMouseLeave}
       />
 
-      {/* Tile info */}
       <div style={styles.tileInfo}>
         <span style={styles.infoLabel}>Selected:</span>
         <span style={styles.infoValue}>
@@ -193,13 +163,12 @@ export function TilesetView() {
         </span>
       </div>
 
-      {/* Tile labels grid */}
-      <div style={styles.labelGrid}>
-        {Array.from({ length: TILESET_ROWS * TILESET_COLS }, (_, i) => {
-          const col = i % TILESET_COLS;
-          const row = Math.floor(i / TILESET_COLS);
-          const id = row * TILESET_COLS + col;
-          const label = TILE_LABELS[`${col},${row}`];
+      <div style={{ ...styles.labelGrid, gridTemplateColumns: `repeat(${COLS}, 1fr)` }}>
+        {Array.from({ length: ROWS * COLS }, (_, i) => {
+          const col = i % COLS;
+          const row = Math.floor(i / COLS);
+          const id = row * COLS + col;
+          const label = slotLabels.get(id);
           const isSelected = col === selectedTileCol && row === selectedTileRow && editTarget === 'tileset';
           return (
             <div
@@ -213,13 +182,12 @@ export function TilesetView() {
               title={`Tile ${id} (col=${col}, row=${row})`}
             >
               <span style={styles.tileIdBadge}>{id}</span>
-              {label && <span style={styles.tileLabelText}>{label.split('\n')[1]}</span>}
+              {label && <span style={styles.tileLabelText}>{label}</span>}
             </div>
           );
         })}
       </div>
 
-      {/* Load PNG */}
       <button
         onClick={() => fileInputRef.current?.click()}
         style={styles.loadBtn}
@@ -283,7 +251,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   labelGrid: {
     display: 'grid',
-    gridTemplateColumns: `repeat(${TILESET_COLS}, 1fr)`,
     gap: 2,
   },
   labelCell: {

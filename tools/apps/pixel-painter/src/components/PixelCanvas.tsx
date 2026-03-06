@@ -1,23 +1,17 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { usePainterStore, RGBA, PixelData } from '../store/usePainterStore.js';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const CANVAS_SIZE = 16; // pixels per dimension
+import { usePainterStore, RGBA, PixelData, pixelDims } from '../store/usePainterStore.js';
 
 // ---------------------------------------------------------------------------
 // Drawing helpers
 // ---------------------------------------------------------------------------
 
-function getPixelAt(pixels: PixelData, x: number, y: number): RGBA {
-  const idx = (y * CANVAS_SIZE + x) * 4;
+function getPixelAt(pixels: PixelData, x: number, y: number, w: number): RGBA {
+  const idx = (y * w + x) * 4;
   return [pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3]];
 }
 
-function setPixelAt(pixels: PixelData, x: number, y: number, color: RGBA): void {
-  const idx = (y * CANVAS_SIZE + x) * 4;
+function setPixelAt(pixels: PixelData, x: number, y: number, w: number, color: RGBA): void {
+  const idx = (y * w + x) * 4;
   pixels[idx] = color[0];
   pixels[idx + 1] = color[1];
   pixels[idx + 2] = color[2];
@@ -28,24 +22,24 @@ function colorsEqual(a: RGBA, b: RGBA): boolean {
   return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
 }
 
-function floodFill(pixels: PixelData, startX: number, startY: number, fillColor: RGBA): PixelData {
+function floodFill(pixels: PixelData, startX: number, startY: number, fillColor: RGBA, w: number, h: number): PixelData {
   const result = new Uint8ClampedArray(pixels) as PixelData;
-  const targetColor = getPixelAt(result, startX, startY);
+  const targetColor = getPixelAt(result, startX, startY, w);
   if (colorsEqual(targetColor, fillColor)) return result;
 
   const stack: [number, number][] = [[startX, startY]];
   while (stack.length > 0) {
     const [x, y] = stack.pop()!;
-    if (x < 0 || x >= CANVAS_SIZE || y < 0 || y >= CANVAS_SIZE) continue;
-    const current = getPixelAt(result, x, y);
+    if (x < 0 || x >= w || y < 0 || y >= h) continue;
+    const current = getPixelAt(result, x, y, w);
     if (!colorsEqual(current, targetColor)) continue;
-    setPixelAt(result, x, y, fillColor);
+    setPixelAt(result, x, y, w, fillColor);
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
   }
   return result;
 }
 
-function drawLine(pixels: PixelData, x0: number, y0: number, x1: number, y1: number, color: RGBA): PixelData {
+function drawLine(pixels: PixelData, x0: number, y0: number, x1: number, y1: number, color: RGBA, w: number, h: number): PixelData {
   const result = new Uint8ClampedArray(pixels) as PixelData;
   let dx = Math.abs(x1 - x0);
   let dy = Math.abs(y1 - y0);
@@ -55,8 +49,8 @@ function drawLine(pixels: PixelData, x0: number, y0: number, x1: number, y1: num
   let cx = x0;
   let cy = y0;
   while (true) {
-    if (cx >= 0 && cx < CANVAS_SIZE && cy >= 0 && cy < CANVAS_SIZE) {
-      setPixelAt(result, cx, cy, color);
+    if (cx >= 0 && cx < w && cy >= 0 && cy < h) {
+      setPixelAt(result, cx, cy, w, color);
     }
     if (cx === x1 && cy === y1) break;
     const e2 = 2 * err;
@@ -66,33 +60,33 @@ function drawLine(pixels: PixelData, x0: number, y0: number, x1: number, y1: num
   return result;
 }
 
-function drawRect(pixels: PixelData, x0: number, y0: number, x1: number, y1: number, color: RGBA): PixelData {
+function drawRect(pixels: PixelData, x0: number, y0: number, x1: number, y1: number, color: RGBA, w: number, h: number): PixelData {
   const result = new Uint8ClampedArray(pixels) as PixelData;
   const minX = Math.max(0, Math.min(x0, x1));
-  const maxX = Math.min(CANVAS_SIZE - 1, Math.max(x0, x1));
+  const maxX = Math.min(w - 1, Math.max(x0, x1));
   const minY = Math.max(0, Math.min(y0, y1));
-  const maxY = Math.min(CANVAS_SIZE - 1, Math.max(y0, y1));
+  const maxY = Math.min(h - 1, Math.max(y0, y1));
   for (let x = minX; x <= maxX; x++) {
-    setPixelAt(result, x, minY, color);
-    setPixelAt(result, x, maxY, color);
+    setPixelAt(result, x, minY, w, color);
+    setPixelAt(result, x, maxY, w, color);
   }
   for (let y = minY; y <= maxY; y++) {
-    setPixelAt(result, minX, y, color);
-    setPixelAt(result, maxX, y, color);
+    setPixelAt(result, minX, y, w, color);
+    setPixelAt(result, maxX, y, w, color);
   }
   return result;
 }
 
-function getMirroredPositions(x: number, y: number, mode: string): [number, number][] {
+function getMirroredPositions(x: number, y: number, mode: string, w: number, h: number): [number, number][] {
   const positions: [number, number][] = [[x, y]];
   if (mode === 'horizontal' || mode === 'both') {
-    positions.push([CANVAS_SIZE - 1 - x, y]);
+    positions.push([w - 1 - x, y]);
   }
   if (mode === 'vertical' || mode === 'both') {
-    positions.push([x, CANVAS_SIZE - 1 - y]);
+    positions.push([x, h - 1 - y]);
   }
   if (mode === 'both') {
-    positions.push([CANVAS_SIZE - 1 - x, CANVAS_SIZE - 1 - y]);
+    positions.push([w - 1 - x, h - 1 - y]);
   }
   return positions;
 }
@@ -108,15 +102,17 @@ function renderToCanvas(
   showGrid: boolean,
   hoverX: number,
   hoverY: number,
-  width: number,
-  height: number,
+  canvasW: number,
+  canvasH: number,
+  pixW: number,
+  pixH: number,
 ): void {
-  ctx.clearRect(0, 0, width, height);
+  ctx.clearRect(0, 0, canvasW, canvasH);
 
   // Checkerboard background for transparency
   const checkSize = Math.max(2, Math.floor(zoom / 4));
-  for (let y = 0; y < height; y += checkSize) {
-    for (let x = 0; x < width; x += checkSize) {
+  for (let y = 0; y < canvasH; y += checkSize) {
+    for (let x = 0; x < canvasW; x += checkSize) {
       const light = ((Math.floor(x / checkSize) + Math.floor(y / checkSize)) % 2 === 0);
       ctx.fillStyle = light ? '#555' : '#444';
       ctx.fillRect(x, y, checkSize, checkSize);
@@ -124,9 +120,9 @@ function renderToCanvas(
   }
 
   // Draw pixels
-  for (let py = 0; py < CANVAS_SIZE; py++) {
-    for (let px = 0; px < CANVAS_SIZE; px++) {
-      const idx = (py * CANVAS_SIZE + px) * 4;
+  for (let py = 0; py < pixH; py++) {
+    for (let px = 0; px < pixW; px++) {
+      const idx = (py * pixW + px) * 4;
       const r = pixels[idx];
       const g = pixels[idx + 1];
       const b = pixels[idx + 2];
@@ -143,14 +139,16 @@ function renderToCanvas(
   if (showGrid && zoom >= 4) {
     ctx.strokeStyle = 'rgba(255,255,255,0.15)';
     ctx.lineWidth = 0.5;
-    for (let i = 0; i <= CANVAS_SIZE; i++) {
+    for (let i = 0; i <= pixW; i++) {
       ctx.beginPath();
       ctx.moveTo(i * zoom, 0);
-      ctx.lineTo(i * zoom, CANVAS_SIZE * zoom);
+      ctx.lineTo(i * zoom, pixH * zoom);
       ctx.stroke();
+    }
+    for (let i = 0; i <= pixH; i++) {
       ctx.beginPath();
       ctx.moveTo(0, i * zoom);
-      ctx.lineTo(CANVAS_SIZE * zoom, i * zoom);
+      ctx.lineTo(pixW * zoom, i * zoom);
       ctx.stroke();
     }
   }
@@ -174,7 +172,6 @@ interface Props {
 
 export function PixelCanvas({ width = 384, height = 384 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const overlayRef = useRef<HTMLCanvasElement>(null);
 
   const {
     pixels,
@@ -184,6 +181,8 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     showGrid,
     fgColor,
     bgColor,
+    manifest,
+    editTarget,
     setPixels,
     setFgColor,
     pushHistory,
@@ -191,44 +190,41 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     addRecentColor,
   } = usePainterStore();
 
+  const { w: pixW, h: pixH } = pixelDims({ editTarget, manifest });
+
   const [hoverPos, setHoverPos] = useState<[number, number]>([-1, -1]);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  // For line/rect tools: track start position and preview
   const drawStartRef = useRef<[number, number] | null>(null);
   const drawBasePixelsRef = useRef<PixelData | null>(null);
 
-  // Compute cell from mouse event
   const getCell = useCallback((e: React.MouseEvent<HTMLCanvasElement>): [number, number] => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / zoom);
     const y = Math.floor((e.clientY - rect.top) / zoom);
     return [
-      Math.max(0, Math.min(CANVAS_SIZE - 1, x)),
-      Math.max(0, Math.min(CANVAS_SIZE - 1, y)),
+      Math.max(0, Math.min(pixW - 1, x)),
+      Math.max(0, Math.min(pixH - 1, y)),
     ];
-  }, [zoom]);
+  }, [zoom, pixW, pixH]);
 
-  // Paint a single pixel (with mirror)
   const paintPixel = useCallback((px: PixelData, x: number, y: number, color: RGBA): PixelData => {
     const result = new Uint8ClampedArray(px) as PixelData;
-    const positions = getMirroredPositions(x, y, mirrorMode);
+    const positions = getMirroredPositions(x, y, mirrorMode, pixW, pixH);
     for (const [mx, my] of positions) {
-      setPixelAt(result, mx, my, color);
+      setPixelAt(result, mx, my, pixW, color);
     }
     return result;
-  }, [mirrorMode]);
+  }, [mirrorMode, pixW, pixH]);
 
-  // Render when pixels/hover/zoom/grid change
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    renderToCanvas(ctx, pixels, zoom, showGrid, hoverPos[0], hoverPos[1], width, height);
-  }, [pixels, zoom, showGrid, hoverPos, width, height]);
+    renderToCanvas(ctx, pixels, zoom, showGrid, hoverPos[0], hoverPos[1], width, height, pixW, pixH);
+  }, [pixels, zoom, showGrid, hoverPos, width, height, pixW, pixH]);
 
-  // Mouse handlers
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const [x, y] = getCell(e);
@@ -237,7 +233,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     const eraserColor: RGBA = [0, 0, 0, 0];
 
     if (activeTool === 'eyedropper') {
-      const picked = getPixelAt(pixels, x, y);
+      const picked = getPixelAt(pixels, x, y, pixW);
       if (isRight) {
         usePainterStore.getState().setBgColor(picked);
       } else {
@@ -252,7 +248,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     setIsDrawing(true);
 
     if (activeTool === 'fill') {
-      const filled = floodFill(pixels, x, y, activeTool === 'fill' && isRight ? bgColor : color);
+      const filled = floodFill(pixels, x, y, activeTool === 'fill' && isRight ? bgColor : color, pixW, pixH);
       setPixels(filled);
       addRecentColor(color);
       setIsDrawing(false);
@@ -265,12 +261,11 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       return;
     }
 
-    // Pencil or eraser
     const drawColor = activeTool === 'eraser' ? eraserColor : color;
     const newPixels = paintPixel(pixels, x, y, drawColor);
     setPixels(newPixels);
     if (activeTool !== 'eraser') addRecentColor(color);
-  }, [activeTool, fgColor, bgColor, pixels, getCell, paintPixel, pushHistory, setPixels, setFgColor, addRecentColor, setActiveTool]);
+  }, [activeTool, fgColor, bgColor, pixels, pixW, pixH, getCell, paintPixel, pushHistory, setPixels, setFgColor, addRecentColor, setActiveTool]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const [x, y] = getCell(e);
@@ -285,7 +280,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       const preview = drawLine(
         drawBasePixelsRef.current,
         drawStartRef.current[0], drawStartRef.current[1],
-        x, y, color
+        x, y, color, pixW, pixH
       );
       setPixels(preview);
       return;
@@ -295,7 +290,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       const preview = drawRect(
         drawBasePixelsRef.current,
         drawStartRef.current[0], drawStartRef.current[1],
-        x, y, color
+        x, y, color, pixW, pixH
       );
       setPixels(preview);
       return;
@@ -306,7 +301,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       const newPixels = paintPixel(pixels, x, y, drawColor);
       setPixels(newPixels);
     }
-  }, [isDrawing, activeTool, fgColor, bgColor, pixels, getCell, paintPixel, setPixels]);
+  }, [isDrawing, activeTool, fgColor, bgColor, pixels, pixW, pixH, getCell, paintPixel, setPixels]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDrawing(false);
@@ -324,13 +319,12 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
     setHoverPos([-1, -1]);
   }, []);
 
-  // Export PNG
   const handleExport = useCallback(() => {
     const offscreen = document.createElement('canvas');
-    offscreen.width = CANVAS_SIZE;
-    offscreen.height = CANVAS_SIZE;
+    offscreen.width = pixW;
+    offscreen.height = pixH;
     const ctx = offscreen.getContext('2d')!;
-    const imageData = new ImageData(new Uint8ClampedArray(pixels), CANVAS_SIZE, CANVAS_SIZE);
+    const imageData = new ImageData(new Uint8ClampedArray(pixels), pixW, pixH);
     ctx.putImageData(imageData, 0, 0);
     offscreen.toBlob((blob) => {
       if (!blob) return;
@@ -341,15 +335,16 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       a.click();
       URL.revokeObjectURL(url);
     }, 'image/png');
-  }, [pixels]);
+  }, [pixels, pixW, pixH]);
 
-  const canvasPixelSize = CANVAS_SIZE * zoom;
+  const canvasPixelW = pixW * zoom;
+  const canvasPixelH = pixH * zoom;
 
   return (
     <div style={styles.wrapper}>
       {/* Toolbar above canvas */}
       <div style={styles.canvasToolbar}>
-        <button onClick={handleExport} style={styles.exportBtn} title="Export as PNG (16x16)">
+        <button onClick={handleExport} style={styles.exportBtn} title={`Export as PNG (${pixW}x${pixH})`}>
           Export PNG
         </button>
         <span style={styles.canvasInfo}>
@@ -358,7 +353,7 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
         <span style={styles.canvasInfo}>
           {hoverPos[0] >= 0
             ? (() => {
-                const [r, g, b, a] = getPixelAt(pixels, hoverPos[0], hoverPos[1]);
+                const [r, g, b, a] = getPixelAt(pixels, hoverPos[0], hoverPos[1], pixW);
                 return `rgba(${r},${g},${b},${(a / 255).toFixed(2)})`;
               })()
             : ''}
@@ -366,11 +361,11 @@ export function PixelCanvas({ width = 384, height = 384 }: Props) {
       </div>
 
       {/* Canvas container */}
-      <div style={{ ...styles.canvasContainer, width: canvasPixelSize, height: canvasPixelSize }}>
+      <div style={{ ...styles.canvasContainer, width: canvasPixelW, height: canvasPixelH }}>
         <canvas
           ref={canvasRef}
-          width={canvasPixelSize}
-          height={canvasPixelSize}
+          width={canvasPixelW}
+          height={canvasPixelH}
           style={styles.canvas}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}

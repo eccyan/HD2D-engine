@@ -1,31 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { usePainterStore } from '../store/usePainterStore.js';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Sprite sheet layout: 64×192 total, 4 frames × 12 rows of 16×16 */
-const SHEET_COLS = 4;
-const SHEET_ROWS = 12;
-const TILE_SIZE = 16;
 const CELL_DISPLAY = 18; // pixels per frame cell in the sheet view
-
-/** Row labels matching Phase 6 spec: 3 states × 4 directions */
-const ROW_LABELS: string[] = [
-  'idle_S',   // 0
-  'idle_N',   // 1
-  'idle_E',   // 2
-  'idle_W',   // 3
-  'walk_S',   // 4
-  'walk_N',   // 5
-  'walk_E',   // 6
-  'walk_W',   // 7
-  'run_S',    // 8
-  'run_N',    // 9
-  'run_E',    // 10
-  'run_W',    // 11
-];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -47,14 +23,22 @@ export function SpriteSheetView() {
     animPreviewPlaying,
     setAnimPreviewFps,
     setAnimPreviewPlaying,
+    manifest,
   } = usePainterStore();
+
+  const { frame_width: FRAME_W, frame_height: FRAME_H, columns: COLS, rows: rowDefs } = manifest.spritesheet;
+  const ROWS = rowDefs.length;
 
   const [hoveredCell, setHoveredCell] = useState<[number, number]>([-1, -1]);
   const [animFrame, setAnimFrame] = useState(0);
   const [loadedImage, setLoadedImage] = useState<ImageData | null>(null);
 
-  const totalWidth = SHEET_COLS * CELL_DISPLAY;
-  const totalHeight = SHEET_ROWS * CELL_DISPLAY;
+  const totalWidth = COLS * CELL_DISPLAY;
+  const totalHeight = ROWS * CELL_DISPLAY;
+
+  // Get frame count for current row
+  const currentRowDef = rowDefs.find((r) => r.row === selectedFrameRow);
+  const currentFrameCount = currentRowDef?.frames ?? COLS;
 
   // Render the sprite sheet view
   useEffect(() => {
@@ -66,26 +50,26 @@ export function SpriteSheetView() {
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-    for (let row = 0; row < SHEET_ROWS; row++) {
-      for (let col = 0; col < SHEET_COLS; col++) {
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
         const x = col * CELL_DISPLAY;
         const y = row * CELL_DISPLAY;
         const key = `${col},${row}`;
 
         if (loadedImage) {
           const offscreen = document.createElement('canvas');
-          offscreen.width = TILE_SIZE;
-          offscreen.height = TILE_SIZE;
+          offscreen.width = FRAME_W;
+          offscreen.height = FRAME_H;
           const offCtx = offscreen.getContext('2d')!;
-          offCtx.putImageData(loadedImage, -(col * TILE_SIZE), -(row * TILE_SIZE));
+          offCtx.putImageData(loadedImage, -(col * FRAME_W), -(row * FRAME_H));
           ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
         } else {
           const framePixels = spritesheetPixels.get(key);
           if (framePixels) {
-            const imgData = new ImageData(new Uint8ClampedArray(framePixels), TILE_SIZE, TILE_SIZE);
+            const imgData = new ImageData(new Uint8ClampedArray(framePixels), FRAME_W, FRAME_H);
             const offscreen = document.createElement('canvas');
-            offscreen.width = TILE_SIZE;
-            offscreen.height = TILE_SIZE;
+            offscreen.width = FRAME_W;
+            offscreen.height = FRAME_H;
             const offCtx = offscreen.getContext('2d')!;
             offCtx.putImageData(imgData, 0, 0);
             ctx.drawImage(offscreen, x, y, CELL_DISPLAY, CELL_DISPLAY);
@@ -101,39 +85,35 @@ export function SpriteSheetView() {
           }
         }
 
-        // Grid
         ctx.strokeStyle = 'rgba(255,255,255,0.1)';
         ctx.lineWidth = 0.5;
         ctx.strokeRect(x + 0.5, y + 0.5, CELL_DISPLAY - 1, CELL_DISPLAY - 1);
 
-        // Selected
         if (col === selectedFrameCol && row === selectedFrameRow && editTarget === 'spritesheet') {
           ctx.strokeStyle = '#f8a84a';
           ctx.lineWidth = 2;
           ctx.strokeRect(x + 1, y + 1, CELL_DISPLAY - 2, CELL_DISPLAY - 2);
         }
 
-        // Animation preview highlight (current row, animated frame)
         if (animPreviewPlaying && row === selectedFrameRow && col === animFrame) {
           ctx.fillStyle = 'rgba(255,200,100,0.2)';
           ctx.fillRect(x, y, CELL_DISPLAY, CELL_DISPLAY);
         }
 
-        // Hover
         if (col === hoveredCell[0] && row === hoveredCell[1]) {
           ctx.fillStyle = 'rgba(255,255,255,0.08)';
           ctx.fillRect(x, y, CELL_DISPLAY, CELL_DISPLAY);
         }
       }
     }
-  }, [spritesheetPixels, selectedFrameCol, selectedFrameRow, editTarget, hoveredCell, animFrame, animPreviewPlaying, loadedImage, totalWidth, totalHeight]);
+  }, [spritesheetPixels, selectedFrameCol, selectedFrameRow, editTarget, hoveredCell, animFrame, animPreviewPlaying, loadedImage, totalWidth, totalHeight, COLS, ROWS, FRAME_W, FRAME_H]);
 
-  // Animation timer
+  // Animation timer — use per-row frame count
   useEffect(() => {
     if (animPreviewPlaying) {
       const interval = 1000 / animPreviewFps;
       animTimerRef.current = window.setInterval(() => {
-        setAnimFrame((f) => (f + 1) % SHEET_COLS);
+        setAnimFrame((f) => (f + 1) % currentFrameCount);
       }, interval);
     } else {
       if (animTimerRef.current !== null) {
@@ -145,7 +125,7 @@ export function SpriteSheetView() {
     return () => {
       if (animTimerRef.current !== null) clearInterval(animTimerRef.current);
     };
-  }, [animPreviewPlaying, animPreviewFps]);
+  }, [animPreviewPlaying, animPreviewFps, currentFrameCount]);
 
   const getCell = useCallback((e: React.MouseEvent<HTMLCanvasElement>): [number, number] => {
     const canvas = canvasRef.current!;
@@ -153,10 +133,10 @@ export function SpriteSheetView() {
     const col = Math.floor((e.clientX - rect.left) / CELL_DISPLAY);
     const row = Math.floor((e.clientY - rect.top) / CELL_DISPLAY);
     return [
-      Math.max(0, Math.min(SHEET_COLS - 1, col)),
-      Math.max(0, Math.min(SHEET_ROWS - 1, row)),
+      Math.max(0, Math.min(COLS - 1, col)),
+      Math.max(0, Math.min(ROWS - 1, row)),
     ];
-  }, []);
+  }, [COLS, ROWS]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const [col, row] = getCell(e);
@@ -178,21 +158,21 @@ export function SpriteSheetView() {
       const img = new Image();
       img.onload = () => {
         const offscreen = document.createElement('canvas');
-        offscreen.width = SHEET_COLS * TILE_SIZE;
-        offscreen.height = SHEET_ROWS * TILE_SIZE;
+        offscreen.width = COLS * FRAME_W;
+        offscreen.height = ROWS * FRAME_H;
         const ctx = offscreen.getContext('2d')!;
         ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, SHEET_COLS * TILE_SIZE, SHEET_ROWS * TILE_SIZE);
+        const data = ctx.getImageData(0, 0, COLS * FRAME_W, ROWS * FRAME_H);
         setLoadedImage(data);
       };
       img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [COLS, ROWS, FRAME_W, FRAME_H]);
 
-  // Animation preview canvas (shows current row animated)
+  // Animation preview canvas
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-  const previewSize = 64; // 64x64 display
+  const previewSize = 64;
 
   useEffect(() => {
     const canvas = previewCanvasRef.current;
@@ -200,7 +180,6 @@ export function SpriteSheetView() {
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, previewSize, previewSize);
 
-    // Checkerboard bg
     const checkSize = 8;
     for (let cy = 0; cy < previewSize; cy += checkSize) {
       for (let cx = 0; cx < previewSize; cx += checkSize) {
@@ -214,42 +193,45 @@ export function SpriteSheetView() {
     const key = `${frameCol},${selectedFrameRow}`;
     const framePixels = spritesheetPixels.get(key);
     if (framePixels) {
-      const imgData = new ImageData(new Uint8ClampedArray(framePixels), TILE_SIZE, TILE_SIZE);
+      const imgData = new ImageData(new Uint8ClampedArray(framePixels), FRAME_W, FRAME_H);
       const offscreen = document.createElement('canvas');
-      offscreen.width = TILE_SIZE;
-      offscreen.height = TILE_SIZE;
+      offscreen.width = FRAME_W;
+      offscreen.height = FRAME_H;
       const offCtx = offscreen.getContext('2d')!;
       offCtx.putImageData(imgData, 0, 0);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(offscreen, 0, 0, previewSize, previewSize);
     }
-  }, [spritesheetPixels, selectedFrameCol, selectedFrameRow, animFrame, animPreviewPlaying, previewSize]);
+  }, [spritesheetPixels, selectedFrameCol, selectedFrameRow, animFrame, animPreviewPlaying, previewSize, FRAME_W, FRAME_H]);
+
+  const rowLabel = currentRowDef?.label ?? `row_${selectedFrameRow}`;
+  const totalPixelW = COLS * FRAME_W;
+  const totalPixelH = ROWS * FRAME_H;
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.header}>
         <span style={styles.title}>Sprite Sheet</span>
-        <span style={styles.subtitle}>64×192 / 4×12 frames</span>
+        <span style={styles.subtitle}>{totalPixelW}x{totalPixelH} / {COLS}x{ROWS} frames</span>
       </div>
 
       <div style={styles.body}>
         {/* Row labels */}
         <div style={styles.rowLabels}>
-          {ROW_LABELS.map((label, i) => (
+          {rowDefs.map((rd) => (
             <div
-              key={i}
+              key={rd.row}
               style={{
                 ...styles.rowLabel,
-                color: i === selectedFrameRow ? '#f8a84a' : '#555',
+                color: rd.row === selectedFrameRow ? '#f8a84a' : '#555',
                 height: CELL_DISPLAY,
               }}
             >
-              {label}
+              {rd.label}
             </div>
           ))}
         </div>
 
-        {/* Sheet canvas */}
         <canvas
           ref={canvasRef}
           width={totalWidth}
@@ -261,17 +243,16 @@ export function SpriteSheetView() {
         />
       </div>
 
-      {/* Selection info */}
       <div style={styles.info}>
         <span style={styles.infoLabel}>
-          {ROW_LABELS[selectedFrameRow]} frame {selectedFrameCol}
+          {rowLabel} frame {selectedFrameCol}
         </span>
       </div>
 
       {/* Animation preview */}
       <div style={styles.previewSection}>
         <div style={styles.previewHeader}>
-          <span style={styles.previewLabel}>Preview ({ROW_LABELS[selectedFrameRow]})</span>
+          <span style={styles.previewLabel}>Preview ({rowLabel})</span>
           <button
             onClick={() => setAnimPreviewPlaying(!animPreviewPlaying)}
             style={{
@@ -306,7 +287,6 @@ export function SpriteSheetView() {
         </div>
       </div>
 
-      {/* Load PNG */}
       <button onClick={() => fileInputRef.current?.click()} style={styles.loadBtn}>
         Load Sprite Sheet PNG
       </button>

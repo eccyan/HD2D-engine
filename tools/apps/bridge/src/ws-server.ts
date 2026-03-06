@@ -3,14 +3,20 @@ import { randomUUID } from 'node:crypto';
 
 type MessageHandler = (message: string, clientId: string) => void;
 
+export interface ClientInfo {
+  ws: WebSocket;
+  clientId: string;
+  toolName?: string;
+}
+
 /**
  * WSServer wraps ws.WebSocketServer and adds per-client ID tracking,
- * broadcast helpers and a typed message handler callback.
+ * tool registration, broadcast helpers and a typed message handler callback.
  */
 export class WSServer {
   private readonly port: number;
   private wss: WebSocketServer | null = null;
-  private readonly clients = new Map<string, WebSocket>();
+  private readonly clients = new Map<string, ClientInfo>();
   private messageHandler: MessageHandler | null = null;
 
   constructor(port: number) {
@@ -29,21 +35,23 @@ export class WSServer {
 
     this.wss.on('connection', (ws: WebSocket) => {
       const clientId = randomUUID();
-      this.clients.set(clientId, ws);
+      this.clients.set(clientId, { ws, clientId });
       console.log(
         `[WSServer] Client connected: ${clientId} (total: ${this.clients.size})`,
       );
 
       ws.on('message', (raw) => {
         const message = raw.toString('utf8');
-        console.log(`[WSServer] ← [${clientId}] ${message}`);
+        console.log(`[WSServer] <- [${clientId}] ${message}`);
         this.messageHandler?.(message, clientId);
       });
 
       ws.on('close', () => {
+        const info = this.clients.get(clientId);
+        const toolLabel = info?.toolName ? ` (tool: ${info.toolName})` : '';
         this.clients.delete(clientId);
         console.log(
-          `[WSServer] Client disconnected: ${clientId} (total: ${this.clients.size})`,
+          `[WSServer] Client disconnected: ${clientId}${toolLabel} (total: ${this.clients.size})`,
         );
       });
 
@@ -59,14 +67,50 @@ export class WSServer {
   }
 
   /**
+   * Register a client as a named tool (e.g. "pixel-painter").
+   */
+  registerTool(clientId: string, toolName: string): void {
+    const info = this.clients.get(clientId);
+    if (info) {
+      info.toolName = toolName;
+      console.log(`[WSServer] Registered tool: ${toolName} -> ${clientId}`);
+    }
+  }
+
+  /**
+   * Find the clientId of a registered tool by name.
+   */
+  findTool(toolName: string): string | undefined {
+    for (const [id, info] of this.clients) {
+      if (info.toolName === toolName && info.ws.readyState === WebSocket.OPEN) {
+        return id;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Get list of all registered tool names.
+   */
+  getToolList(): string[] {
+    const tools: string[] = [];
+    for (const info of this.clients.values()) {
+      if (info.toolName && info.ws.readyState === WebSocket.OPEN) {
+        tools.push(info.toolName);
+      }
+    }
+    return tools;
+  }
+
+  /**
    * Send a message to every connected client.
    */
   broadcast(msg: string): void {
     if (this.clients.size === 0) return;
-    console.log(`[WSServer] → broadcast (${this.clients.size} clients)`);
-    for (const [id, ws] of this.clients) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(msg);
+    console.log(`[WSServer] -> broadcast (${this.clients.size} clients)`);
+    for (const [id, info] of this.clients) {
+      if (info.ws.readyState === WebSocket.OPEN) {
+        info.ws.send(msg);
       } else {
         console.warn(`[WSServer] Skipping non-open client: ${id}`);
       }
@@ -78,13 +122,13 @@ export class WSServer {
    * Returns true if the message was delivered, false otherwise.
    */
   sendTo(clientId: string, msg: string): boolean {
-    const ws = this.clients.get(clientId);
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    const info = this.clients.get(clientId);
+    if (!info || info.ws.readyState !== WebSocket.OPEN) {
       console.warn(`[WSServer] sendTo: client not found or not open: ${clientId}`);
       return false;
     }
-    console.log(`[WSServer] → [${clientId}]`);
-    ws.send(msg);
+    console.log(`[WSServer] -> [${clientId}]`);
+    info.ws.send(msg);
     return true;
   }
 
@@ -109,8 +153,8 @@ export class WSServer {
         resolve();
         return;
       }
-      for (const ws of this.clients.values()) {
-        ws.terminate();
+      for (const info of this.clients.values()) {
+        info.ws.terminate();
       }
       this.clients.clear();
       this.wss.close(() => resolve());

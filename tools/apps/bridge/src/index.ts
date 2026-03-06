@@ -2,6 +2,7 @@
  * Bridge proxy — relays JSON messages between:
  *   - The Vulkan game engine via /tmp/vulkan_game.sock (Unix domain socket)
  *   - Creative tool clients via ws://localhost:9100 (WebSocket)
+ *   - Registered tool apps (e.g. pixel-painter) via WebSocket tool routing
  *
  * Also exposes a REST API on port 9101 for scene / texture file I/O.
  */
@@ -25,7 +26,7 @@ const WS_PORT = 9100;
 const HTTP_PORT = 9101;
 
 // Resolve the engine's assets directory relative to this file's location.
-// Project layout: tools/apps/bridge/src/index.ts → root is 4 levels up.
+// Project layout: tools/apps/bridge/src/index.ts -> root is 4 levels up.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENGINE_DIR = path.resolve(__dirname, '../../../../');
 const SCENES_DIR = path.join(ENGINE_DIR, 'assets', 'scenes');
@@ -40,7 +41,7 @@ const wsServer = new WSServer(WS_PORT);
 const tracker = new RequestTracker(30_000);
 
 // ---------------------------------------------------------------------------
-// WebSocket → Unix socket forwarding
+// WebSocket message handler — routes to engine or registered tools
 // ---------------------------------------------------------------------------
 
 wsServer.onMessage((rawMsg: string, clientId: string) => {
@@ -52,18 +53,75 @@ wsServer.onMessage((rawMsg: string, clientId: string) => {
     return;
   }
 
-  // Attach a unique correlation ID so we can route the response back.
+  // --- Tool registration ---
+  if (parsed['type'] === 'register_tool' && typeof parsed['name'] === 'string') {
+    const toolName = parsed['name'] as string;
+    wsServer.registerTool(clientId, toolName);
+    wsServer.sendTo(clientId, JSON.stringify({ type: 'registered', name: toolName }));
+    console.log(`[Bridge] Tool registered: ${toolName} [${clientId}]`);
+    return;
+  }
+
+  // --- Tool response (from a registered tool back to the requesting client) ---
+  // If a tool client sends back a message with _bridge_id, route it like an engine response.
+  const bridgeIdFromTool = parsed['_bridge_id'];
+  if (typeof bridgeIdFromTool === 'string') {
+    const originClientId = tracker.resolve(bridgeIdFromTool);
+    delete parsed['_bridge_id'];
+    const outgoing = JSON.stringify(parsed);
+
+    if (originClientId) {
+      console.log(`[Bridge] Tool->WS [${originClientId}] id=${bridgeIdFromTool} type=${String(parsed['type'] ?? '?')}`);
+      const sent = wsServer.sendTo(originClientId, outgoing);
+      if (!sent) {
+        console.warn(`[Bridge] Origin client gone for id=${bridgeIdFromTool}, broadcasting.`);
+        wsServer.broadcast(outgoing);
+      }
+    } else {
+      console.warn(`[Bridge] Unknown _bridge_id=${bridgeIdFromTool} from tool, broadcasting.`);
+      wsServer.broadcast(outgoing);
+    }
+    return;
+  }
+
+  // --- Route to a registered tool ---
+  const target = parsed['target'] as string | undefined;
+  if (target && target !== 'engine') {
+    const toolClientId = wsServer.findTool(target);
+    if (!toolClientId) {
+      wsServer.sendTo(clientId, JSON.stringify({
+        type: 'error',
+        error: `Tool "${target}" is not connected`,
+      }));
+      return;
+    }
+
+    // Attach correlation ID for response routing
+    const bridgeId = randomUUID();
+    parsed['_bridge_id'] = bridgeId;
+    tracker.track(bridgeId, clientId);
+
+    // Remove the target field before forwarding (tool doesn't need it)
+    delete parsed['target'];
+
+    const serialised = JSON.stringify(parsed);
+    console.log(`[Bridge] WS->Tool [${target}] id=${bridgeId} cmd=${String(parsed['cmd'] ?? '?')}`);
+    wsServer.sendTo(toolClientId, serialised);
+    return;
+  }
+
+  // --- Default: forward to engine via Unix socket ---
   const bridgeId = randomUUID();
   parsed['_bridge_id'] = bridgeId;
   tracker.track(bridgeId, clientId);
 
   const serialised = JSON.stringify(parsed);
-  console.log(`[Bridge] WS→Unix  [${clientId}] id=${bridgeId} cmd=${String(parsed['cmd'] ?? '?')}`);
+  console.log(`[Bridge] WS->Unix [${clientId}] id=${bridgeId} cmd=${String(parsed['cmd'] ?? '?')}`);
   unixClient.send(serialised);
 });
 
 // ---------------------------------------------------------------------------
-// Unix socket → WebSocket forwarding
+// Unix socket -> WebSocket forwarding
 // ---------------------------------------------------------------------------
 
 unixClient.onData((line: string) => {
@@ -88,7 +146,7 @@ unixClient.onData((line: string) => {
     const outgoing = JSON.stringify(parsed);
 
     if (clientId) {
-      console.log(`[Bridge] Unix→WS  [${clientId}] id=${bridgeId} type=${String(parsed['type'] ?? '?')}`);
+      console.log(`[Bridge] Unix->WS [${clientId}] id=${bridgeId} type=${String(parsed['type'] ?? '?')}`);
       const sent = wsServer.sendTo(clientId, outgoing);
       if (!sent) {
         // Client disconnected before response arrived; broadcast as fallback.
@@ -103,7 +161,7 @@ unixClient.onData((line: string) => {
   } else {
     // This is an unsolicited event (e.g. dialog_started) — broadcast to all.
     const outgoing = JSON.stringify(parsed);
-    console.log(`[Bridge] Unix→WS  broadcast event type=${String(parsed['type'] ?? '?')}`);
+    console.log(`[Bridge] Unix->WS broadcast event type=${String(parsed['type'] ?? '?')}`);
     wsServer.broadcast(outgoing);
   }
 });
@@ -213,6 +271,11 @@ app.post('/api/files/textures/:name', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/tools — list registered tool clients
+app.get('/api/tools', (_req: Request, res: Response) => {
+  res.json({ tools: wsServer.getToolList() });
+});
+
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
   res.json({
@@ -220,6 +283,7 @@ app.get('/health', (_req: Request, res: Response) => {
     engineConnected: unixClient.isConnected,
     wsClients: wsServer.clientCount,
     pendingRequests: tracker.pendingCount,
+    tools: wsServer.getToolList(),
   });
 });
 
@@ -228,7 +292,7 @@ app.get('/health', (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  console.log('[Bridge] Starting up …');
+  console.log('[Bridge] Starting up ...');
 
   // Start the WebSocket server (non-blocking).
   wsServer.start();
@@ -255,7 +319,7 @@ async function main(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function shutdown(signal: string): Promise<void> {
-  console.log(`\n[Bridge] Received ${signal}, shutting down …`);
+  console.log(`\n[Bridge] Received ${signal}, shutting down ...`);
   tracker.destroy();
   unixClient.disconnect();
   await wsServer.close();

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
-import { usePainterStore, PixelData } from '../store/usePainterStore.js';
+import { usePainterStore, PixelData, pixelDims } from '../store/usePainterStore.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,7 +16,7 @@ type GenStatus =
 // Downscale helper: nearest-neighbor to 16x16 RGBA
 // ---------------------------------------------------------------------------
 
-async function downscaleToPixelData(pngBytes: Uint8Array): Promise<PixelData> {
+async function downscaleToPixelData(pngBytes: Uint8Array, targetW: number, targetH: number): Promise<PixelData> {
   const blob = new Blob([pngBytes], { type: 'image/png' });
   const url = URL.createObjectURL(blob);
   try {
@@ -28,12 +28,12 @@ async function downscaleToPixelData(pngBytes: Uint8Array): Promise<PixelData> {
     });
 
     const offscreen = document.createElement('canvas');
-    offscreen.width = 16;
-    offscreen.height = 16;
+    offscreen.width = targetW;
+    offscreen.height = targetH;
     const ctx = offscreen.getContext('2d')!;
     ctx.imageSmoothingEnabled = false; // nearest-neighbor
-    ctx.drawImage(img, 0, 0, 16, 16);
-    const imgData = ctx.getImageData(0, 0, 16, 16);
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    const imgData = ctx.getImageData(0, 0, targetW, targetH);
     return new Uint8ClampedArray(imgData.data) as PixelData;
   } finally {
     URL.revokeObjectURL(url);
@@ -45,7 +45,8 @@ async function downscaleToPixelData(pngBytes: Uint8Array): Promise<PixelData> {
 // ---------------------------------------------------------------------------
 
 export function AIGeneratePanel() {
-  const { applyAIPixels, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow } = usePainterStore();
+  const { applyAIPixels, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, manifest } = usePainterStore();
+  const { w: targetW, h: targetH } = pixelDims({ editTarget, manifest });
 
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, anti-aliasing, gradient, watercolor');
@@ -91,9 +92,12 @@ export function AIGeneratePanel() {
     const actualSeed = seed === -1 ? Math.floor(Math.random() * 2 ** 31) : seed;
 
     // Build descriptive context for tile/sprite generation
+    const slotLabel = editTarget === 'tileset'
+      ? manifest.tileset.slots.find((s) => s.id === selectedTileRow * manifest.tileset.columns + selectedTileCol)?.label
+      : manifest.spritesheet.rows.find((r) => r.row === selectedFrameRow)?.label;
     const target = editTarget === 'tileset'
-      ? `16x16 pixel art tile, tile (${selectedTileCol},${selectedTileRow})`
-      : `16x16 pixel art sprite frame, row ${selectedFrameRow} frame ${selectedFrameCol}`;
+      ? `${targetW}x${targetH} pixel art tile, tile (${selectedTileCol},${selectedTileRow})${slotLabel ? ` "${slotLabel}"` : ''}`
+      : `${targetW}x${targetH} pixel art sprite frame, ${slotLabel ?? `row ${selectedFrameRow}`} frame ${selectedFrameCol}`;
 
     const fullPrompt = `${prompt}, ${target}, pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset`;
     const fullNegative = negativePrompt
@@ -118,15 +122,15 @@ export function AIGeneratePanel() {
         loras,
       });
 
-      setStatus({ kind: 'generating', message: 'Downscaling to 16x16...' });
+      setStatus({ kind: 'generating', message: `Downscaling to ${targetW}x${targetH}...` });
 
       // Show full-res preview
       const blob = new Blob([pngBytes], { type: 'image/png' });
       const previewUrl = URL.createObjectURL(blob);
       setPreviewDataUrl(previewUrl);
 
-      // Downscale to 16x16
-      const pixels = await downscaleToPixelData(pngBytes);
+      // Downscale to target dimensions
+      const pixels = await downscaleToPixelData(pngBytes, targetW, targetH);
       setPendingPixels(pixels);
 
       setStatus({ kind: 'success', message: `Generated! Seed: ${actualSeed}` });
@@ -137,7 +141,7 @@ export function AIGeneratePanel() {
         setStatus({ kind: 'error', message: (err as Error).message ?? String(err) });
       }
     }
-  }, [prompt, negativePrompt, comfyUrl, steps, seed, cfgScale, samplerName, loraName, loraWeight, status, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow]);
+  }, [prompt, negativePrompt, comfyUrl, steps, seed, cfgScale, samplerName, loraName, loraWeight, status, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, targetW, targetH, manifest]);
 
   const handleApply = useCallback(() => {
     if (!pendingPixels) return;
@@ -383,13 +387,13 @@ export function AIGeneratePanel() {
                   ref={(canvas) => {
                     if (!canvas || !pendingPixels) return;
                     const ctx = canvas.getContext('2d')!;
-                    const imgData = new ImageData(new Uint8ClampedArray(pendingPixels), 16, 16);
+                    const imgData = new ImageData(new Uint8ClampedArray(pendingPixels), targetW, targetH);
                     ctx.putImageData(imgData, 0, 0);
                   }}
-                  width={16}
-                  height={16}
+                  width={targetW}
+                  height={targetH}
                   style={styles.previewPixel}
-                  title="16x16 nearest-neighbor downscale"
+                  title={`${targetW}x${targetH} nearest-neighbor downscale`}
                 />
               )}
             </div>

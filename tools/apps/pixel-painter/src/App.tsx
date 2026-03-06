@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
-import { usePainterStore, DrawingTool } from './store/usePainterStore.js';
+import { usePainterStore, DrawingTool, pixelDims } from './store/usePainterStore.js';
 import { PixelCanvas } from './components/PixelCanvas.js';
 import { TilesetView } from './components/TilesetView.js';
 import { SpriteSheetView } from './components/SpriteSheetView.js';
 import { ColorPalettePanel } from './components/ColorPalettePanel.js';
 import { AIGeneratePanel } from './components/AIGeneratePanel.js';
+import { ManifestSettings } from './components/ManifestSettings.js';
+import { useRemoteControl } from './hooks/useRemoteControl.js';
 
 // ---------------------------------------------------------------------------
 // Toolbar button component
@@ -81,6 +83,7 @@ export function App() {
     zoom,
     showGrid,
     showAIPanel,
+    showManifestSettings,
     editTarget,
     fgColor,
     bgColor,
@@ -89,15 +92,18 @@ export function App() {
     setZoom,
     toggleGrid,
     setShowAIPanel,
+    setShowManifestSettings,
     setEditTarget,
     undo,
     redo,
   } = usePainterStore();
 
+  // Connect to bridge for remote control
+  useRemoteControl('ws://localhost:9100');
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if focus is in an input/textarea
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
@@ -118,11 +124,12 @@ export function App() {
         case '[': setZoom(Math.max(4, zoom - 4)); break;
         case 'h': toggleGrid(); break;
         case 'a': setShowAIPanel(!showAIPanel); break;
+        case 's': setShowManifestSettings(!showManifestSettings); break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, setActiveTool, setZoom, zoom, toggleGrid, setShowAIPanel, showAIPanel]);
+  }, [undo, redo, setActiveTool, setZoom, zoom, toggleGrid, setShowAIPanel, showAIPanel, setShowManifestSettings, showManifestSettings]);
 
   const tools: Array<{ tool: DrawingTool; label: string; shortcut: string }> = [
     { tool: 'pencil', label: 'Pencil', shortcut: 'P' },
@@ -142,7 +149,6 @@ export function App() {
       {/* TOP TOOLBAR                                                       */}
       {/* ---------------------------------------------------------------- */}
       <div style={styles.toolbar}>
-        {/* App title */}
         <div style={styles.appTitle}>
           Pixel Painter
         </div>
@@ -285,6 +291,20 @@ export function App() {
           AI Gen
         </button>
 
+        {/* Settings toggle */}
+        <button
+          onClick={() => setShowManifestSettings(!showManifestSettings)}
+          style={{
+            ...styles.iconBtn,
+            background: showManifestSettings ? '#2a2a1a' : 'transparent',
+            borderColor: showManifestSettings ? '#8a8a3a' : '#444',
+            color: showManifestSettings ? '#d0d070' : '#666',
+          }}
+          title="Asset manifest settings [S]"
+        >
+          Settings
+        </button>
+
         <div style={{ flex: 1 }} />
 
         {/* Color preview in toolbar */}
@@ -335,11 +355,12 @@ export function App() {
           <ZoomFollowingCanvas />
         </div>
 
-        {/* RIGHT: Color palette + AI panel */}
+        {/* RIGHT: Color palette + AI panel + Settings */}
         <div style={styles.rightPanel}>
           <div style={styles.rightScroll}>
             <ColorPalettePanel />
             {showAIPanel && <AIGeneratePanel />}
+            {showManifestSettings && <ManifestSettings />}
           </div>
         </div>
       </div>
@@ -357,12 +378,13 @@ export function App() {
 // ---------------------------------------------------------------------------
 
 function StatusBar() {
-  const { activeTool, mirrorMode, zoom, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, fgColor } = usePainterStore();
+  const { activeTool, mirrorMode, zoom, editTarget, selectedTileCol, selectedTileRow, selectedFrameCol, selectedFrameRow, fgColor, manifest } = usePainterStore();
 
   const [r, g, b, a] = fgColor;
+  const { w, h } = pixelDims({ editTarget, manifest });
 
   const tileInfo = editTarget === 'tileset'
-    ? `Tileset tile (${selectedTileCol},${selectedTileRow}) = ID ${selectedTileRow * 8 + selectedTileCol}`
+    ? `Tileset tile (${selectedTileCol},${selectedTileRow}) = ID ${selectedTileRow * manifest.tileset.columns + selectedTileCol}`
     : `Sprite row ${selectedFrameRow} frame ${selectedFrameCol}`;
 
   return (
@@ -379,19 +401,21 @@ function StatusBar() {
         FG: <span style={{ color: `rgb(${r},${g},${b})` }}>rgba({r},{g},{b},{(a / 255).toFixed(2)})</span>
       </span>
       <div style={{ flex: 1 }} />
-      <span style={styles.statusItem}>16×16 Pixel Art Editor</span>
+      <span style={styles.statusItem}>{w}x{h} Pixel Art Editor</span>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Zoom-following canvas wrapper (re-mounts canvas when zoom changes)
+// Zoom-following canvas wrapper
 // ---------------------------------------------------------------------------
 
 function ZoomFollowingCanvas() {
   const zoom = usePainterStore((s) => s.zoom);
-  const size = zoom * 16;
-  return <PixelCanvas width={size} height={size} />;
+  const manifest = usePainterStore((s) => s.manifest);
+  const editTarget = usePainterStore((s) => s.editTarget);
+  const { w, h } = pixelDims({ editTarget, manifest });
+  return <PixelCanvas width={zoom * w} height={zoom * h} />;
 }
 
 // ---------------------------------------------------------------------------
