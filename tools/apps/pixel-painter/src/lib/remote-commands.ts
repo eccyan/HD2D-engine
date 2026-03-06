@@ -6,9 +6,8 @@ import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
 import {
   buildFullPrompt,
   buildNegativePrompt,
-  buildRowPrompt,
+  buildRowFramePrompts,
   downscaleToPixelData,
-  sliceStripToFrames,
   pixelsToHeightmap,
   SAMPLER_NAMES,
   DEFAULT_NEGATIVE_PROMPT,
@@ -499,7 +498,7 @@ async function handleAiGenerateRow(
 
   const actualSeed = seedParam === -1 ? Math.floor(Math.random() * 2 ** 31) : seedParam;
 
-  const fullPrompt = buildRowPrompt({
+  const framePrompts = buildRowFramePrompts({
     prompt,
     rowDef,
     frameWidth: fw,
@@ -508,24 +507,37 @@ async function handleAiGenerateRow(
   });
   const fullNegative = buildNegativePrompt(negativePrompt);
 
-  // Generate at 512x512 — SD 1.5 produces noise at extreme aspect ratios.
-  // The prompt asks for a horizontal strip; sliceStripToFrames handles slicing.
-  const genWidth = 512;
-  const genHeight = 512;
-
+  // Generate each frame as a separate 512x512 image using the same seed
+  // for visual consistency, then downscale to target size.
+  // Retry up to 2 times per frame on ComfyUI empty-output failures.
+  const maxRetries = 2;
   try {
-    const pngBytes = await client.generateImage(fullPrompt, {
-      width: genWidth,
-      height: genHeight,
-      steps,
-      seed: actualSeed,
-      negativePrompt: fullNegative,
-      cfgScale: cfg,
-      samplerName: sampler,
-      loras,
-    });
+    const frames: PixelData[] = [];
 
-    const frames = await sliceStripToFrames(pngBytes, frameCount, fw, fh);
+    for (let i = 0; i < frameCount; i++) {
+      let pngBytes: Uint8Array | null = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          pngBytes = await client.generateImage(framePrompts[i], {
+            width: 512,
+            height: 512,
+            steps,
+            seed: actualSeed,
+            negativePrompt: fullNegative,
+            cfgScale: cfg,
+            samplerName: sampler,
+            loras,
+          });
+          break;
+        } catch (e) {
+          if (attempt === maxRetries) throw e;
+          // Brief pause before retry
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+      const pixels = await downscaleToPixelData(pngBytes!, fw, fh);
+      frames.push(pixels);
+    }
 
     if (apply) {
       store.applyRowPixels(row, frames);
@@ -538,8 +550,6 @@ async function handleAiGenerateRow(
         row,
         width: fw,
         height: fh,
-        gen_width: genWidth,
-        gen_height: genHeight,
       },
     };
   } catch (err) {

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
 import { usePainterStore, PixelData, pixelDims } from '../store/usePainterStore.js';
-import { buildFullPrompt, buildNegativePrompt, buildRowPrompt, downscaleToPixelData, sliceStripToFrames, pixelsToHeightmap, DEFAULT_NEGATIVE_PROMPT } from '../lib/ai-generate-helpers.js';
+import { buildFullPrompt, buildNegativePrompt, buildRowFramePrompts, downscaleToPixelData, pixelsToHeightmap, DEFAULT_NEGATIVE_PROMPT } from '../lib/ai-generate-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -164,10 +164,8 @@ export function AIGeneratePanel() {
 
     const actualSeed = seed === -1 ? Math.floor(Math.random() * 2 ** 31) : seed;
     const frameCount = rowDef.frames;
-    const genWidth = 512;
-    const genHeight = 512;
 
-    const fullPrompt = buildRowPrompt({
+    const framePrompts = buildRowFramePrompts({
       prompt,
       rowDef,
       frameWidth: targetW,
@@ -176,32 +174,44 @@ export function AIGeneratePanel() {
     });
     const fullNegative = buildNegativePrompt(negativePrompt);
 
-    setStatus({ kind: 'generating', message: `Generating ${frameCount}-frame strip (${genWidth}x${genHeight})...` });
-
     try {
       const loras = loraName.trim()
         ? [{ name: loraName.trim(), weight: loraWeight }]
         : [];
 
-      const pngBytes = await client.generateImage(fullPrompt, {
-        width: genWidth,
-        height: genHeight,
-        steps,
-        seed: actualSeed,
-        negativePrompt: fullNegative,
-        cfgScale,
-        samplerName,
-        loras,
-      });
+      const maxRetries = 2;
+      const frames: PixelData[] = [];
+      for (let i = 0; i < frameCount; i++) {
+        let pngBytes: Uint8Array | null = null;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          setStatus({
+            kind: 'generating',
+            message: `Generating frame ${i + 1}/${frameCount}${attempt > 0 ? ` (retry ${attempt})` : ''}...`,
+          });
+          try {
+            pngBytes = await client.generateImage(framePrompts[i], {
+              width: 512,
+              height: 512,
+              steps,
+              seed: actualSeed,
+              negativePrompt: fullNegative,
+              cfgScale,
+              samplerName,
+              loras,
+            });
+            break;
+          } catch (e) {
+            if (attempt === maxRetries) throw e;
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
 
-      // Show full strip preview
-      const blob = new Blob([pngBytes], { type: 'image/png' });
-      setStripPreviewUrl(URL.createObjectURL(blob));
+        const pixels = await downscaleToPixelData(pngBytes!, targetW, targetH);
+        frames.push(pixels);
+      }
 
-      setStatus({ kind: 'generating', message: `Slicing into ${frameCount} frames...` });
-
-      const frames = await sliceStripToFrames(pngBytes, frameCount, targetW, targetH);
       setPendingFrames(frames);
+      setStripPreviewUrl(null);
 
       setStatus({ kind: 'success', message: `Generated ${frameCount} frames! Seed: ${actualSeed}` });
     } catch (err) {
@@ -513,18 +523,12 @@ export function AIGeneratePanel() {
           </div>
         )}
 
-        {/* Row strip preview */}
-        {genMode === 'row' && stripPreviewUrl && (
+        {/* Row frames preview */}
+        {genMode === 'row' && pendingFrames && (
           <div style={styles.previewSection}>
-            <div style={styles.fieldLabel}>Generated Strip</div>
-            <img
-              src={stripPreviewUrl}
-              alt="Generated strip"
-              style={styles.stripPreview}
-            />
             {pendingFrames && (
               <>
-                <div style={styles.fieldLabel}>Sliced Frames ({pendingFrames.length})</div>
+                <div style={styles.fieldLabel}>Generated Frames ({pendingFrames.length})</div>
                 <div style={styles.frameRow}>
                   {pendingFrames.map((frame, i) => (
                     <canvas

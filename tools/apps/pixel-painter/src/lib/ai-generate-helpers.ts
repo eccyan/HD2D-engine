@@ -101,15 +101,39 @@ export interface RowPromptContext {
   activeLayer: ActiveLayer;
 }
 
-export function buildRowPrompt(ctx: RowPromptContext): string {
-  const { prompt, rowDef, frameWidth, frameHeight, activeLayer } = ctx;
+/**
+ * Build per-frame prompts for a sprite row.
+ * Returns one prompt per frame. Each prompt describes a single character
+ * at a specific animation phase so SD 1.5 generates a clear, centered sprite.
+ */
+export function buildRowFramePrompts(ctx: RowPromptContext): string[] {
+  const { prompt, rowDef, activeLayer } = ctx;
   const frameCount = rowDef.frames;
+
+  const dirMap: Record<string, string> = {
+    S: 'facing forward, front view',
+    N: 'facing away, back view',
+    E: 'facing right, side view',
+    W: 'facing left, side view',
+  };
+  const dirDesc = dirMap[rowDef.direction] ?? `facing ${rowDef.direction}`;
 
   const heightmapSuffix = activeLayer === 'heightmap'
     ? ', height map, white=high black=low, grayscale, depth map'
-    : ', pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset';
+    : ', pixel art, 8-bit, 16-bit, low-res, retro game graphics, NES palette, clean edges, game asset, single character, centered, transparent background';
 
-  return `${prompt}, pixel art sprite sheet, ${frameCount} frames in a row, ${rowDef.state} animation facing ${rowDef.direction}, ${frameCount}x1 grid layout, consistent character across all frames, white background, evenly spaced, side by side${heightmapSuffix}`;
+  // Animation phase descriptions per frame
+  const statePhases: Record<string, string[]> = {
+    idle: ['standing still', 'standing still, slight movement', 'standing still', 'standing still, slight sway'],
+    walk: ['left foot forward', 'standing upright mid-step', 'right foot forward', 'standing upright mid-step'],
+    run: ['left foot extended', 'both feet off ground', 'right foot extended', 'both feet off ground'],
+  };
+  const phases = statePhases[rowDef.state] ?? Array(frameCount).fill(rowDef.state);
+
+  return Array.from({ length: frameCount }, (_, i) => {
+    const phase = phases[i % phases.length];
+    return `${prompt}, ${dirDesc}, ${rowDef.state} pose, ${phase}, frame ${i + 1} of ${frameCount}${heightmapSuffix}`;
+  });
 }
 
 // ---------------------------------------------------------------------------
