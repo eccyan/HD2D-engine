@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { CharacterManifest, ManifestStats } from '@vulkan-game-tools/asset-types';
 import { getManifestStats } from '@vulkan-game-tools/asset-types';
+import { usePainterStore } from '../store/usePainterStore.js';
 
 const BRIDGE_URL = 'http://localhost:9101';
 
-interface CharacterSelectorProps {
-  onSelect: (id: string, manifest: CharacterManifest) => void;
-  selectedId: string | null;
-}
-
-export function CharacterSelector({ onSelect, selectedId }: CharacterSelectorProps) {
+export function CharacterSelector() {
+  const { characterId: selectedId, setCharacterId, setCharacterManifest } = usePainterStore();
   const [characters, setCharacters] = useState<string[]>([]);
   const [stats, setStats] = useState<Record<string, ManifestStats>>({});
   const [loading, setLoading] = useState(false);
@@ -48,7 +45,8 @@ export function CharacterSelector({ onSelect, selectedId }: CharacterSelectorPro
     try {
       const res = await fetch(`${BRIDGE_URL}/api/characters/${id}`);
       const manifest = (await res.json()) as CharacterManifest;
-      onSelect(id, manifest);
+      setCharacterId(id);
+      setCharacterManifest(manifest);
     } catch (err) {
       console.error('Failed to load character:', err);
     }

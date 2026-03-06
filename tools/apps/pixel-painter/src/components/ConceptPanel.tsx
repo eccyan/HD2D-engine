@@ -1,14 +1,12 @@
 import { useState } from 'react';
-import type { CharacterManifest, ConceptArt } from '@vulkan-game-tools/asset-types';
+import type { ConceptArt } from '@vulkan-game-tools/asset-types';
+import { usePainterStore } from '../store/usePainterStore.js';
 
 const BRIDGE_URL = 'http://localhost:9101';
 
-interface ConceptPanelProps {
-  manifest: CharacterManifest;
-  onManifestUpdate: (manifest: CharacterManifest) => void;
-}
-
-export function ConceptPanel({ manifest, onManifestUpdate }: ConceptPanelProps) {
+export function ConceptPanel() {
+  const { characterManifest: manifest, setCharacterManifest } = usePainterStore();
+  if (!manifest) return null;
   const [description, setDescription] = useState(manifest.concept.description);
   const [stylePrompt, setStylePrompt] = useState(manifest.concept.style_prompt);
   const [negativePrompt, setNegativePrompt] = useState(manifest.concept.negative_prompt);
@@ -24,7 +22,7 @@ export function ConceptPanel({ manifest, onManifestUpdate }: ConceptPanelProps) 
         body: JSON.stringify(updated, null, 2),
       });
       if (res.ok) {
-        onManifestUpdate(updated);
+        setCharacterManifest(updated);
       }
     } catch (err) {
       console.error('Failed to save concept:', err);

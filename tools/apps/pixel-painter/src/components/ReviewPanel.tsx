@@ -1,18 +1,11 @@
 import { useState } from 'react';
 import type {
-  CharacterManifest,
   CharacterFrame,
   FrameStatus,
 } from '@vulkan-game-tools/asset-types';
+import { usePainterStore } from '../store/usePainterStore.js';
 
 const BRIDGE_URL = 'http://localhost:9101';
-
-interface ReviewPanelProps {
-  manifest: CharacterManifest;
-  onManifestUpdate: (manifest: CharacterManifest) => void;
-  onFrameSelect: (animName: string, frameIndex: number) => void;
-  onRegenerateFrame: (animName: string, frameIndex: number) => void;
-}
 
 const STATUS_COLORS: Record<FrameStatus, string> = {
   pending: '#666',
@@ -30,12 +23,9 @@ const STATUS_LABELS: Record<FrameStatus, string> = {
   rejected: 'X',
 };
 
-export function ReviewPanel({
-  manifest,
-  onManifestUpdate,
-  onFrameSelect,
-  onRegenerateFrame,
-}: ReviewPanelProps) {
+export function ReviewPanel() {
+  const { characterManifest: manifest, setCharacterManifest } = usePainterStore();
+  if (!manifest) return null;
   const [filter, setFilter] = useState<FrameStatus | 'all'>('all');
   const [batchAction, setBatchAction] = useState<FrameStatus>('approved');
 
@@ -67,7 +57,7 @@ export function ReviewPanel({
           else frame.review.notes = notes;
         }
       }
-      onManifestUpdate(updated);
+      setCharacterManifest(updated);
     } catch (err) {
       console.error('Failed to update frame status:', err);
     }
@@ -94,7 +84,7 @@ export function ReviewPanel({
         }
       }
     }
-    onManifestUpdate(updated);
+    setCharacterManifest(updated);
   };
 
   const handleAssemble = async () => {
@@ -170,10 +160,10 @@ export function ReviewPanel({
                   key={frame.index}
                   frame={frame}
                   animName={anim.name}
-                  onClick={() => onFrameSelect(anim.name, frame.index)}
+                  onClick={() => console.log('select frame', anim.name, frame.index)}
                   onApprove={() => updateFrameStatus(anim.name, frame.index, 'approved')}
                   onReject={() => updateFrameStatus(anim.name, frame.index, 'rejected')}
-                  onRegenerate={() => onRegenerateFrame(anim.name, frame.index)}
+                  onRegenerate={() => console.log('regenerate frame', anim.name, frame.index)}
                 />
               ))}
             </div>

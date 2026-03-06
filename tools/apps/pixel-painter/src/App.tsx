@@ -7,6 +7,9 @@ import { ColorPalettePanel } from './components/ColorPalettePanel.js';
 import { AIGeneratePanel } from './components/AIGeneratePanel.js';
 import { ManifestSettings } from './components/ManifestSettings.js';
 import { NormalPreview } from './components/NormalPreview.js';
+import { CharacterSelector } from './components/CharacterSelector.js';
+import { ConceptPanel } from './components/ConceptPanel.js';
+import { ReviewPanel } from './components/ReviewPanel.js';
 import { useRemoteControl } from './hooks/useRemoteControl.js';
 
 // ---------------------------------------------------------------------------
@@ -92,6 +95,9 @@ export function App() {
     heightValue,
     showNormalPreview,
     heightmapOpacity,
+    characterId,
+    characterManifest,
+    showReviewPanel,
     setActiveTool,
     setMirrorMode,
     setZoom,
@@ -103,6 +109,7 @@ export function App() {
     setHeightValue,
     setShowNormalPreview,
     setHeightmapOpacity,
+    setShowReviewPanel,
     undo,
     redo,
   } = usePainterStore();
@@ -362,6 +369,22 @@ export function App() {
           AI Gen
         </button>
 
+        {/* Review panel toggle (visible when character loaded) */}
+        {characterId && (
+          <button
+            onClick={() => setShowReviewPanel(!showReviewPanel)}
+            style={{
+              ...styles.iconBtn,
+              background: showReviewPanel ? '#1a2a2a' : 'transparent',
+              borderColor: showReviewPanel ? '#3a8a8a' : '#444',
+              color: showReviewPanel ? '#70d8d8' : '#666',
+            }}
+            title="Character review panel"
+          >
+            Review
+          </button>
+        )}
+
         {/* Normal preview toggle */}
         <button
           onClick={() => setShowNormalPreview(!showNormalPreview)}
@@ -430,6 +453,7 @@ export function App() {
         {/* LEFT: Sheet views */}
         <div style={styles.leftPanel}>
           <div style={styles.leftScroll}>
+            <CharacterSelector />
             <TilesetView />
             <SpriteSheetView />
           </div>
@@ -446,6 +470,8 @@ export function App() {
             {activeLayer === 'diffuse' && <ColorPalettePanel />}
             {showNormalPreview && <NormalPreview />}
             {showAIPanel && <AIGeneratePanel />}
+            {characterManifest && <ConceptPanel />}
+            {characterManifest && showReviewPanel && <ReviewPanel />}
             {showManifestSettings && <ManifestSettings />}
           </div>
         </div>
