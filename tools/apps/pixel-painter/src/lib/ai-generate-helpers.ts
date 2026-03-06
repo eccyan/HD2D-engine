@@ -15,7 +15,7 @@ export const SAMPLER_NAMES = [
 ] as const;
 
 export const DEFAULT_NEGATIVE_PROMPT =
-  'smooth, realistic, 3d render, blurry, soft, high resolution, photorealistic, anti-aliasing, gradient, watercolor';
+  'blurry, smooth, realistic, 3d render, photorealistic, watermark, text, signature, noise, static, artifacts';
 
 // ---------------------------------------------------------------------------
 // Prompt builders

@@ -32,8 +32,8 @@ export function AIGeneratePanel() {
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [pendingPixels, setPendingPixels] = useState<PixelData | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [loraName, setLoraName] = useState('');
-  const [loraWeight, setLoraWeight] = useState(0.8);
+  const [loraName, setLoraName] = useState('PixelArtRedmond15V-PixelArt-PIXARFK');
+  const [loraWeight, setLoraWeight] = useState(0.85);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -262,7 +262,7 @@ export function AIGeneratePanel() {
                       type="text"
                       value={loraName}
                       onChange={(e) => setLoraName(e.target.value)}
-                      placeholder="e.g. pixel-art-xl"
+                      placeholder="e.g. PixelArtRedmond15V-PixelArt-PIXARFK"
                       style={styles.textInput}
                     />
                   </div>
@@ -280,7 +280,7 @@ export function AIGeneratePanel() {
                   </div>
                 </div>
                 <div style={{ ...styles.hint, marginTop: 2 }}>
-                  Place .safetensors in models/loras/ folder
+                  Place .safetensors in ComfyUI/models/loras/
                 </div>
               </div>
               <div style={styles.row}>
@@ -386,9 +386,9 @@ export function AIGeneratePanel() {
         {/* Help text */}
         <div style={styles.helpText}>
           Requires ComfyUI running locally.<br />
-          Model: SD 1.5 + pixel art LoRA recommended.<br />
-          Mac (no CUDA): python main.py --cpu --listen<br />
-          LoRA: download .safetensors to models/loras/, enter filename without extension above.
+          Model: SD 1.5 + PixelArtRedmond LoRA (weight 0.85).<br />
+          Mac (MPS): python main.py --fp32-vae --listen --enable-cors-header '*'<br />
+          Sampler: euler only (others produce poor results on MPS).
         </div>
       </div>
     </div>
