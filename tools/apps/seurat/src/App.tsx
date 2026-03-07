@@ -2,29 +2,11 @@ import React, { useEffect } from 'react';
 import { useSeuratStore } from './store/useSeuratStore.js';
 import { usePlaybackEngine } from './hooks/usePlaybackEngine.js';
 import { useRemoteControl } from './hooks/useRemoteControl.js';
-import { Sidebar } from './components/layout/Sidebar.js';
+import { TreePane } from './components/layout/TreePane.js';
 import { Toolbar } from './components/layout/Toolbar.js';
 import { StatusBar } from './components/layout/StatusBar.js';
-import { DashboardView } from './components/dashboard/DashboardView.js';
-import { ConceptView } from './components/concept/ConceptView.js';
-import { GenerateView } from './components/generate/GenerateView.js';
-import { ReviewView } from './components/review/ReviewView.js';
-import { AnimateView } from './components/animate/AnimateView.js';
-import { AtlasView } from './components/atlas/AtlasView.js';
-import { ManifestView } from './components/manifest/ManifestView.js';
-
-function SectionContent() {
-  const section = useSeuratStore((s) => s.activeSection);
-  switch (section) {
-    case 'dashboard': return <DashboardView />;
-    case 'concept': return <ConceptView />;
-    case 'generate': return <GenerateView />;
-    case 'review': return <ReviewView />;
-    case 'animate': return <AnimateView />;
-    case 'atlas': return <AtlasView />;
-    case 'manifest': return <ManifestView />;
-  }
-}
+import { MainPane } from './components/layout/MainPane.js';
+import { RightPane } from './components/layout/RightPane.js';
 
 export function App() {
   usePlaybackEngine();
@@ -35,10 +17,10 @@ export function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
-      // Space = play/pause in animate mode
+      // Space = play/pause in animation mode
       if (e.code === 'Space') {
         const store = useSeuratStore.getState();
-        if (store.activeSection === 'animate') {
+        if (store.treeSelection.kind === 'animation') {
           e.preventDefault();
           if (store.playbackState === 'playing') {
             store.setPlaybackState('paused');
@@ -63,10 +45,11 @@ export function App() {
     <div style={styles.root}>
       <Toolbar />
       <div style={styles.body}>
-        <Sidebar />
-        <div style={styles.content}>
-          <SectionContent />
+        <TreePane />
+        <div style={styles.main}>
+          <MainPane />
         </div>
+        <RightPane />
       </div>
       <StatusBar />
     </div>
@@ -87,7 +70,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflow: 'hidden',
   },
-  content: {
+  main: {
     flex: 1,
     overflow: 'hidden',
     display: 'flex',

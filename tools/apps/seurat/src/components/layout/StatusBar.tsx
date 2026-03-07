@@ -4,8 +4,6 @@ import { useSeuratStore, getManifestStats } from '../../store/useSeuratStore.js'
 export function StatusBar() {
   const selectedCharacterId = useSeuratStore((s) => s.selectedCharacterId);
   const manifest = useSeuratStore((s) => s.manifest);
-  const activeSection = useSeuratStore((s) => s.activeSection);
-
   const stats = manifest ? getManifestStats(manifest) : null;
 
   return (

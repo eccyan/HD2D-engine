@@ -1,35 +1,26 @@
 import React from 'react';
-import type { Section } from '../../store/types.js';
+import type { TreeSelection } from '../../store/types.js';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { getClipDuration } from '../../lib/frame-utils.js';
 
-const SECTION_TITLES: Record<Section, string> = {
-  dashboard: 'Dashboard',
-  concept: 'Concept Art',
-  generate: 'AI Generation',
-  review: 'Frame Review',
-  animate: 'Animation Preview',
-  atlas: 'Atlas Assembly',
-  manifest: 'Manifest Editor',
-};
+function getSelectionLabel(sel: TreeSelection): string {
+  switch (sel.kind) {
+    case 'manifest': return 'Manifest';
+    case 'character': return `Character: ${sel.characterId}`;
+    case 'animation': return `${sel.characterId} / ${sel.animName}`;
+  }
+}
 
 export function Toolbar() {
-  const activeSection = useSeuratStore((s) => s.activeSection);
-  const selectedCharacterId = useSeuratStore((s) => s.selectedCharacterId);
+  const treeSelection = useSeuratStore((s) => s.treeSelection);
 
   return (
     <div style={styles.toolbar}>
       <span style={styles.appTitle}>SEURAT</span>
       <span style={styles.divider} />
-      <span style={styles.sectionTitle}>{SECTION_TITLES[activeSection]}</span>
-      {selectedCharacterId && (
-        <>
-          <span style={styles.divider} />
-          <span style={styles.charLabel}>{selectedCharacterId}</span>
-        </>
-      )}
+      <span style={styles.sectionTitle}>{getSelectionLabel(treeSelection)}</span>
       <div style={{ flex: 1 }} />
-      {activeSection === 'animate' && <PlaybackControls />}
+      {treeSelection.kind === 'animation' && <PlaybackControls />}
     </div>
   );
 }
@@ -119,15 +110,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     color: '#aaa',
     fontWeight: 600,
-  },
-  charLabel: {
-    fontFamily: 'monospace',
-    fontSize: 10,
-    color: '#666',
-    background: '#1e1e30',
-    padding: '2px 8px',
-    borderRadius: 3,
-    border: '1px solid #333',
   },
   tbBtn: {
     background: '#1e1e30',

@@ -9,6 +9,11 @@ export type Section =
   | 'atlas'
   | 'manifest';
 
+export type TreeSelection =
+  | { kind: 'manifest' }
+  | { kind: 'character'; characterId: string }
+  | { kind: 'animation'; characterId: string; animName: string };
+
 export interface AIConfig {
   comfyUrl: string;
   steps: number;

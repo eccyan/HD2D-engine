@@ -8,6 +8,7 @@ import { createDefaultManifest, getManifestStats } from '@vulkan-game-tools/asse
 import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
 import type {
   Section,
+  TreeSelection,
   AIConfig,
   GenerationJob,
   PlaybackState,
@@ -23,6 +24,8 @@ export interface SeuratState {
   // Navigation
   activeSection: Section;
   setActiveSection: (s: Section) => void;
+  treeSelection: TreeSelection;
+  setTreeSelection: (s: TreeSelection) => void;
 
   // Characters
   characters: string[];
@@ -86,6 +89,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   // Navigation
   activeSection: 'dashboard',
   setActiveSection: (s) => set({ activeSection: s }),
+  treeSelection: { kind: 'manifest' } as TreeSelection,
+  setTreeSelection: (s) => set({ treeSelection: s }),
 
   // Characters
   characters: [],
@@ -125,7 +130,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     await api.createCharacter(id, name, manifest);
     await get().refreshCharacters();
     await get().selectCharacter(id);
-    set({ activeSection: 'concept' });
+    set({ treeSelection: { kind: 'character', characterId: id } });
   },
 
   saveManifest: async () => {
