@@ -32,15 +32,13 @@ export function RightPane() {
   const treeSelection = useSeuratStore((s) => s.treeSelection);
 
   return (
-    <div style={styles.paneOuter}>
-      <div className="right-pane-scroll" style={styles.paneInner}>
-        <RightContent selection={treeSelection} />
-      </div>
+    <div className="right-pane" style={styles.pane}>
+      <RightContent selection={treeSelection} />
       <style>{`
-        .right-pane-scroll::-webkit-scrollbar { width: 6px; }
-        .right-pane-scroll::-webkit-scrollbar-track { background: #111120; }
-        .right-pane-scroll::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
-        .right-pane-scroll::-webkit-scrollbar-thumb:hover { background: #5a5a7a; }
+        .right-pane::-webkit-scrollbar { width: 6px; }
+        .right-pane::-webkit-scrollbar-track { background: #111120; }
+        .right-pane::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+        .right-pane::-webkit-scrollbar-thumb:hover { background: #5a5a7a; }
       `}</style>
     </div>
   );
@@ -169,20 +167,12 @@ function SpriteGenerationSection() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  paneOuter: {
+  pane: {
     width: 300,
     minWidth: 300,
     flexShrink: 0,
-    alignSelf: 'stretch' as const,
     background: '#111120',
     borderLeft: '1px solid #2a2a3a',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden',
-  },
-  paneInner: {
-    flex: 1,
-    minHeight: 0,
     overflowY: 'auto' as const,
     padding: 12,
     display: 'flex',
