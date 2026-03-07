@@ -65,6 +65,9 @@ export interface SeuratState {
   // Sprite sheet
   spriteSheetUrl: string | null;
   loadSpriteSheet: () => void;
+
+  // Test helpers (inject manifest directly without bridge)
+  selectCharacterDirect: (manifest: CharacterManifest) => void;
 }
 
 export const useSeuratStore = create<SeuratState>((set, get) => ({
@@ -228,5 +231,16 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const { selectedCharacterId } = get();
     if (!selectedCharacterId) return;
     set({ spriteSheetUrl: api.spriteSheetUrl(selectedCharacterId) });
+  },
+
+  // Test helpers
+  selectCharacterDirect: (manifest) => {
+    set({
+      selectedCharacterId: manifest.character_id,
+      manifest,
+      selectedClipName: manifest.animations[0]?.name ?? null,
+      assemblyResult: null,
+      spriteSheetUrl: null,
+    });
   },
 }));

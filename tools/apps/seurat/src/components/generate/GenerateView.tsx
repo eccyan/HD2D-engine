@@ -55,7 +55,7 @@ export function GenerateView() {
   );
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="generate-view">
       <div style={styles.title}>AI Generation</div>
 
       {/* AI Config */}
@@ -67,6 +67,7 @@ export function GenerateView() {
             value={aiConfig.comfyUrl}
             onChange={(e) => setAIConfig({ comfyUrl: e.target.value })}
             style={styles.input}
+            data-testid="gen-comfy-url"
           />
         </div>
         <div style={styles.row}>
@@ -118,6 +119,7 @@ export function GenerateView() {
             <button
               key={s}
               onClick={() => setScope(s)}
+              data-testid={`gen-scope-${s}`}
               style={{
                 ...styles.scopeBtn,
                 background: scope === s ? '#1e2a42' : 'transparent',
@@ -159,7 +161,7 @@ export function GenerateView() {
           </div>
         )}
 
-        <button onClick={handleGenerate} style={styles.generateBtn}>
+        <button onClick={handleGenerate} style={styles.generateBtn} data-testid="gen-generate-btn">
           Generate
         </button>
       </div>

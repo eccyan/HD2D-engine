@@ -34,11 +34,11 @@ export function ConceptView() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="concept-view">
       <div style={styles.header}>
         <span style={styles.title}>Concept Art</span>
         {manifest.concept.approved && (
-          <span style={styles.approvedBadge}>Approved</span>
+          <span style={styles.approvedBadge} data-testid="concept-approved-badge">Approved</span>
         )}
       </div>
 
@@ -50,6 +50,7 @@ export function ConceptView() {
           rows={4}
           style={styles.textarea}
           placeholder="Describe the character: appearance, gear, personality..."
+          data-testid="concept-description"
         />
 
         <label style={styles.label}>Style Prompt (prepended to all AI generation)</label>
@@ -59,6 +60,7 @@ export function ConceptView() {
           rows={3}
           style={styles.textarea}
           placeholder="pixel art, 128x128, medieval fantasy, low-res..."
+          data-testid="concept-style-prompt"
         />
 
         <label style={styles.label}>Negative Prompt</label>
@@ -68,10 +70,11 @@ export function ConceptView() {
           rows={2}
           style={styles.textarea}
           placeholder="blurry, realistic, 3d render..."
+          data-testid="concept-negative-prompt"
         />
 
         <div style={styles.actions}>
-          <button onClick={() => handleSave()} disabled={saving} style={styles.saveBtn}>
+          <button onClick={() => handleSave()} disabled={saving} style={styles.saveBtn} data-testid="concept-save-btn">
             {saving ? 'Saving...' : 'Save Concept'}
           </button>
           {!manifest.concept.approved && (
@@ -79,6 +82,7 @@ export function ConceptView() {
               onClick={() => handleSave(true)}
               disabled={saving}
               style={styles.approveBtn}
+              data-testid="concept-approve-btn"
             >
               Approve Concept
             </button>

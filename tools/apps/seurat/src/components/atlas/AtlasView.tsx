@@ -24,7 +24,7 @@ export function AtlasView() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="atlas-view">
       <div style={styles.title}>Atlas Assembly</div>
 
       <div style={styles.section}>
@@ -56,6 +56,7 @@ export function AtlasView() {
           onClick={() => handleAssemble(true)}
           disabled={assembling}
           style={styles.validateBtn}
+          data-testid="atlas-validate-btn"
         >
           {assembling ? 'Validating...' : 'Validate Only'}
         </button>
@@ -63,6 +64,7 @@ export function AtlasView() {
           onClick={() => handleAssemble(false)}
           disabled={assembling}
           style={styles.assembleBtn}
+          data-testid="atlas-assemble-btn"
         >
           {assembling ? 'Assembling...' : 'Assemble Atlas'}
         </button>

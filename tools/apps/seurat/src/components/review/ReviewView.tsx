@@ -35,14 +35,15 @@ export function ReviewView() {
   }));
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="review-view">
       <div style={styles.header}>
         <span style={styles.title}>Frame Review</span>
-        <div style={styles.filters}>
+        <div style={styles.filters} data-testid="review-filters">
           {FILTER_OPTIONS.map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setReviewFilter(value)}
+              data-testid={`review-filter-${value}`}
               style={{
                 ...styles.filterBtn,
                 background: reviewFilter === value ? '#1e2a42' : 'transparent',
@@ -55,12 +56,12 @@ export function ReviewView() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
-        <button onClick={batchApproveGenerated} style={styles.batchBtn}>
+        <button onClick={batchApproveGenerated} style={styles.batchBtn} data-testid="review-batch-approve">
           Approve All Generated
         </button>
       </div>
 
-      <div style={styles.grid}>
+      <div style={styles.grid} data-testid="review-grid">
         {filteredAnims.map((anim) => {
           if (anim.frames.length === 0) return null;
           return (

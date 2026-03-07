@@ -38,7 +38,7 @@ export function ManifestView() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="manifest-view">
       <div style={styles.title}>Manifest Editor</div>
 
       {/* Stats */}
@@ -93,14 +93,14 @@ export function ManifestView() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={styles.sectionTitle}>Raw JSON</div>
           {!editing && (
-            <button onClick={() => setEditing(true)} style={styles.editBtn}>Edit</button>
+            <button onClick={() => setEditing(true)} style={styles.editBtn} data-testid="manifest-edit-btn">Edit</button>
           )}
           {editing && (
             <>
-              <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
+              <button onClick={handleSave} disabled={saving} style={styles.saveBtn} data-testid="manifest-save-btn">
                 {saving ? 'Saving...' : 'Save'}
               </button>
-              <button onClick={() => { setEditing(false); setJson(JSON.stringify(manifest, null, 2)); setError(''); }} style={styles.cancelBtn}>
+              <button onClick={() => { setEditing(false); setJson(JSON.stringify(manifest, null, 2)); setError(''); }} style={styles.cancelBtn} data-testid="manifest-cancel-btn">
                 Cancel
               </button>
             </>
@@ -111,6 +111,7 @@ export function ManifestView() {
           value={json}
           onChange={(e) => setJson(e.target.value)}
           readOnly={!editing}
+          data-testid="manifest-json-editor"
           style={{
             ...styles.jsonEditor,
             background: editing ? '#1a1a30' : '#111120',

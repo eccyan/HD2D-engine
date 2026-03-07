@@ -28,7 +28,7 @@ interface Props {
 
 export function FrameCell({ frame, animName, onApprove, onReject, onRegenerate, onClick }: Props) {
   return (
-    <div onClick={onClick} style={{ ...styles.cell, borderColor: STATUS_COLORS[frame.status] }}>
+    <div onClick={onClick} style={{ ...styles.cell, borderColor: STATUS_COLORS[frame.status] }} data-testid={`frame-cell-${animName}-${frame.index}`}>
       <div style={{ ...styles.badge, background: STATUS_COLORS[frame.status] }}>
         {STATUS_LABELS[frame.status]}
       </div>

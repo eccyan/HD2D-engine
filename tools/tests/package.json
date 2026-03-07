@@ -14,6 +14,7 @@
     "test:level-designer:scenario": "node --import tsx/esm --conditions source src/qa-runner.ts --tool level-designer --scenario",
     "test:seurat:scenario": "node --import tsx/esm --conditions source src/qa-runner.ts --tool seurat --scenario",
     "test:seurat:ui": "node --import tsx/esm --conditions source src/seurat-ui.test.ts",
+    "test:seurat:scenario-ui": "node --import tsx/esm --conditions source src/seurat-ui-scenario.test.ts",
     "test:particle-designer:scenario": "node --import tsx/esm --conditions source src/qa-runner.ts --tool particle-designer --scenario",
     "test:audio-composer:scenario": "node --import tsx/esm --conditions source src/qa-runner.ts --tool audio-composer --scenario",
     "test:sfx-designer:scenario": "node --import tsx/esm --conditions source src/qa-runner.ts --tool sfx-designer --scenario",

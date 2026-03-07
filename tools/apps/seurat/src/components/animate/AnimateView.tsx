@@ -23,9 +23,9 @@ export function AnimateView() {
   const clip = manifest.animations.find((a) => a.name === selectedClipName) ?? null;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} data-testid="animate-view">
       {/* Left: clip list */}
-      <div style={styles.clipList}>
+      <div style={styles.clipList} data-testid="animate-clip-list">
         <div style={styles.clipListHeader}>
           <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#666' }}>CLIPS</span>
           {!spriteSheetUrl && (
@@ -38,6 +38,7 @@ export function AnimateView() {
           <button
             key={anim.name}
             onClick={() => selectClip(anim.name)}
+            data-testid={`animate-clip-${anim.name}`}
             style={{
               ...styles.clipBtn,
               background: anim.name === selectedClipName ? '#1e2a42' : 'transparent',
