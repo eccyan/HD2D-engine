@@ -4,7 +4,9 @@ import type {
 } from '@vulkan-game-tools/asset-types';
 import type { AssembleResult } from '../store/types.js';
 
-const BASE = 'http://localhost:9101';
+// In dev mode, Vite proxies /api to the bridge server (avoids CORS).
+// In production, fall back to the bridge URL directly.
+const BASE = '';
 
 export async function fetchCharacters(): Promise<string[]> {
   const res = await fetch(`${BASE}/api/characters`);
