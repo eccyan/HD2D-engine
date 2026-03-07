@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
-import type { LoraConfig } from '../../store/types.js';
 
-type GenerateScope = 'single' | 'row' | 'sheet_row' | 'all_pending';
+
+type GenerateScope = 'single' | 'row' | 'all_pending';
 
 interface Props {
   animName?: string;
@@ -16,7 +16,6 @@ export function GenerateActions({ animName: preselectedAnim }: Props) {
   const generationJobs = useSeuratStore((s) => s.generationJobs);
   const clearCompletedJobs = useSeuratStore((s) => s.clearCompletedJobs);
   const generateFrames = useSeuratStore((s) => s.generateFrames);
-  const generateSheetRow = useSeuratStore((s) => s.generateSheetRow);
   const [scope, setScope] = useState<GenerateScope>(preselectedAnim ? 'row' : 'all_pending');
   const [selectedAnim, setSelectedAnim] = useState<string>(preselectedAnim ?? '');
   const [selectedFrame, setSelectedFrame] = useState(0);
@@ -30,11 +29,7 @@ export function GenerateActions({ animName: preselectedAnim }: Props) {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      if (scope === 'sheet_row') {
-        await generateSheetRow(effectiveAnim);
-      } else {
-        await generateFrames(scope, effectiveAnim, selectedFrame);
-      }
+      await generateFrames(scope, effectiveAnim, selectedFrame);
     } finally {
       setGenerating(false);
     }
@@ -138,26 +133,21 @@ export function GenerateActions({ animName: preselectedAnim }: Props) {
       <div style={styles.section}>
         <div style={styles.subTitle}>Scope</div>
         <Row>
-          {(['single', 'row', 'sheet_row', 'all_pending'] as const).map((s) => (
+          {(['single', 'row', 'all_pending'] as const).map((s) => (
             <button
               key={s}
               onClick={() => setScope(s)}
               style={{
                 ...styles.scopeBtn,
                 background: scope === s ? '#1e2a42' : 'transparent',
-                borderColor: scope === s ? (s === 'sheet_row' ? '#c8a04a' : '#4a8af8') : '#333',
-                color: scope === s ? (s === 'sheet_row' ? '#e8c060' : '#90b8f8') : '#666',
+                borderColor: scope === s ? '#4a8af8' : '#333',
+                color: scope === s ? '#90b8f8' : '#666',
               }}
             >
-              {s === 'single' ? 'Single' : s === 'row' ? 'Row' : s === 'sheet_row' ? 'Sheet' : `All (${pendingCount})`}
+              {s === 'single' ? 'Single' : s === 'row' ? 'Row' : `All (${pendingCount})`}
             </button>
           ))}
         </Row>
-        {scope === 'sheet_row' && (
-          <div style={{ fontSize: 8, color: '#c8a04a', fontFamily: 'monospace' }}>
-            Generates all frames as one wide image, then slices into individual frames.
-          </div>
-        )}
 
         {scope !== 'all_pending' && (
           <Row>

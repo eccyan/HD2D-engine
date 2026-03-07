@@ -57,7 +57,6 @@ export interface SeuratState {
     animName?: string,
     frameIndex?: number,
   ) => Promise<void>;
-  generateSheetRow: (animName: string) => Promise<void>;
 
   // Review
   reviewFilter: ReviewFilter;
@@ -299,211 +298,127 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       }
     }
 
-    // Build list of frames to generate
-    type FrameTask = { animName: string; frameIndex: number };
-    const tasks: FrameTask[] = [];
+    // Import prompt builders
+    const { buildFramePrompt, buildSheetRowPrompt, buildNegativePrompt } = await import('../lib/ai-generate.js');
+    const loras = aiConfig.loras.filter((l) => l.name.trim());
+    const negative = buildNegativePrompt(manifest);
 
     if (scope === 'single' && animName !== undefined && frameIndex !== undefined) {
-      tasks.push({ animName, frameIndex });
-    } else if (scope === 'row' && animName) {
+      // Single frame: generate one image
       const anim = manifest.animations.find((a) => a.name === animName);
-      if (anim) {
-        for (const f of anim.frames) tasks.push({ animName, frameIndex: f.index });
-      }
-    } else {
-      // all_pending
-      for (const anim of manifest.animations) {
-        for (const f of anim.frames) {
-          if (f.status === 'pending') tasks.push({ animName: anim.name, frameIndex: f.index });
-        }
-      }
-    }
+      if (!anim) return;
 
-    if (tasks.length === 0) return;
-
-    // Import prompt builder
-    const { buildFramePrompt, buildNegativePrompt } = await import('../lib/ai-generate.js');
-
-    for (const task of tasks) {
-      const jobId = `${task.animName}_${task.frameIndex}_${Date.now()}`;
-      const anim = manifest.animations.find((a) => a.name === task.animName);
-      if (!anim) continue;
-
-      get().addGenerationJob({
-        id: jobId,
-        animName: task.animName,
-        frameIndex: task.frameIndex,
-        status: 'running',
-      });
+      const jobId = `${animName}_${frameIndex}_${Date.now()}`;
+      get().addGenerationJob({ id: jobId, animName, frameIndex, status: 'running' });
 
       try {
-        const prompt = buildFramePrompt(manifest, anim, task.frameIndex);
-        const negative = buildNegativePrompt(manifest);
+        const prompt = buildFramePrompt(manifest, anim, frameIndex);
         const seed = aiConfig.seed === -1
           ? Math.floor(Math.random() * 2147483647)
-          : aiConfig.seed + task.frameIndex; // offset seed per frame for variety
+          : aiConfig.seed + frameIndex;
 
         let pngBytes: Uint8Array;
-
-        const loras = aiConfig.loras.filter((l) => l.name.trim());
         if (conceptBytes) {
-          // img2img: use concept art as reference (with retry for blank images)
           pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
-            width: manifest.spritesheet.frame_width,
-            height: manifest.spritesheet.frame_height,
-            steps: aiConfig.steps,
-            seed,
-            cfgScale: aiConfig.cfg,
-            samplerName: aiConfig.sampler,
-            negativePrompt: negative,
-            denoise: aiConfig.denoise,
-            loras,
+            width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
+            steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+            negativePrompt: negative, denoise: aiConfig.denoise, loras,
           });
         } else {
-          // txt2img fallback (with retry for blank images)
           pngBytes = await comfy.generateImageWithRetry(prompt, {
-            width: manifest.spritesheet.frame_width,
-            height: manifest.spritesheet.frame_height,
-            steps: aiConfig.steps,
-            seed,
-            cfgScale: aiConfig.cfg,
-            samplerName: aiConfig.sampler,
-            negativePrompt: negative,
-            loras,
+            width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
+            steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+            negativePrompt: negative, loras,
           });
         }
 
-        // Save frame image to bridge
-        await api.saveFrameImage(manifest.character_id, task.animName, task.frameIndex, pngBytes);
-
-        // Update manifest in store
+        await api.saveFrameImage(manifest.character_id, animName, frameIndex, pngBytes);
         const current = get().manifest;
         if (current) {
           const updated = structuredClone(current);
-          const a = updated.animations.find((x) => x.name === task.animName);
-          const f = a?.frames.find((x) => x.index === task.frameIndex);
-          if (f) {
-            f.status = 'generated';
-            f.file = `${task.animName}/${task.animName}_${task.frameIndex}.png`;
-          }
+          const f = updated.animations.find((x) => x.name === animName)?.frames.find((x) => x.index === frameIndex);
+          if (f) { f.status = 'generated'; f.file = `${animName}/${animName}_${frameIndex}.png`; }
           set({ manifest: updated });
         }
-
         get().updateGenerationJob(jobId, { status: 'done' });
       } catch (err) {
-        get().updateGenerationJob(jobId, {
-          status: 'error',
-          error: err instanceof Error ? err.message : String(err),
-        });
+        get().updateGenerationJob(jobId, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+      }
+    } else {
+      // Row or all_pending: generate each animation as a single wide image, then slice
+      const animsToGenerate: string[] = [];
+      if (scope === 'row' && animName) {
+        animsToGenerate.push(animName);
+      } else {
+        // all_pending — collect animations that have pending frames
+        for (const a of manifest.animations) {
+          if (a.frames.some((f) => f.status === 'pending')) animsToGenerate.push(a.name);
+        }
+      }
+
+      for (const an of animsToGenerate) {
+        const anim = manifest.animations.find((a) => a.name === an);
+        if (!anim) continue;
+
+        const jobId = `row_${an}_${Date.now()}`;
+        get().addGenerationJob({ id: jobId, animName: an, frameIndex: -1, status: 'running' });
+
+        try {
+          const prompt = buildSheetRowPrompt(manifest, anim);
+          const seed = aiConfig.seed === -1
+            ? Math.floor(Math.random() * 2147483647)
+            : aiConfig.seed;
+          const frameCount = anim.frames.length;
+          const sheetWidth = manifest.spritesheet.frame_width * frameCount;
+          const sheetHeight = manifest.spritesheet.frame_height;
+
+          let pngBytes: Uint8Array;
+          if (conceptBytes) {
+            pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
+              width: sheetWidth, height: sheetHeight,
+              steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+              negativePrompt: negative, denoise: aiConfig.denoise, loras,
+            });
+          } else {
+            pngBytes = await comfy.generateImageWithRetry(prompt, {
+              width: sheetWidth, height: sheetHeight,
+              steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+              negativePrompt: negative, loras,
+            });
+          }
+
+          // Slice the wide image into individual frames
+          const blob = new Blob([pngBytes as BlobPart], { type: 'image/png' });
+          const bitmap = await createImageBitmap(blob);
+          const fw = manifest.spritesheet.frame_width;
+          const fh = manifest.spritesheet.frame_height;
+
+          for (let i = 0; i < frameCount; i++) {
+            const canvas = new OffscreenCanvas(fw, fh);
+            const ctx = canvas.getContext('2d')!;
+            ctx.drawImage(bitmap, i * fw, 0, fw, fh, 0, 0, fw, fh);
+            const frameBlob = await canvas.convertToBlob({ type: 'image/png' });
+            const frameBuf = await frameBlob.arrayBuffer();
+            const frameBytes = new Uint8Array(frameBuf);
+
+            await api.saveFrameImage(manifest.character_id, an, i, frameBytes);
+            const current = get().manifest;
+            if (current) {
+              const updated = structuredClone(current);
+              const f = updated.animations.find((x) => x.name === an)?.frames.find((x) => x.index === i);
+              if (f) { f.status = 'generated'; f.file = `${an}/${an}_${i}.png`; }
+              set({ manifest: updated });
+            }
+          }
+          bitmap.close();
+          get().updateGenerationJob(jobId, { status: 'done' });
+        } catch (err) {
+          get().updateGenerationJob(jobId, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+        }
       }
     }
 
     // Save final manifest state
-    try { await api.saveManifest(get().manifest!); } catch { /* best effort */ }
-  },
-
-  generateSheetRow: async (animName) => {
-    const { manifest, aiConfig } = get();
-    if (!manifest) return;
-
-    const anim = manifest.animations.find((a) => a.name === animName);
-    if (!anim) return;
-
-    const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-    const hasConceptImage = manifest.concept.reference_images.length > 0;
-
-    let conceptBytes: Uint8Array | null = null;
-    if (hasConceptImage) {
-      try {
-        conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
-      } catch { /* Fall back to txt2img */ }
-    }
-
-    const jobId = `sheet_${animName}_${Date.now()}`;
-    get().addGenerationJob({
-      id: jobId,
-      animName,
-      frameIndex: -1, // indicates sheet row
-      status: 'running',
-    });
-
-    try {
-      const { buildSheetRowPrompt, buildNegativePrompt } = await import('../lib/ai-generate.js');
-      const prompt = buildSheetRowPrompt(manifest, anim);
-      const negative = buildNegativePrompt(manifest);
-      const seed = aiConfig.seed === -1
-        ? Math.floor(Math.random() * 2147483647)
-        : aiConfig.seed;
-      const loras = aiConfig.loras.filter((l) => l.name.trim());
-
-      const frameCount = anim.frames.length;
-      const sheetWidth = manifest.spritesheet.frame_width * frameCount;
-      const sheetHeight = manifest.spritesheet.frame_height;
-
-      let pngBytes: Uint8Array;
-      if (conceptBytes) {
-        pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
-          width: sheetWidth,
-          height: sheetHeight,
-          steps: aiConfig.steps,
-          seed,
-          cfgScale: aiConfig.cfg,
-          samplerName: aiConfig.sampler,
-          negativePrompt: negative,
-          denoise: aiConfig.denoise,
-          loras,
-        });
-      } else {
-        pngBytes = await comfy.generateImageWithRetry(prompt, {
-          width: sheetWidth,
-          height: sheetHeight,
-          steps: aiConfig.steps,
-          seed,
-          cfgScale: aiConfig.cfg,
-          samplerName: aiConfig.sampler,
-          negativePrompt: negative,
-          loras,
-        });
-      }
-
-      // Slice the sheet row into individual frames using OffscreenCanvas
-      const blob = new Blob([pngBytes as BlobPart], { type: 'image/png' });
-      const bitmap = await createImageBitmap(blob);
-      const fw = manifest.spritesheet.frame_width;
-      const fh = manifest.spritesheet.frame_height;
-
-      for (let i = 0; i < frameCount; i++) {
-        const canvas = new OffscreenCanvas(fw, fh);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(bitmap, i * fw, 0, fw, fh, 0, 0, fw, fh);
-        const frameBlob = await canvas.convertToBlob({ type: 'image/png' });
-        const frameBuf = await frameBlob.arrayBuffer();
-        const frameBytes = new Uint8Array(frameBuf);
-
-        await api.saveFrameImage(manifest.character_id, animName, i, frameBytes);
-
-        const current = get().manifest;
-        if (current) {
-          const updated = structuredClone(current);
-          const a = updated.animations.find((x) => x.name === animName);
-          const f = a?.frames.find((x) => x.index === i);
-          if (f) {
-            f.status = 'generated';
-            f.file = `${animName}/${animName}_${i}.png`;
-          }
-          set({ manifest: updated });
-        }
-      }
-
-      bitmap.close();
-      get().updateGenerationJob(jobId, { status: 'done' });
-    } catch (err) {
-      get().updateGenerationJob(jobId, {
-        status: 'error',
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-
     try { await api.saveManifest(get().manifest!); } catch { /* best effort */ }
   },
 
