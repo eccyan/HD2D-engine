@@ -71,8 +71,6 @@ export function PixelActions() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.sectionTitle}>Pixel Art</div>
-
       {disabled && (
         <div style={styles.disabledMsg}>Approve chibi art first to enable pixel art generation.</div>
       )}

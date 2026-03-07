@@ -78,8 +78,6 @@ export function ConceptActions() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.sectionTitle}>Concept Art</div>
-
       <label style={styles.label}>Description</label>
       <textarea
         value={description}

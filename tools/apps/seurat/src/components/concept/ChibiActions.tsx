@@ -71,8 +71,6 @@ export function ChibiActions() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.sectionTitle}>Chibi / Deformed</div>
-
       {disabled && (
         <div style={styles.disabledMsg}>Approve concept art first to enable chibi generation.</div>
       )}

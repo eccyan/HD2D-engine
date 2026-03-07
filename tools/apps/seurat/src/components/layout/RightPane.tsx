@@ -8,6 +8,26 @@ import { AtlasActions } from '../atlas/AtlasActions.js';
 import { GenerateActions } from '../generate/GenerateActions.js';
 import { ReviewActions } from '../review/ReviewActions.js';
 
+function Collapsible({ title, defaultOpen = true, badge, children }: {
+  title: string;
+  defaultOpen?: boolean;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div style={styles.collapsible}>
+      <button onClick={() => setOpen(!open)} style={styles.collapseHeader}>
+        <span style={styles.collapseArrow}>{open ? '▾' : '▸'}</span>
+        <span style={styles.collapseTitle}>{title}</span>
+        {badge && <span style={styles.collapseBadge}>{badge}</span>}
+      </button>
+      {open && <div style={styles.collapseBody}>{children}</div>}
+    </div>
+  );
+}
+
 export function RightPane() {
   const treeSelection = useSeuratStore((s) => s.treeSelection);
 
@@ -23,27 +43,61 @@ function RightContent({ selection }: { selection: ReturnType<typeof useSeuratSto
     case 'manifest':
       return <ManifestJsonEditor />;
     case 'character':
-      return (
-        <>
-          <ConceptActions />
-          <div style={styles.divider} />
-          <ChibiActions />
-          <div style={styles.divider} />
-          <PixelActions />
-          <div style={styles.divider} />
-          <SpriteGenerationSection />
-          <AtlasActions />
-        </>
-      );
+      return <CharacterSections />;
     case 'animation':
       return (
         <>
-          <GenerateActions animName={selection.animName} />
-          <div style={styles.divider} />
-          <ReviewActions animName={selection.animName} />
+          <Collapsible title="Generate" defaultOpen>
+            <GenerateActions animName={selection.animName} />
+          </Collapsible>
+          <Collapsible title="Review" defaultOpen>
+            <ReviewActions animName={selection.animName} />
+          </Collapsible>
         </>
       );
   }
+}
+
+function CharacterSections() {
+  const manifest = useSeuratStore((s) => s.manifest);
+  const conceptApproved = manifest?.concept.approved;
+  const chibiApproved = manifest?.chibi?.approved;
+  const pixelApproved = manifest?.pixel?.approved;
+
+  return (
+    <>
+      <Collapsible
+        title="Concept Art"
+        defaultOpen
+        badge={conceptApproved ? 'approved' : undefined}
+      >
+        <ConceptActions />
+      </Collapsible>
+      <Collapsible
+        title="Chibi / Deformed"
+        defaultOpen={!!conceptApproved && !chibiApproved}
+        badge={chibiApproved ? 'approved' : !conceptApproved ? 'locked' : undefined}
+      >
+        <ChibiActions />
+      </Collapsible>
+      <Collapsible
+        title="Pixel Art"
+        defaultOpen={!!chibiApproved && !pixelApproved}
+        badge={pixelApproved ? 'approved' : !chibiApproved ? 'locked' : undefined}
+      >
+        <PixelActions />
+      </Collapsible>
+      <Collapsible
+        title="Sprite Generation"
+        defaultOpen={false}
+      >
+        <SpriteGenerationSection />
+      </Collapsible>
+      <Collapsible title="Atlas" defaultOpen={false}>
+        <AtlasActions />
+      </Collapsible>
+    </>
+  );
 }
 
 function SpriteGenerationSection() {
@@ -60,14 +114,12 @@ function SpriteGenerationSection() {
     0,
   );
 
-  // Gating: require pixel approval, or backwards compat (concept approved + no chibi)
   const pixelApproved = manifest.pixel?.approved === true;
   const backwardsCompat = manifest.concept.approved && manifest.chibi === undefined;
   const enabled = pixelApproved || backwardsCompat;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={styles.sectionTitle}>Sprite Generation</div>
       {!enabled && (
         <div style={styles.disabledMsg}>
           Complete the pipeline (concept → chibi → pixel) and approve pixel art to enable frame generation.
@@ -118,19 +170,48 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 12,
     display: 'flex',
     flexDirection: 'column',
-    gap: 8,
+    gap: 4,
   },
-  divider: {
-    height: 1,
-    background: '#2a2a3a',
-    margin: '8px 0',
+  collapsible: {
+    borderRadius: 6,
+    border: '1px solid #2a2a3a',
+    overflow: 'hidden',
   },
-  sectionTitle: {
+  collapseHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    width: '100%',
+    padding: '8px 10px',
+    background: '#161628',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  collapseArrow: {
     fontFamily: 'monospace',
-    fontSize: 12,
+    fontSize: 10,
+    color: '#666',
+    width: 12,
+    flexShrink: 0,
+  },
+  collapseTitle: {
+    fontFamily: 'monospace',
+    fontSize: 11,
     color: '#aaa',
     fontWeight: 600,
-    marginBottom: 4,
+    flex: 1,
+  },
+  collapseBadge: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    padding: '1px 6px',
+    borderRadius: 3,
+    border: '1px solid #44aa44',
+    color: '#70d870',
+  },
+  collapseBody: {
+    padding: '8px 10px',
   },
   disabledMsg: {
     fontFamily: 'monospace',
