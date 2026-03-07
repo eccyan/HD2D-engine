@@ -21,6 +21,7 @@ export interface LoraConfig {
 
 export interface AIConfig {
   comfyUrl: string;
+  checkpoint: string;
   steps: number;
   seed: number;
   cfg: number;
@@ -40,12 +41,13 @@ export interface AIConfig {
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
   comfyUrl: 'http://127.0.0.1:8188',
+  checkpoint: 'v1-5-pruned-emaonly.safetensors',
   steps: 20,
-  seed: -1,
-  cfg: 7,
+  seed: 42,
+  cfg: 2,
   sampler: 'euler',
-  denoise: 0.55,
-  loras: [{ name: 'PixelArtRedmond15V-PixelArt-PIXARFK', weight: 0.8 }],
+  denoise: 0.1,
+  loras: [{ name: 'PixelArtRedmond15V-PixelArt-PIXARFK', weight: 0.4 }],
   controlNetModel: 'control_v11f1e_sd15_tile',
   controlStrength: 0.7,
   removeBackground: false,
@@ -54,7 +56,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   ipAdapterWeight: 0.6,
   ipAdapterPreset: 'PLUS (high strength)',
   openPoseModel: 'control_v11p_sd15_openpose',
-  openPoseStrength: 0.8,
+  openPoseStrength: 0.6,
 };
 
 export interface GenerationJob {

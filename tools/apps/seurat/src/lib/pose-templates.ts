@@ -108,26 +108,90 @@ const RUN_DOWN: Pose[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Derive other directions by transforming the "down" poses
+// Hand-crafted side-view poses (facing right)
+// In side view: "far" limbs (left arm/leg from viewer's perspective) are
+// hidden or overlap with near limbs. Nose is offset to show facing direction.
 // ---------------------------------------------------------------------------
 
-/** Mirror X for left/right facing (swap left↔right body sides) */
+/** Side-view idle facing right: character stands in profile */
+const IDLE_RIGHT: Pose[] = [
+  // Frame 0 — neutral standing
+  [[0.58, 0.15], [0.50, 0.24], [0.46, 0.27], [0.42, 0.40], [0.40, 0.50],
+   [0.54, 0.27], [0.56, 0.40], [0.58, 0.50], [0.50, 0.50],
+   [0.48, 0.51], [0.48, 0.67], [0.48, 0.82],
+   [0.52, 0.51], [0.52, 0.67], [0.52, 0.82]],
+  // Frame 1 — slight exhale
+  [[0.58, 0.15], [0.50, 0.24], [0.46, 0.28], [0.42, 0.41], [0.40, 0.52],
+   [0.54, 0.28], [0.56, 0.41], [0.58, 0.52], [0.50, 0.51],
+   [0.48, 0.52], [0.48, 0.67], [0.48, 0.82],
+   [0.52, 0.52], [0.52, 0.67], [0.52, 0.82]],
+  // Frame 2 — same as 0
+  [[0.58, 0.15], [0.50, 0.24], [0.46, 0.27], [0.42, 0.40], [0.40, 0.50],
+   [0.54, 0.27], [0.56, 0.40], [0.58, 0.50], [0.50, 0.50],
+   [0.48, 0.51], [0.48, 0.67], [0.48, 0.82],
+   [0.52, 0.51], [0.52, 0.67], [0.52, 0.82]],
+  // Frame 3 — slight inhale
+  [[0.58, 0.14], [0.50, 0.23], [0.46, 0.26], [0.42, 0.39], [0.40, 0.49],
+   [0.54, 0.26], [0.56, 0.39], [0.58, 0.49], [0.50, 0.50],
+   [0.48, 0.51], [0.48, 0.67], [0.48, 0.82],
+   [0.52, 0.51], [0.52, 0.67], [0.52, 0.82]],
+];
+
+/** Side-view walk facing right: arms and legs swing forward/back */
+const WALK_RIGHT: Pose[] = [
+  // Frame 0 — right leg forward, left arm forward
+  [[0.58, 0.15], [0.50, 0.24], [0.48, 0.27], [0.40, 0.36], [0.36, 0.44],
+   [0.52, 0.27], [0.60, 0.36], [0.64, 0.44], [0.50, 0.50],
+   [0.50, 0.51], [0.56, 0.65], [0.60, 0.80],
+   [0.50, 0.51], [0.44, 0.66], [0.40, 0.80]],
+  // Frame 1 — passing (legs together)
+  [[0.58, 0.15], [0.50, 0.24], [0.48, 0.27], [0.46, 0.40], [0.48, 0.50],
+   [0.52, 0.27], [0.54, 0.40], [0.52, 0.50], [0.50, 0.50],
+   [0.50, 0.51], [0.50, 0.67], [0.50, 0.82],
+   [0.50, 0.51], [0.50, 0.67], [0.50, 0.82]],
+  // Frame 2 — left leg forward, right arm forward
+  [[0.58, 0.15], [0.50, 0.24], [0.48, 0.27], [0.60, 0.36], [0.64, 0.44],
+   [0.52, 0.27], [0.40, 0.36], [0.36, 0.44], [0.50, 0.50],
+   [0.50, 0.51], [0.44, 0.65], [0.40, 0.80],
+   [0.50, 0.51], [0.56, 0.66], [0.60, 0.80]],
+  // Frame 3 — passing (other side)
+  [[0.58, 0.15], [0.50, 0.24], [0.48, 0.27], [0.54, 0.40], [0.52, 0.50],
+   [0.52, 0.27], [0.46, 0.40], [0.48, 0.50], [0.50, 0.50],
+   [0.50, 0.51], [0.50, 0.67], [0.50, 0.82],
+   [0.50, 0.51], [0.50, 0.67], [0.50, 0.82]],
+];
+
+/** Side-view run facing right: exaggerated stride, arms pumping */
+const RUN_RIGHT: Pose[] = [
+  // Frame 0 — right leg far forward, left arm forward
+  [[0.58, 0.16], [0.50, 0.25], [0.48, 0.28], [0.38, 0.34], [0.32, 0.40],
+   [0.52, 0.28], [0.62, 0.34], [0.68, 0.40], [0.50, 0.50],
+   [0.50, 0.51], [0.60, 0.63], [0.66, 0.78],
+   [0.50, 0.51], [0.42, 0.63], [0.36, 0.74]],
+  // Frame 1 — contact, body lower
+  [[0.58, 0.18], [0.50, 0.27], [0.48, 0.30], [0.42, 0.40], [0.40, 0.48],
+   [0.52, 0.30], [0.58, 0.40], [0.60, 0.48], [0.50, 0.52],
+   [0.50, 0.53], [0.56, 0.66], [0.56, 0.82],
+   [0.50, 0.53], [0.46, 0.66], [0.44, 0.78]],
+  // Frame 2 — left leg forward, right arm forward
+  [[0.58, 0.16], [0.50, 0.25], [0.48, 0.28], [0.62, 0.34], [0.68, 0.40],
+   [0.52, 0.28], [0.38, 0.34], [0.32, 0.40], [0.50, 0.50],
+   [0.50, 0.51], [0.42, 0.63], [0.36, 0.78],
+   [0.50, 0.51], [0.60, 0.63], [0.66, 0.74]],
+  // Frame 3 — contact other side
+  [[0.58, 0.18], [0.50, 0.27], [0.48, 0.30], [0.58, 0.40], [0.60, 0.48],
+   [0.52, 0.30], [0.42, 0.40], [0.40, 0.48], [0.50, 0.52],
+   [0.50, 0.53], [0.46, 0.66], [0.44, 0.82],
+   [0.50, 0.53], [0.56, 0.66], [0.56, 0.78]],
+];
+
+// ---------------------------------------------------------------------------
+// Derive other directions from base poses
+// ---------------------------------------------------------------------------
+
+/** Mirror X for left facing (flip right-facing poses) */
 function mirrorX(pose: Pose): Pose {
   return pose.map((kp) => (kp ? [1 - kp[0], kp[1]] : null));
-}
-
-/** Swap left/right body parts (indices 2-4 ↔ 5-7, 9-11 ↔ 12-14) */
-function swapSides(pose: Pose): Pose {
-  const p = [...pose];
-  // Swap arms
-  [p[2], p[5]] = [p[5], p[2]];
-  [p[3], p[6]] = [p[6], p[3]];
-  [p[4], p[7]] = [p[7], p[4]];
-  // Swap legs
-  [p[9], p[12]] = [p[12], p[9]];
-  [p[10], p[13]] = [p[13], p[10]];
-  [p[11], p[14]] = [p[14], p[11]];
-  return p;
 }
 
 /** For "up" (back-facing): hide the nose, keep body same shape */
@@ -137,34 +201,21 @@ function toUp(pose: Pose): Pose {
   return p;
 }
 
-/** For "right" facing: compress X range, shift body right */
-function toRight(pose: Pose): Pose {
-  return pose.map((kp) => {
-    if (!kp) return null;
-    // Compress to side view: narrow X spread, shift slightly
-    const cx = 0.5;
-    const nx = cx + (kp[0] - cx) * 0.3 + 0.05;
-    return [nx, kp[1]];
-  });
-}
-
-/** For "left" facing: mirror of right */
-function toLeft(pose: Pose): Pose {
-  return mirrorX(toRight(pose));
-}
-
-function derivePoses(downPoses: Pose[]): Record<string, Pose[]> {
+function buildDirections(
+  downPoses: Pose[],
+  rightPoses: Pose[],
+): Record<string, Pose[]> {
   return {
     down: downPoses,
     up: downPoses.map(toUp),
-    right: downPoses.map(toRight),
-    left: downPoses.map(toLeft),
+    right: rightPoses,
+    left: rightPoses.map(mirrorX),
   };
 }
 
-const IDLE_POSES = derivePoses(IDLE_DOWN);
-const WALK_POSES = derivePoses(WALK_DOWN);
-const RUN_POSES = derivePoses(RUN_DOWN);
+const IDLE_POSES = buildDirections(IDLE_DOWN, IDLE_RIGHT);
+const WALK_POSES = buildDirections(WALK_DOWN, WALK_RIGHT);
+const RUN_POSES = buildDirections(RUN_DOWN, RUN_RIGHT);
 
 const POSE_MAP: Record<string, Record<string, Pose[]>> = {
   idle: IDLE_POSES,

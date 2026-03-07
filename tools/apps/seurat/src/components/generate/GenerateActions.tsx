@@ -42,6 +42,10 @@ export function GenerateActions({ animName }: Props) {
           <input value={aiConfig.comfyUrl} onChange={(e) => setAIConfig({ comfyUrl: e.target.value })} style={styles.input} />
         </Row>
         <Row>
+          <label style={styles.label}>Ckpt</label>
+          <input value={aiConfig.checkpoint} onChange={(e) => setAIConfig({ checkpoint: e.target.value })} style={styles.input} placeholder="v1-5-pruned-emaonly.safetensors" />
+        </Row>
+        <Row>
           <label style={styles.label}>Steps</label>
           <input type="number" value={aiConfig.steps} onChange={(e) => setAIConfig({ steps: parseInt(e.target.value) || 20 })} style={{ ...styles.input, width: 50 }} />
           <label style={styles.label}>CFG</label>

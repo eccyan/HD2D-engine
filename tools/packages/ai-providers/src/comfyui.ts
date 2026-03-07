@@ -62,6 +62,7 @@ interface WorkflowOptions {
   cfg: number;
   samplerName: string;
   loras: LoraEntry[];
+  checkpoint?: string;
   removeBackground?: boolean;
   remBgNodeType?: string;
 }
@@ -100,7 +101,7 @@ function buildTxt2ImgWorkflow(
     "4": {
       class_type: "CheckpointLoaderSimple",
       inputs: {
-        ckpt_name: "v1-5-pruned-emaonly.safetensors",
+        ckpt_name: opts.checkpoint ?? "v1-5-pruned-emaonly.safetensors",
       },
     },
     "5": {
@@ -204,7 +205,7 @@ function buildImg2ImgWorkflow(
     "4": {
       class_type: "CheckpointLoaderSimple",
       inputs: {
-        ckpt_name: "v1-5-pruned-emaonly.safetensors",
+        ckpt_name: opts.checkpoint ?? "v1-5-pruned-emaonly.safetensors",
       },
     },
     "10": {
@@ -319,7 +320,7 @@ function buildControlNetWorkflow(
     "4": {
       class_type: "CheckpointLoaderSimple",
       inputs: {
-        ckpt_name: "v1-5-pruned-emaonly.safetensors",
+        ckpt_name: opts.checkpoint ?? "v1-5-pruned-emaonly.safetensors",
       },
     },
     // Load the reference image for ControlNet conditioning
@@ -451,6 +452,10 @@ interface IPAdapterWorkflowOptions extends WorkflowOptions {
   openPoseModel: string;
   /** OpenPose ControlNet strength. */
   openPoseStrength: number;
+  /** Final output width (downscale from generation resolution). */
+  outputWidth?: number;
+  /** Final output height (downscale from generation resolution). */
+  outputHeight?: number;
 }
 
 function buildIPAdapterPoseWorkflow(
@@ -461,7 +466,7 @@ function buildIPAdapterPoseWorkflow(
     "4": {
       class_type: "CheckpointLoaderSimple",
       inputs: {
-        ckpt_name: "v1-5-pruned-emaonly.safetensors",
+        ckpt_name: opts.checkpoint ?? "v1-5-pruned-emaonly.safetensors",
       },
     },
     // Load concept image for IP-Adapter
@@ -607,6 +612,25 @@ function buildIPAdapterPoseWorkflow(
   }
 
   injectRemBGNodes(nodes, opts);
+
+  // Downscale from generation resolution to final sprite size
+  if (opts.outputWidth && opts.outputHeight &&
+      (opts.outputWidth !== opts.width || opts.outputHeight !== opts.height)) {
+    const saveInputs = nodes["9"].inputs as Record<string, unknown>;
+    const currentSource = saveInputs.images;
+    nodes["50"] = {
+      class_type: "ImageScale",
+      inputs: {
+        upscale_method: "nearest-exact",
+        width: opts.outputWidth,
+        height: opts.outputHeight,
+        crop: "disabled",
+        image: currentSource,
+      },
+    };
+    saveInputs.images = ["50", 0];
+  }
+
   return nodes;
 }
 
@@ -656,6 +680,7 @@ export class ComfyUIClient implements ImageProvider {
       cfg: opts?.cfgScale ?? 7,
       samplerName: opts?.samplerName ?? "euler",
       loras: opts?.loras ?? [],
+      checkpoint: opts?.checkpoint,
       removeBackground: opts?.removeBackground,
       remBgNodeType: opts?.remBgNodeType,
     });
@@ -725,6 +750,7 @@ export class ComfyUIClient implements ImageProvider {
       cfg: opts?.cfgScale ?? 7,
       samplerName: opts?.samplerName ?? "euler",
       loras: opts?.loras ?? [],
+      checkpoint: opts?.checkpoint,
       imageName,
       denoise: opts?.denoise ?? 0.4,
       removeBackground: opts?.removeBackground,
@@ -930,6 +956,7 @@ export class ComfyUIClient implements ImageProvider {
       cfg: opts.cfgScale ?? 7,
       samplerName: opts.samplerName ?? "euler",
       loras: opts.loras ?? [],
+      checkpoint: opts.checkpoint,
       imageName,
       denoise: opts.denoise ?? 0.75,
       controlNetModel,
@@ -1034,6 +1061,7 @@ export class ComfyUIClient implements ImageProvider {
       cfg: opts.cfgScale ?? 7,
       samplerName: opts.samplerName ?? "euler",
       loras: opts.loras ?? [],
+      checkpoint: opts.checkpoint,
       conceptImageName,
       poseImageName,
       denoise: opts.denoise ?? 0.75,
@@ -1043,6 +1071,8 @@ export class ComfyUIClient implements ImageProvider {
       openPoseStrength: opts.openPoseStrength ?? 0.8,
       removeBackground: opts.removeBackground,
       remBgNodeType: opts.remBgNodeType,
+      outputWidth: opts.outputWidth,
+      outputHeight: opts.outputHeight,
     });
 
     const submitBody: PromptRequest = { prompt: workflow };

@@ -6,6 +6,7 @@ import { FramePreviewCanvas } from './FramePreviewCanvas.js';
 import { ClipTimeline } from './ClipTimeline.js';
 import { FrameCell } from '../review/FrameCell.js';
 import { FrameDetailModal } from '../review/FrameDetailModal.js';
+import { PosePreview } from './PosePreview.js';
 
 interface Props {
   animName: string;
@@ -93,6 +94,11 @@ export function AnimationMainView({ animName }: Props) {
             />
           ))}
         </div>
+      </div>
+
+      {/* Pose skeleton preview */}
+      <div style={{ padding: '0 12px 12px' }}>
+        <PosePreview animName={animName} frameCount={clip.frames.length} />
       </div>
 
       {detailFrame && (

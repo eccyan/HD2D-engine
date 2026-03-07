@@ -43,7 +43,7 @@ export interface SeuratState {
   conceptImageUrl: string | null;
   conceptGenerating: boolean;
   conceptError: string | null;
-  generateConceptArt: () => Promise<void>;
+  generateConceptArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string }) => Promise<void>;
   uploadConceptImage: (file: File) => Promise<void>;
   loadConceptImage: () => void;
 
@@ -77,6 +77,12 @@ export interface SeuratState {
   currentTime: number;
   setCurrentTime: (t: number) => void;
   updateFrameDuration: (anim: string, frame: number, duration: number) => void;
+
+  // Pose editing
+  poseOverrides: Record<string, ([number, number] | null)[]>;
+  setPoseOverride: (animName: string, frameIndex: number, pose: ([number, number] | null)[]) => void;
+  clearPoseOverride: (animName: string, frameIndex: number) => void;
+  clearAllPoseOverrides: (animName: string) => void;
 
   // Atlas
   assemblyResult: AssembleResult | null;
@@ -161,7 +167,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   conceptGenerating: false,
   conceptError: null,
 
-  generateConceptArt: async () => {
+  generateConceptArt: async (overrides) => {
     const { manifest, aiConfig } = get();
     if (!manifest) return;
 
@@ -179,29 +185,36 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       const prompt = [
         concept.style_prompt,
         concept.description,
-        'full body character portrait',
-        'front view',
-        'standing pose',
-        `${spritesheet.frame_width * 4}x${spritesheet.frame_height * 4}`,
-        'centered, transparent background',
       ].filter(Boolean).join(', ');
 
       const negative = concept.negative_prompt
-        ? `${concept.negative_prompt}, watermark, text, signature, cropped, partial`
-        : 'blurry, realistic, 3d render, watermark, text, signature, cropped, partial';
+        ? `${concept.negative_prompt}, watermark, text, signature, cropped, partial body`
+        : 'blurry, watermark, text, signature, cropped, partial body';
 
-      const seed = aiConfig.seed === -1 ? Math.floor(Math.random() * 2147483647) : aiConfig.seed;
+      const steps = overrides?.steps ?? aiConfig.steps;
+      const cfg = overrides?.cfg ?? aiConfig.cfg;
+      const sampler = overrides?.sampler ?? aiConfig.sampler;
+      const rawSeed = overrides?.seed ?? aiConfig.seed;
+      const seed = rawSeed === -1 ? Math.floor(Math.random() * 2147483647) : rawSeed;
+      const loras = overrides?.loras !== undefined
+        ? overrides.loras.filter((l) => l.name.trim())
+        : aiConfig.loras.filter((l) => l.name.trim());
 
-      const loras = aiConfig.loras.filter((l) => l.name.trim());
+      console.log('[Seurat] Concept prompt:', prompt);
+      console.log('[Seurat] Concept negative:', negative);
+      console.log('[Seurat] Concept settings:', { steps, cfg, sampler, seed, loras: loras.map(l => `${l.name}:${l.weight}`) });
+      const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
+      console.log('[Seurat] Concept checkpoint:', checkpoint);
       const pngBytes = await comfy.generateImageWithRetry(
         prompt,
         {
           width: 512,
           height: 512,
-          steps: aiConfig.steps,
+          steps,
           seed,
-          cfgScale: aiConfig.cfg,
-          samplerName: aiConfig.sampler,
+          cfgScale: cfg,
+          samplerName: sampler,
+          checkpoint,
           negativePrompt: negative,
           loras,
           removeBackground: aiConfig.removeBackground,
@@ -313,7 +326,16 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const { buildFramePrompt, buildSheetRowPrompt, buildNegativePrompt } = await import('../lib/ai-generate.js');
     const { getPose, renderPoseToPng, getAnimationPoses, renderPoseStripToPng } = await import('../lib/pose-templates.js');
     const loras = aiConfig.loras.filter((l) => l.name.trim());
-    const negative = buildNegativePrompt(manifest);
+    let negative = buildNegativePrompt(manifest);
+    // When IP-Adapter is active: skip LoRAs (conflict with IP-Adapter style),
+    // cap CFG, force denoise=1.0 (EmptyLatentImage), add anti-saturation terms
+    const ipaActive = aiConfig.useIPAdapter;
+    const ipaCfg = ipaActive ? Math.min(aiConfig.cfg, 5) : aiConfig.cfg;
+    const ipaDenoise = 1.0;
+    const ipaLoras = loras;
+    if (ipaActive) {
+      negative += ', oversaturated, neon, vibrant colors, high contrast';
+    }
 
     if (scope === 'single' && animName !== undefined && frameIndex !== undefined) {
       // Single frame: generate one image
@@ -331,28 +353,35 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           : aiConfig.seed + frameIndex;
 
         let pngBytes: Uint8Array;
-        const pose = aiConfig.useIPAdapter ? getPose(animName, frameIndex) : null;
+        const pose = aiConfig.useIPAdapter
+          ? (get().poseOverrides[`${animName}:${frameIndex}`] ?? getPose(animName, frameIndex))
+          : null;
 
         if (aiConfig.useIPAdapter && conceptBytes && pose) {
-          // IP-Adapter + OpenPose mode
-          console.log('[Seurat] Generating single frame via IP-Adapter + OpenPose...');
-          const poseBytes = await renderPoseToPng(pose, manifest.spritesheet.frame_width, manifest.spritesheet.frame_height);
+          // IP-Adapter + OpenPose mode — generate at 512x512, downscale to frame size
+          const genSize = 512;
+          console.log(`[Seurat] Generating single frame via IP-Adapter + OpenPose (${genSize}x${genSize} → ${manifest.spritesheet.frame_width}x${manifest.spritesheet.frame_height})...`);
+          const poseBytes = await renderPoseToPng(pose, genSize, genSize);
           pngBytes = await comfy.generateIPAdapterWithRetry(prompt, conceptBytes, poseBytes, {
-            width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
-            steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
-            negativePrompt: negative, denoise: aiConfig.denoise, loras,
+            width: genSize, height: genSize,
+            steps: aiConfig.steps, seed, cfgScale: ipaCfg, samplerName: aiConfig.sampler,
+            checkpoint: aiConfig.checkpoint,
+            negativePrompt: negative, denoise: ipaDenoise, loras: ipaLoras,
             ipAdapterWeight: aiConfig.ipAdapterWeight,
             ipAdapterPreset: aiConfig.ipAdapterPreset,
             openPoseModel: aiConfig.openPoseModel,
             openPoseStrength: aiConfig.openPoseStrength,
             removeBackground: aiConfig.removeBackground,
             remBgNodeType: aiConfig.remBgNodeType,
+            outputWidth: manifest.spritesheet.frame_width,
+            outputHeight: manifest.spritesheet.frame_height,
           });
         } else if (conceptBytes) {
           console.log('[Seurat] Generating single frame via img2img...');
           pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
             width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
             steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+            checkpoint: aiConfig.checkpoint,
             negativePrompt: negative, denoise: aiConfig.denoise, loras,
             removeBackground: aiConfig.removeBackground,
             remBgNodeType: aiConfig.remBgNodeType,
@@ -362,6 +391,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           pngBytes = await comfy.generateImageWithRetry(prompt, {
             width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
             steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+            checkpoint: aiConfig.checkpoint,
             negativePrompt: negative, loras,
             removeBackground: aiConfig.removeBackground,
             remBgNodeType: aiConfig.remBgNodeType,
@@ -410,29 +440,36 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             ? Math.floor(Math.random() * 2147483647)
             : aiConfig.seed;
 
-          // Check if IP-Adapter per-frame mode applies
-          const animPoses = aiConfig.useIPAdapter ? getAnimationPoses(an, frameCount) : null;
+          // Check if IP-Adapter per-frame mode applies (with pose overrides)
+          const overrides = get().poseOverrides;
+          const animPoses = aiConfig.useIPAdapter ? getAnimationPoses(an, frameCount)?.map(
+            (p, i) => overrides[`${an}:${i}`] ?? p
+          ) ?? null : null;
 
           if (aiConfig.useIPAdapter && conceptBytes && animPoses) {
-            // IP-Adapter + OpenPose: generate each frame individually with its pose
-            console.log(`[Seurat] Row "${an}": IP-Adapter + OpenPose mode, ${frameCount} frames...`);
+            // IP-Adapter + OpenPose: generate at 512x512 per-frame, downscale to sprite size
+            const genSize = 512;
+            console.log(`[Seurat] Row "${an}": IP-Adapter + OpenPose mode, ${frameCount} frames (${genSize}x${genSize} → ${fw}x${fh})...`);
 
             for (let i = 0; i < frameCount; i++) {
               const framePrompt = buildFramePrompt(manifest, anim, i);
               const frameSeed = seed + i;
-              const poseBytes = await renderPoseToPng(animPoses[i], fw, fh);
+              const poseBytes = await renderPoseToPng(animPoses[i], genSize, genSize);
               console.log(`[Seurat] Row "${an}" frame ${i}: generating via IP-Adapter...`);
 
               const frameBytes = await comfy.generateIPAdapterWithRetry(framePrompt, conceptBytes, poseBytes, {
-                width: fw, height: fh,
-                steps: aiConfig.steps, seed: frameSeed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
-                negativePrompt: negative, denoise: aiConfig.denoise, loras,
+                width: genSize, height: genSize,
+                steps: aiConfig.steps, seed: frameSeed, cfgScale: ipaCfg, samplerName: aiConfig.sampler,
+                checkpoint: aiConfig.checkpoint,
+                negativePrompt: negative, denoise: ipaDenoise, loras: ipaLoras,
                 ipAdapterWeight: aiConfig.ipAdapterWeight,
                 ipAdapterPreset: aiConfig.ipAdapterPreset,
                 openPoseModel: aiConfig.openPoseModel,
                 openPoseStrength: aiConfig.openPoseStrength,
                 removeBackground: aiConfig.removeBackground,
                 remBgNodeType: aiConfig.remBgNodeType,
+                outputWidth: fw,
+                outputHeight: fh,
               });
 
               await api.saveFrameImage(manifest.character_id, an, i, frameBytes);
@@ -460,6 +497,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
               pngBytes = await comfy.generateControlNetWithRetry(prompt, tiledBytes, {
                 width: sheetWidth, height: sheetHeight,
                 steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+                checkpoint: aiConfig.checkpoint,
                 negativePrompt: negative, denoise: aiConfig.denoise, loras,
                 controlNetModel: aiConfig.controlNetModel,
                 controlStrength: aiConfig.controlStrength,
@@ -472,6 +510,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
               pngBytes = await comfy.generateImg2ImgWithRetry(prompt, tiledBytes, {
                 width: sheetWidth, height: sheetHeight,
                 steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+                checkpoint: aiConfig.checkpoint,
                 negativePrompt: negative, denoise: aiConfig.denoise, loras,
                 removeBackground: aiConfig.removeBackground,
                 remBgNodeType: aiConfig.remBgNodeType,
@@ -481,6 +520,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
               pngBytes = await comfy.generateImageWithRetry(prompt, {
                 width: sheetWidth, height: sheetHeight,
                 steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+                checkpoint: aiConfig.checkpoint,
                 negativePrompt: negative, loras,
                 removeBackground: aiConfig.removeBackground,
                 remBgNodeType: aiConfig.remBgNodeType,
@@ -615,6 +655,26 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const frame = anim?.frames.find((f) => f.index === frameIndex);
     if (frame) frame.duration = duration;
     set({ manifest: updated });
+  },
+
+  // Pose editing
+  poseOverrides: {},
+  setPoseOverride: (animName, frameIndex, pose) => {
+    const key = `${animName}:${frameIndex}`;
+    set({ poseOverrides: { ...get().poseOverrides, [key]: pose } });
+  },
+  clearPoseOverride: (animName, frameIndex) => {
+    const key = `${animName}:${frameIndex}`;
+    const overrides = { ...get().poseOverrides };
+    delete overrides[key];
+    set({ poseOverrides: overrides });
+  },
+  clearAllPoseOverrides: (animName) => {
+    const overrides = { ...get().poseOverrides };
+    for (const key of Object.keys(overrides)) {
+      if (key.startsWith(`${animName}:`)) delete overrides[key];
+    }
+    set({ poseOverrides: overrides });
   },
 
   // Atlas

@@ -25,6 +25,8 @@ export interface ImageGenerateOptions {
   width?: number;
   /** Output image height in pixels. */
   height?: number;
+  /** Checkpoint model filename (e.g. "v1-5-pruned-emaonly.safetensors"). */
+  checkpoint?: string;
   /** Number of diffusion steps. Higher = better quality but slower. */
   steps?: number;
   /** Random seed for reproducibility. */
@@ -82,6 +84,10 @@ export interface IPAdapterOptions extends ImageGenerateOptions {
   openPoseModel?: string;
   /** OpenPose ControlNet strength. Default 0.8. */
   openPoseStrength?: number;
+  /** Final output width — downscale from generation resolution. */
+  outputWidth?: number;
+  /** Final output height — downscale from generation resolution. */
+  outputHeight?: number;
 }
 
 /**

@@ -1,10 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { ConceptArt } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
+import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
 
 export function ConceptActions() {
   const manifest = useSeuratStore((s) => s.manifest);
   const saveConcept = useSeuratStore((s) => s.saveConcept);
+  const aiConfig = useSeuratStore((s) => s.aiConfig);
   const conceptGenerating = useSeuratStore((s) => s.conceptGenerating);
   const conceptError = useSeuratStore((s) => s.conceptError);
   const generateConceptArt = useSeuratStore((s) => s.generateConceptArt);
@@ -19,6 +21,19 @@ export function ConceptActions() {
   const [stylePrompt, setStylePrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Concept-specific generation settings (independent from sprite animation settings)
+  const [conceptSteps, setConceptSteps] = useState(20);
+  const [conceptCfg, setConceptCfg] = useState(10);
+  const [conceptSampler, setConceptSampler] = useState('euler');
+  const [conceptSeed, setConceptSeed] = useState(-1);
+  const [conceptCheckpoint, setConceptCheckpoint] = useState('');
+  const [conceptLoras, setConceptLoras] = useState<{ name: string; weight: number }[]>([]);
+
+  // Sync ComfyUI URL and LoRA from main aiConfig but keep concept-specific cfg/steps
+  useEffect(() => {
+    setConceptSampler(aiConfig.sampler);
+  }, [aiConfig.sampler]);
 
   useEffect(() => {
     if (!manifest) return;
@@ -55,7 +70,11 @@ export function ConceptActions() {
       negative_prompt: negativePrompt,
     };
     await saveConcept(concept);
-    await generateConceptArt();
+    await generateConceptArt({
+      steps: conceptSteps, cfg: conceptCfg, sampler: conceptSampler, seed: conceptSeed,
+      loras: conceptLoras,
+      checkpoint: conceptCheckpoint || undefined,
+    });
   };
 
   return (
@@ -101,6 +120,85 @@ export function ConceptActions() {
       </div>
 
       <div style={styles.divider} />
+
+      {/* Concept generation settings */}
+      <div style={styles.settingsSection}>
+        <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#777', fontWeight: 600, marginBottom: 2 }}>
+          ComfyUI Settings (Concept)
+        </div>
+        <Row>
+          <label style={styles.settingLabel}>Ckpt</label>
+          <input
+            value={conceptCheckpoint}
+            onChange={(e) => setConceptCheckpoint(e.target.value)}
+            style={{ ...styles.settingInput, flex: 1 }}
+            placeholder={aiConfig.checkpoint || 'v1-5-pruned-emaonly.safetensors'}
+          />
+        </Row>
+        <Row>
+          <label style={styles.settingLabel}>Steps</label>
+          <input type="number" value={conceptSteps} onChange={(e) => setConceptSteps(parseInt(e.target.value) || 20)} style={{ ...styles.settingInput, width: 50 }} />
+          <label style={styles.settingLabel}>CFG</label>
+          <input type="number" value={conceptCfg} onChange={(e) => setConceptCfg(parseFloat(e.target.value) || 7)} style={{ ...styles.settingInput, width: 50 }} step={0.5} />
+        </Row>
+        <Row>
+          <label style={styles.settingLabel}>Seed</label>
+          <input type="number" value={conceptSeed} onChange={(e) => setConceptSeed(parseInt(e.target.value))} style={{ ...styles.settingInput, width: 80 }} />
+          <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>-1=rng</span>
+        </Row>
+        <Row>
+          <label style={styles.settingLabel}>Sampler</label>
+          <select value={conceptSampler} onChange={(e) => setConceptSampler(e.target.value)} style={styles.settingSelect}>
+            {SAMPLER_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Row>
+        {/* LoRA */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#777', fontWeight: 600 }}>LoRA</span>
+          <button
+            onClick={() => setConceptLoras([...conceptLoras, { name: '', weight: 0.8 }])}
+            style={styles.miniBtn}
+          >
+            +
+          </button>
+          {conceptLoras.length === 0 && (
+            <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>none (add to apply)</span>
+          )}
+        </div>
+        {conceptLoras.map((lora, i) => (
+          <Row key={i}>
+            <input
+              value={lora.name}
+              onChange={(e) => {
+                const updated = [...conceptLoras];
+                updated[i] = { ...updated[i], name: e.target.value };
+                setConceptLoras(updated);
+              }}
+              style={{ ...styles.settingInput, flex: 1 }}
+              placeholder="lora_name"
+            />
+            <input
+              type="number"
+              value={lora.weight}
+              onChange={(e) => {
+                const updated = [...conceptLoras];
+                updated[i] = { ...updated[i], weight: parseFloat(e.target.value) || 0 };
+                setConceptLoras(updated);
+              }}
+              style={{ ...styles.settingInput, width: 55 }}
+              step={0.1}
+              min={0}
+              max={2}
+            />
+            <button
+              onClick={() => setConceptLoras(conceptLoras.filter((_, j) => j !== i))}
+              style={styles.miniBtn}
+            >
+              x
+            </button>
+          </Row>
+        ))}
+      </div>
 
       <div style={styles.buttonRow}>
         <button
@@ -182,6 +280,10 @@ export function ConceptActions() {
       )}
     </div>
   );
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{children}</div>;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -332,5 +434,51 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 9,
     color: '#aaa',
     padding: '1px 0',
+  },
+  settingsSection: {
+    background: '#131324',
+    border: '1px solid #2a2a3a',
+    borderRadius: 6,
+    padding: 8,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    marginBottom: 6,
+  },
+  settingLabel: {
+    fontFamily: 'monospace',
+    fontSize: 9,
+    color: '#666',
+    minWidth: 40,
+  },
+  settingInput: {
+    background: '#1a1a2e',
+    border: '1px solid #3a3a5a',
+    borderRadius: 3,
+    color: '#ddd',
+    fontFamily: 'monospace',
+    fontSize: 10,
+    padding: '3px 6px',
+    outline: 'none',
+  },
+  miniBtn: {
+    background: '#2a2a3a',
+    border: '1px solid #444',
+    borderRadius: 3,
+    color: '#888',
+    fontFamily: 'monospace',
+    fontSize: 8,
+    padding: '1px 6px',
+    cursor: 'pointer',
+  },
+  settingSelect: {
+    background: '#1a1a2e',
+    border: '1px solid #3a3a5a',
+    borderRadius: 3,
+    color: '#ddd',
+    fontFamily: 'monospace',
+    fontSize: 10,
+    padding: '3px 6px',
+    outline: 'none',
   },
 };
