@@ -138,6 +138,64 @@ export async function saveConceptImage(characterId: string, pngBytes: Uint8Array
   if (!res.ok) throw new Error(`Failed to save concept image: ${res.status}`);
 }
 
+export function chibiImageUrl(characterId: string): string {
+  return `${BASE}/api/characters/${encodeURIComponent(characterId)}/chibi-image?t=${Date.now()}`;
+}
+
+export async function fetchChibiImageBytes(characterId: string): Promise<Uint8Array> {
+  const res = await fetch(`${BASE}/api/characters/${encodeURIComponent(characterId)}/chibi-image`);
+  if (!res.ok) throw new Error(`No chibi image for ${characterId}: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+export async function saveChibiImage(characterId: string, pngBytes: Uint8Array): Promise<void> {
+  let binary = '';
+  for (let i = 0; i < pngBytes.length; i++) {
+    binary += String.fromCharCode(pngBytes[i]);
+  }
+  const base64 = btoa(binary);
+
+  const res = await fetch(
+    `${BASE}/api/characters/${encodeURIComponent(characterId)}/chibi-image`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: base64 }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to save chibi image: ${res.status}`);
+}
+
+export function pixelImageUrl(characterId: string): string {
+  return `${BASE}/api/characters/${encodeURIComponent(characterId)}/pixel-image?t=${Date.now()}`;
+}
+
+export async function fetchPixelImageBytes(characterId: string): Promise<Uint8Array> {
+  const res = await fetch(`${BASE}/api/characters/${encodeURIComponent(characterId)}/pixel-image`);
+  if (!res.ok) throw new Error(`No pixel image for ${characterId}: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+export async function savePixelImage(characterId: string, pngBytes: Uint8Array): Promise<void> {
+  let binary = '';
+  for (let i = 0; i < pngBytes.length; i++) {
+    binary += String.fromCharCode(pngBytes[i]);
+  }
+  const base64 = btoa(binary);
+
+  const res = await fetch(
+    `${BASE}/api/characters/${encodeURIComponent(characterId)}/pixel-image`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: base64 }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to save pixel image: ${res.status}`);
+}
+
 export function frameThumbnailUrl(
   characterId: string,
   animName: string,

@@ -1,10 +1,37 @@
 import React, { useState } from 'react';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 
+type Stage = 'concept' | 'chibi' | 'pixel';
+
+function getStageStatus(
+  manifest: { concept: { approved: boolean }; chibi?: { approved: boolean; reference_image: string }; pixel?: { approved: boolean; reference_image: string } },
+  stage: Stage,
+): 'approved' | 'pending' | 'locked' {
+  if (stage === 'concept') return manifest.concept.approved ? 'approved' : 'pending';
+  if (stage === 'chibi') {
+    if (!manifest.concept.approved) return 'locked';
+    if (manifest.chibi?.approved) return 'approved';
+    return manifest.chibi?.reference_image ? 'pending' : 'locked';
+  }
+  // pixel
+  if (!manifest.chibi?.approved) return 'locked';
+  if (manifest.pixel?.approved) return 'approved';
+  return manifest.pixel?.reference_image ? 'pending' : 'locked';
+}
+
+const STATUS_COLORS: Record<string, { border: string; text: string; bg: string }> = {
+  approved: { border: '#44aa44', text: '#70d870', bg: '#1e3a2e' },
+  pending: { border: '#aa8822', text: '#ddaa44', bg: '#2a2a1a' },
+  locked: { border: '#444', text: '#666', bg: '#1a1a1a' },
+};
+
 export function ConceptPreview() {
   const manifest = useSeuratStore((s) => s.manifest);
   const conceptImageUrl = useSeuratStore((s) => s.conceptImageUrl);
-  const [imgError, setImgError] = useState(false);
+  const chibiImageUrl = useSeuratStore((s) => s.chibiImageUrl);
+  const pixelImageUrl = useSeuratStore((s) => s.pixelImageUrl);
+  const [selectedStage, setSelectedStage] = useState<Stage>('concept');
+  const [imgError, setImgError] = useState<Record<Stage, boolean>>({ concept: false, chibi: false, pixel: false });
 
   if (!manifest) {
     return (
@@ -12,24 +39,72 @@ export function ConceptPreview() {
     );
   }
 
+  const stages: { key: Stage; label: string; url: string | null }[] = [
+    { key: 'concept', label: 'Concept Art', url: conceptImageUrl },
+    { key: 'chibi', label: 'Chibi/Deformed', url: chibiImageUrl },
+    { key: 'pixel', label: 'Pixel Art', url: pixelImageUrl },
+  ];
+
+  const currentUrl = stages.find((s) => s.key === selectedStage)?.url ?? null;
+
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <span style={styles.title}>Concept Art</span>
-        {manifest.concept.approved && (
-          <span style={styles.approvedBadge}>Approved</span>
-        )}
+      {/* Pipeline stepper */}
+      <div style={styles.stepper}>
+        {stages.map((stage, i) => {
+          const status = getStageStatus(manifest, stage.key);
+          const colors = STATUS_COLORS[status];
+          const isSelected = selectedStage === stage.key;
+          return (
+            <React.Fragment key={stage.key}>
+              {i > 0 && <div style={styles.arrow}>→</div>}
+              <button
+                onClick={() => setSelectedStage(stage.key)}
+                style={{
+                  ...styles.stageCard,
+                  borderColor: isSelected ? '#8a8af8' : colors.border,
+                  background: isSelected ? '#1e1e3e' : colors.bg,
+                }}
+              >
+                <div style={styles.stageThumbnailBox}>
+                  {stage.url && !imgError[stage.key] ? (
+                    <img
+                      src={stage.url}
+                      alt={stage.label}
+                      style={styles.stageThumbnail}
+                      onError={() => setImgError((prev) => ({ ...prev, [stage.key]: true }))}
+                    />
+                  ) : (
+                    <div style={styles.stagePlaceholder}>
+                      {status === 'locked' ? '🔒' : '—'}
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontFamily: 'monospace', fontSize: 9, color: '#ccc', textAlign: 'center' }}>{stage.label}</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 8, color: colors.text, textAlign: 'center' }}>
+                  {status}
+                </div>
+              </button>
+            </React.Fragment>
+          );
+        })}
       </div>
+
+      {/* Large preview of selected stage */}
       <div style={styles.imageBox}>
-        {conceptImageUrl && !imgError ? (
+        {currentUrl && !imgError[selectedStage] ? (
           <img
-            src={conceptImageUrl}
-            alt="Concept art"
+            src={currentUrl}
+            alt={stages.find((s) => s.key === selectedStage)?.label}
             style={styles.img}
-            onError={() => setImgError(true)}
+            onError={() => setImgError((prev) => ({ ...prev, [selectedStage]: true }))}
           />
         ) : (
-          <div style={styles.placeholder}>No concept art yet</div>
+          <div style={styles.placeholder}>
+            {getStageStatus(manifest, selectedStage) === 'locked'
+              ? 'Complete previous stage first'
+              : `No ${selectedStage} art yet`}
+          </div>
         )}
       </div>
     </div>
@@ -52,26 +127,52 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'monospace',
     fontSize: 12,
   },
-  header: {
+  stepper: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     marginBottom: 20,
-    alignSelf: 'flex-start',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
-  title: {
+  stageCard: {
+    border: '1px solid #444',
+    borderRadius: 6,
+    padding: 8,
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 100,
+    background: 'none',
+  },
+  stageThumbnailBox: {
+    width: 80,
+    height: 80,
+    background: '#0e0e1a',
+    border: '1px solid #2a2a3a',
+    borderRadius: 4,
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stageThumbnail: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    imageRendering: 'pixelated' as const,
+  },
+  stagePlaceholder: {
     fontFamily: 'monospace',
     fontSize: 16,
-    fontWeight: 700,
-    color: '#ccc',
+    color: '#444',
   },
-  approvedBadge: {
-    fontSize: 10,
-    color: '#44aa44',
-    border: '1px solid #44aa44',
-    padding: '2px 8px',
-    borderRadius: 3,
+  arrow: {
     fontFamily: 'monospace',
+    fontSize: 18,
+    color: '#555',
   },
   imageBox: {
     width: '100%',

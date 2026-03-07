@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type {
   CharacterManifest,
   ConceptArt,
+  ChibiArt,
+  PixelArt,
   FrameStatus,
 } from '@vulkan-game-tools/asset-types';
 import { createDefaultManifest, getManifestStats } from '@vulkan-game-tools/asset-types';
@@ -46,6 +48,22 @@ export interface SeuratState {
   generateConceptArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string }) => Promise<void>;
   uploadConceptImage: (file: File) => Promise<void>;
   loadConceptImage: () => void;
+
+  // Chibi
+  saveChibi: (chibi: ChibiArt) => Promise<void>;
+  chibiImageUrl: string | null;
+  chibiGenerating: boolean;
+  chibiError: string | null;
+  generateChibiArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; denoise?: number }) => Promise<void>;
+  uploadChibiImage: (file: File) => Promise<void>;
+
+  // Pixel
+  savePixel: (pixel: PixelArt) => Promise<void>;
+  pixelImageUrl: string | null;
+  pixelGenerating: boolean;
+  pixelError: string | null;
+  generatePixelArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; denoise?: number }) => Promise<void>;
+  uploadPixelImage: (file: File) => Promise<void>;
 
   // Generation
   aiConfig: AIConfig;
@@ -130,6 +148,14 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           ? api.conceptImageUrl(id)
           : null,
         conceptError: null,
+        chibiImageUrl: manifest.chibi?.reference_image
+          ? api.chibiImageUrl(id)
+          : null,
+        chibiError: null,
+        pixelImageUrl: manifest.pixel?.reference_image
+          ? api.pixelImageUrl(id)
+          : null,
+        pixelError: null,
       });
     } catch {
       console.warn(`[Seurat] Could not load manifest for "${id}" — is the bridge running?`);
@@ -285,6 +311,231 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set({ conceptImageUrl: api.conceptImageUrl(selectedCharacterId) });
   },
 
+  // Chibi
+  saveChibi: async (chibi) => {
+    const { manifest } = get();
+    if (!manifest) return;
+    const updated = { ...manifest, chibi };
+    set({ manifest: updated });
+    await api.saveManifest(updated);
+  },
+
+  chibiImageUrl: null,
+  chibiGenerating: false,
+  chibiError: null,
+
+  generateChibiArt: async (overrides) => {
+    const { manifest, aiConfig } = get();
+    if (!manifest) return;
+
+    const chibi = manifest.chibi;
+    const stylePrompt = chibi?.style_prompt || 'chibi, super deformed, 2-3 head body ratio, cute, simple features';
+    const negPrompt = chibi?.negative_prompt || 'realistic, photograph, 3d render';
+
+    set({ chibiGenerating: true, chibiError: null });
+
+    try {
+      // Load concept image for img2img
+      const conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
+
+      const comfy = new ComfyUIClient(aiConfig.comfyUrl);
+      const prompt = [stylePrompt, manifest.concept.description].filter(Boolean).join(', ');
+      const negative = `${negPrompt}, watermark, text, signature`;
+
+      const steps = overrides?.steps ?? aiConfig.steps;
+      const cfg = overrides?.cfg ?? aiConfig.cfg;
+      const sampler = overrides?.sampler ?? aiConfig.sampler;
+      const rawSeed = overrides?.seed ?? aiConfig.seed;
+      const seed = rawSeed === -1 ? Math.floor(Math.random() * 2147483647) : rawSeed;
+      const denoise = overrides?.denoise ?? 0.6;
+      const loras = overrides?.loras !== undefined
+        ? overrides.loras.filter((l) => l.name.trim())
+        : aiConfig.loras.filter((l) => l.name.trim());
+      const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
+
+      console.log('[Seurat] Chibi prompt:', prompt);
+
+      const pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
+        width: 512,
+        height: 512,
+        steps,
+        seed,
+        cfgScale: cfg,
+        samplerName: sampler,
+        checkpoint,
+        negativePrompt: negative,
+        denoise,
+        loras,
+        removeBackground: aiConfig.removeBackground,
+        remBgNodeType: aiConfig.remBgNodeType,
+      });
+
+      await api.saveChibiImage(manifest.character_id, pngBytes);
+
+      const updated = {
+        ...manifest,
+        chibi: {
+          style_prompt: stylePrompt,
+          negative_prompt: negPrompt,
+          reference_image: 'chibi.png',
+          approved: manifest.chibi?.approved ?? false,
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      set({ chibiImageUrl: api.chibiImageUrl(manifest.character_id), chibiError: null });
+    } catch (err) {
+      set({ chibiError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ chibiGenerating: false });
+    }
+  },
+
+  uploadChibiImage: async (file) => {
+    const { manifest } = get();
+    if (!manifest) return;
+
+    set({ chibiGenerating: true, chibiError: null });
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const pngBytes = new Uint8Array(arrayBuf);
+      await api.saveChibiImage(manifest.character_id, pngBytes);
+
+      const updated = {
+        ...manifest,
+        chibi: {
+          style_prompt: manifest.chibi?.style_prompt || 'chibi, super deformed, 2-3 head body ratio, cute, simple features',
+          negative_prompt: manifest.chibi?.negative_prompt || 'realistic, photograph, 3d render',
+          reference_image: 'chibi.png',
+          approved: manifest.chibi?.approved ?? false,
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      set({ chibiImageUrl: api.chibiImageUrl(manifest.character_id), chibiError: null });
+    } catch (err) {
+      set({ chibiError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ chibiGenerating: false });
+    }
+  },
+
+  // Pixel
+  savePixel: async (pixel) => {
+    const { manifest } = get();
+    if (!manifest) return;
+    const updated = { ...manifest, pixel };
+    set({ manifest: updated });
+    await api.saveManifest(updated);
+  },
+
+  pixelImageUrl: null,
+  pixelGenerating: false,
+  pixelError: null,
+
+  generatePixelArt: async (overrides) => {
+    const { manifest, aiConfig } = get();
+    if (!manifest) return;
+
+    const pixel = manifest.pixel;
+    const stylePrompt = pixel?.style_prompt || 'pixel art, 8-bit, clean edges, retro game sprite';
+    const negPrompt = pixel?.negative_prompt || 'blurry, realistic, 3d render, smooth shading';
+
+    set({ pixelGenerating: true, pixelError: null });
+
+    try {
+      // Load chibi image for img2img
+      const chibiBytes = await api.fetchChibiImageBytes(manifest.character_id);
+
+      const comfy = new ComfyUIClient(aiConfig.comfyUrl);
+      const prompt = [stylePrompt, manifest.concept.description].filter(Boolean).join(', ');
+      const negative = `${negPrompt}, watermark, text, signature`;
+
+      const steps = overrides?.steps ?? aiConfig.steps;
+      const cfg = overrides?.cfg ?? aiConfig.cfg;
+      const sampler = overrides?.sampler ?? aiConfig.sampler;
+      const rawSeed = overrides?.seed ?? aiConfig.seed;
+      const seed = rawSeed === -1 ? Math.floor(Math.random() * 2147483647) : rawSeed;
+      const denoise = overrides?.denoise ?? 0.55;
+      const loras = overrides?.loras !== undefined
+        ? overrides.loras.filter((l) => l.name.trim())
+        : aiConfig.loras.filter((l) => l.name.trim());
+      const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
+
+      console.log('[Seurat] Pixel prompt:', prompt);
+
+      const { frame_width, frame_height } = manifest.spritesheet;
+      const pngBytes = await comfy.generateImg2ImgWithRetry(prompt, chibiBytes, {
+        width: Math.max(frame_width, 256),
+        height: Math.max(frame_height, 256),
+        steps,
+        seed,
+        cfgScale: cfg,
+        samplerName: sampler,
+        checkpoint,
+        negativePrompt: negative,
+        denoise,
+        loras,
+        removeBackground: aiConfig.removeBackground,
+        remBgNodeType: aiConfig.remBgNodeType,
+      });
+
+      await api.savePixelImage(manifest.character_id, pngBytes);
+
+      const updated = {
+        ...manifest,
+        pixel: {
+          style_prompt: stylePrompt,
+          negative_prompt: negPrompt,
+          reference_image: 'pixel.png',
+          approved: manifest.pixel?.approved ?? false,
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      set({ pixelImageUrl: api.pixelImageUrl(manifest.character_id), pixelError: null });
+    } catch (err) {
+      set({ pixelError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ pixelGenerating: false });
+    }
+  },
+
+  uploadPixelImage: async (file) => {
+    const { manifest } = get();
+    if (!manifest) return;
+
+    set({ pixelGenerating: true, pixelError: null });
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const pngBytes = new Uint8Array(arrayBuf);
+      await api.savePixelImage(manifest.character_id, pngBytes);
+
+      const updated = {
+        ...manifest,
+        pixel: {
+          style_prompt: manifest.pixel?.style_prompt || 'pixel art, 8-bit, clean edges, retro game sprite',
+          negative_prompt: manifest.pixel?.negative_prompt || 'blurry, realistic, 3d render, smooth shading',
+          reference_image: 'pixel.png',
+          approved: manifest.pixel?.approved ?? false,
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      set({ pixelImageUrl: api.pixelImageUrl(manifest.character_id), pixelError: null });
+    } catch (err) {
+      set({ pixelError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ pixelGenerating: false });
+    }
+  },
+
   // Generation
   aiConfig: DEFAULT_AI_CONFIG,
   setAIConfig: (config) => set((s) => ({ aiConfig: { ...s.aiConfig, ...config } })),
@@ -309,17 +560,34 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const comfy = new ComfyUIClient(aiConfig.comfyUrl);
     const hasConceptImage = manifest.concept.reference_images.length > 0;
 
-    // Load concept image bytes for img2img (if available)
+    // Load reference image for img2img: prefer pixel > chibi > concept
     let conceptBytes: Uint8Array | null = null;
-    if (hasConceptImage) {
+    if (manifest.pixel?.reference_image) {
+      try {
+        conceptBytes = await api.fetchPixelImageBytes(manifest.character_id);
+        console.log(`[Seurat] Loaded pixel image as reference: ${conceptBytes.length} bytes`);
+      } catch (err) {
+        console.warn('[Seurat] Failed to load pixel image, trying chibi:', err);
+      }
+    }
+    if (!conceptBytes && manifest.chibi?.reference_image) {
+      try {
+        conceptBytes = await api.fetchChibiImageBytes(manifest.character_id);
+        console.log(`[Seurat] Loaded chibi image as reference: ${conceptBytes.length} bytes`);
+      } catch (err) {
+        console.warn('[Seurat] Failed to load chibi image, trying concept:', err);
+      }
+    }
+    if (!conceptBytes && hasConceptImage) {
       try {
         conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
         console.log(`[Seurat] Loaded concept image: ${conceptBytes.length} bytes`);
       } catch (err) {
         console.warn('[Seurat] Failed to load concept image, falling back to txt2img:', err);
       }
-    } else {
-      console.log('[Seurat] No concept image, using txt2img mode');
+    }
+    if (!conceptBytes) {
+      console.log('[Seurat] No reference image, using txt2img mode');
     }
 
     // Import prompt builders and pose templates

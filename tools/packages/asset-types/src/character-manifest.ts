@@ -62,11 +62,27 @@ export interface AtlasInfo {
   height: number;
 }
 
+export interface ChibiArt {
+  style_prompt: string;
+  negative_prompt: string;
+  reference_image: string;  // "chibi.png"
+  approved: boolean;
+}
+
+export interface PixelArt {
+  style_prompt: string;
+  negative_prompt: string;
+  reference_image: string;  // "pixel.png"
+  approved: boolean;
+}
+
 export interface CharacterManifest {
   version: number;
   character_id: string;
   display_name: string;
   concept: ConceptArt;
+  chibi?: ChibiArt;
+  pixel?: PixelArt;
   spritesheet: SpritesheetConfig;
   animations: CharacterAnimation[];
   atlas?: AtlasInfo;

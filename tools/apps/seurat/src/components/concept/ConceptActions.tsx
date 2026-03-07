@@ -11,11 +11,7 @@ export function ConceptActions() {
   const conceptError = useSeuratStore((s) => s.conceptError);
   const generateConceptArt = useSeuratStore((s) => s.generateConceptArt);
   const uploadConceptImage = useSeuratStore((s) => s.uploadConceptImage);
-  const generateFrames = useSeuratStore((s) => s.generateFrames);
-  const generationJobs = useSeuratStore((s) => s.generationJobs);
-  const clearCompletedJobs = useSeuratStore((s) => s.clearCompletedJobs);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [generatingAll, setGeneratingAll] = useState(false);
 
   const [description, setDescription] = useState('');
   const [stylePrompt, setStylePrompt] = useState('');
@@ -43,11 +39,6 @@ export function ConceptActions() {
   }, [manifest?.character_id]);
 
   if (!manifest) return null;
-
-  const pendingCount = manifest.animations.reduce(
-    (s, a) => s + a.frames.filter((f) => f.status === 'pending').length,
-    0,
-  );
 
   const handleSave = async (approved?: boolean) => {
     setSaving(true);
@@ -240,43 +231,6 @@ export function ConceptActions() {
       )}
       {conceptError && !conceptError.includes('retrying') && (
         <div style={styles.errorText}>{conceptError}</div>
-      )}
-
-      <div style={styles.divider} />
-
-      {/* Generate All Animations */}
-      <div style={styles.sectionTitle}>Sprite Generation</div>
-      <div style={{ fontSize: 9, fontFamily: 'monospace', color: '#888', marginBottom: 4 }}>
-        Generate all pending animation frames ({pendingCount} pending across {manifest.animations.length} animations)
-      </div>
-      <button
-        onClick={async () => {
-          setGeneratingAll(true);
-          try { await generateFrames('all_pending'); } finally { setGeneratingAll(false); }
-        }}
-        disabled={generatingAll || pendingCount === 0}
-        style={{ ...styles.generateAllBtn, opacity: generatingAll || pendingCount === 0 ? 0.5 : 1 }}
-      >
-        {generatingAll ? 'Generating...' : `Generate All Animations (${pendingCount})`}
-      </button>
-
-      {/* Jobs */}
-      {generationJobs.length > 0 && (
-        <div style={styles.jobsSection}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#777', fontWeight: 600 }}>Jobs</span>
-            <button onClick={clearCompletedJobs} style={styles.clearJobsBtn}>Clear</button>
-          </div>
-          {generationJobs.map((job) => (
-            <div key={job.id} style={styles.jobRow}>
-              <span style={{ color: job.status === 'error' ? '#d88' : job.status === 'done' ? '#8d8' : '#aa8' }}>
-                [{job.status}]
-              </span>
-              <span>{job.animName}{job.frameIndex >= 0 ? `/f${job.frameIndex}` : ''}</span>
-              {job.error && <span style={{ color: '#d88', fontSize: 8 }}>{job.error}</span>}
-            </div>
-          ))}
-        </div>
       )}
     </div>
   );

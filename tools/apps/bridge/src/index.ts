@@ -385,6 +385,96 @@ app.get('/api/characters/:id/concept-image', async (req: Request, res: Response)
   }
 });
 
+// POST /api/characters/:id/chibi-image — save chibi art image (base64 PNG)
+app.post('/api/characters/:id/chibi-image', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    await fs.mkdir(charDir, { recursive: true });
+    const filePath = path.join(charDir, 'chibi.png');
+
+    let data: Buffer;
+    const contentType = req.headers['content-type'] ?? '';
+
+    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
+      data = Buffer.from(req.body['data'] as string, 'base64');
+    } else {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+      }
+      data = Buffer.concat(chunks);
+    }
+
+    await fs.writeFile(filePath, data);
+    console.log(`[REST] Chibi image written: ${filePath} (${data.length} bytes)`);
+    res.json({ ok: true, path: filePath, bytes: data.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const statusCode = message.includes('Path traversal') ? 400 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+});
+
+// GET /api/characters/:id/chibi-image — serve chibi art image
+app.get('/api/characters/:id/chibi-image', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const filePath = path.join(charDir, 'chibi.png');
+    const data = await fs.readFile(filePath);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const statusCode = message.includes('Path traversal') ? 400 : 404;
+    res.status(statusCode).json({ error: message });
+  }
+});
+
+// POST /api/characters/:id/pixel-image — save pixel art image (base64 PNG)
+app.post('/api/characters/:id/pixel-image', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    await fs.mkdir(charDir, { recursive: true });
+    const filePath = path.join(charDir, 'pixel.png');
+
+    let data: Buffer;
+    const contentType = req.headers['content-type'] ?? '';
+
+    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
+      data = Buffer.from(req.body['data'] as string, 'base64');
+    } else {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+      }
+      data = Buffer.concat(chunks);
+    }
+
+    await fs.writeFile(filePath, data);
+    console.log(`[REST] Pixel image written: ${filePath} (${data.length} bytes)`);
+    res.json({ ok: true, path: filePath, bytes: data.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const statusCode = message.includes('Path traversal') ? 400 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+});
+
+// GET /api/characters/:id/pixel-image — serve pixel art image
+app.get('/api/characters/:id/pixel-image', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const filePath = path.join(charDir, 'pixel.png');
+    const data = await fs.readFile(filePath);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const statusCode = message.includes('Path traversal') ? 400 : 404;
+    res.status(statusCode).json({ error: message });
+  }
+});
+
 // POST /api/characters/:id/frames/:anim/:frame/image — save a frame PNG
 app.post('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, res: Response) => {
   try {
