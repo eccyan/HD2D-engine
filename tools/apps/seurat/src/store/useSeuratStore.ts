@@ -5,6 +5,7 @@ import type {
   FrameStatus,
 } from '@vulkan-game-tools/asset-types';
 import { createDefaultManifest, getManifestStats } from '@vulkan-game-tools/asset-types';
+import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
 import type {
   Section,
   AIConfig,
@@ -34,6 +35,11 @@ export interface SeuratState {
 
   // Concept
   saveConcept: (concept: ConceptArt) => Promise<void>;
+  conceptImageUrl: string | null;
+  conceptGenerating: boolean;
+  conceptError: string | null;
+  generateConceptArt: () => Promise<void>;
+  loadConceptImage: () => void;
 
   // Generation
   aiConfig: AIConfig;
@@ -98,6 +104,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         selectedClipName: manifest.animations[0]?.name ?? null,
         assemblyResult: null,
         spriteSheetUrl: null,
+        conceptImageUrl: manifest.concept.reference_images.length > 0
+          ? api.conceptImageUrl(id)
+          : null,
+        conceptError: null,
       });
     } catch {
       console.warn(`[Seurat] Could not load manifest for "${id}" — is the bridge running?`);
@@ -129,6 +139,78 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const updated = { ...manifest, concept };
     set({ manifest: updated });
     await api.saveManifest(updated);
+  },
+
+  conceptImageUrl: null,
+  conceptGenerating: false,
+  conceptError: null,
+
+  generateConceptArt: async () => {
+    const { manifest, aiConfig } = get();
+    if (!manifest) return;
+
+    const { concept, spritesheet } = manifest;
+    if (!concept.description && !concept.style_prompt) {
+      set({ conceptError: 'Fill in a description or style prompt first.' });
+      return;
+    }
+
+    set({ conceptGenerating: true, conceptError: null });
+
+    try {
+      const comfy = new ComfyUIClient(aiConfig.comfyUrl);
+
+      const prompt = [
+        concept.style_prompt,
+        concept.description,
+        'full body character portrait',
+        'front view',
+        'standing pose',
+        `${spritesheet.frame_width * 4}x${spritesheet.frame_height * 4}`,
+        'pixel art, game character concept art, clean edges, centered, transparent background',
+      ].filter(Boolean).join(', ');
+
+      const negative = concept.negative_prompt
+        ? `${concept.negative_prompt}, watermark, text, signature, cropped, partial`
+        : 'blurry, realistic, 3d render, watermark, text, signature, cropped, partial';
+
+      const pngBytes = await comfy.generateImage(prompt, {
+        width: 512,
+        height: 512,
+        steps: aiConfig.steps,
+        seed: aiConfig.seed === -1 ? Math.floor(Math.random() * 2147483647) : aiConfig.seed,
+        cfgScale: aiConfig.cfg,
+        samplerName: aiConfig.sampler,
+        negativePrompt: negative,
+      });
+
+      // Save to bridge
+      await api.saveConceptImage(manifest.character_id, pngBytes);
+
+      // Update manifest reference_images
+      const updated = {
+        ...manifest,
+        concept: {
+          ...manifest.concept,
+          reference_images: ['concept.png'],
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      // Reload the concept image URL
+      set({ conceptImageUrl: api.conceptImageUrl(manifest.character_id) });
+    } catch (err) {
+      set({ conceptError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ conceptGenerating: false });
+    }
+  },
+
+  loadConceptImage: () => {
+    const { selectedCharacterId } = get();
+    if (!selectedCharacterId) return;
+    set({ conceptImageUrl: api.conceptImageUrl(selectedCharacterId) });
   },
 
   // Generation

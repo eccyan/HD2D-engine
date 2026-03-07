@@ -85,6 +85,29 @@ export function spriteSheetUrl(characterId: string): string {
   return `${BASE}/api/characters/${encodeURIComponent(characterId)}/spritesheet.png?t=${Date.now()}`;
 }
 
+export function conceptImageUrl(characterId: string): string {
+  return `${BASE}/api/characters/${encodeURIComponent(characterId)}/concept-image?t=${Date.now()}`;
+}
+
+export async function saveConceptImage(characterId: string, pngBytes: Uint8Array): Promise<void> {
+  // Convert to base64 for JSON transport
+  let binary = '';
+  for (let i = 0; i < pngBytes.length; i++) {
+    binary += String.fromCharCode(pngBytes[i]);
+  }
+  const base64 = btoa(binary);
+
+  const res = await fetch(
+    `${BASE}/api/characters/${encodeURIComponent(characterId)}/concept-image`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: base64 }),
+    },
+  );
+  if (!res.ok) throw new Error(`Failed to save concept image: ${res.status}`);
+}
+
 export function frameThumbnailUrl(
   characterId: string,
   animName: string,
