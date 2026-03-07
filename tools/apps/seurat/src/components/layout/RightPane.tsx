@@ -32,8 +32,16 @@ export function RightPane() {
   const treeSelection = useSeuratStore((s) => s.treeSelection);
 
   return (
-    <div style={styles.pane}>
-      <RightContent selection={treeSelection} />
+    <div style={styles.paneOuter}>
+      <div className="right-pane-scroll" style={styles.paneInner}>
+        <RightContent selection={treeSelection} />
+      </div>
+      <style>{`
+        .right-pane-scroll::-webkit-scrollbar { width: 6px; }
+        .right-pane-scroll::-webkit-scrollbar-track { background: #111120; }
+        .right-pane-scroll::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+        .right-pane-scroll::-webkit-scrollbar-thumb:hover { background: #5a5a7a; }
+      `}</style>
     </div>
   );
 }
@@ -161,16 +169,24 @@ function SpriteGenerationSection() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  pane: {
+  paneOuter: {
     width: 300,
     flexShrink: 0,
-    height: '100%',
     background: '#111120',
     borderLeft: '1px solid #2a2a3a',
-    overflowY: 'auto',
+    position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  paneInner: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflowY: 'scroll' as const,
     padding: 12,
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'column' as const,
     gap: 4,
   },
   collapsible: {
