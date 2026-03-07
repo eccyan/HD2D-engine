@@ -36,7 +36,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   cfg: 7,
   sampler: 'euler_ancestral',
   denoise: 0.55,
-  loras: [{ name: 'pixel-art-xl-v1.1', weight: 0.8 }],
+  loras: [{ name: 'PixelArtRedmond15V-PixelArt-PIXARFK', weight: 0.8 }],
 };
 
 export interface GenerationJob {
