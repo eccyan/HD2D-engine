@@ -15,6 +15,7 @@ export interface AIConfig {
   seed: number;
   cfg: number;
   sampler: string;
+  denoise: number;
 }
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
@@ -23,6 +24,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   seed: -1,
   cfg: 7,
   sampler: 'euler_ancestral',
+  denoise: 0.55,
 };
 
 export interface GenerationJob {

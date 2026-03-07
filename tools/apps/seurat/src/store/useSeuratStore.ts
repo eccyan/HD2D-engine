@@ -39,6 +39,7 @@ export interface SeuratState {
   conceptGenerating: boolean;
   conceptError: string | null;
   generateConceptArt: () => Promise<void>;
+  uploadConceptImage: (file: File) => Promise<void>;
   loadConceptImage: () => void;
 
   // Generation
@@ -48,6 +49,11 @@ export interface SeuratState {
   addGenerationJob: (job: GenerationJob) => void;
   updateGenerationJob: (id: string, update: Partial<GenerationJob>) => void;
   clearCompletedJobs: () => void;
+  generateFrames: (
+    scope: 'single' | 'row' | 'all_pending',
+    animName?: string,
+    frameIndex?: number,
+  ) => Promise<void>;
 
   // Review
   reviewFilter: ReviewFilter;
@@ -216,6 +222,36 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     }
   },
 
+  uploadConceptImage: async (file) => {
+    const { manifest } = get();
+    if (!manifest) return;
+
+    set({ conceptGenerating: true, conceptError: null });
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const pngBytes = new Uint8Array(arrayBuf);
+
+      await api.saveConceptImage(manifest.character_id, pngBytes);
+
+      const updated = {
+        ...manifest,
+        concept: {
+          ...manifest.concept,
+          reference_images: ['concept.png'],
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      set({ conceptImageUrl: api.conceptImageUrl(manifest.character_id), conceptError: null });
+    } catch (err) {
+      set({ conceptError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ conceptGenerating: false });
+    }
+  },
+
   loadConceptImage: () => {
     const { selectedCharacterId } = get();
     if (!selectedCharacterId) return;
@@ -237,6 +273,123 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set((s) => ({
       generationJobs: s.generationJobs.filter((j) => j.status !== 'done' && j.status !== 'error'),
     })),
+
+  generateFrames: async (scope, animName, frameIndex) => {
+    const { manifest, aiConfig } = get();
+    if (!manifest) return;
+
+    const comfy = new ComfyUIClient(aiConfig.comfyUrl);
+    const hasConceptImage = manifest.concept.reference_images.length > 0;
+
+    // Load concept image bytes for img2img (if available)
+    let conceptBytes: Uint8Array | null = null;
+    if (hasConceptImage) {
+      try {
+        conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
+      } catch {
+        // Fall back to txt2img if concept image can't be loaded
+      }
+    }
+
+    // Build list of frames to generate
+    type FrameTask = { animName: string; frameIndex: number };
+    const tasks: FrameTask[] = [];
+
+    if (scope === 'single' && animName !== undefined && frameIndex !== undefined) {
+      tasks.push({ animName, frameIndex });
+    } else if (scope === 'row' && animName) {
+      const anim = manifest.animations.find((a) => a.name === animName);
+      if (anim) {
+        for (const f of anim.frames) tasks.push({ animName, frameIndex: f.index });
+      }
+    } else {
+      // all_pending
+      for (const anim of manifest.animations) {
+        for (const f of anim.frames) {
+          if (f.status === 'pending') tasks.push({ animName: anim.name, frameIndex: f.index });
+        }
+      }
+    }
+
+    if (tasks.length === 0) return;
+
+    // Import prompt builder
+    const { buildFramePrompt, buildNegativePrompt } = await import('../lib/ai-generate.js');
+
+    for (const task of tasks) {
+      const jobId = `${task.animName}_${task.frameIndex}_${Date.now()}`;
+      const anim = manifest.animations.find((a) => a.name === task.animName);
+      if (!anim) continue;
+
+      get().addGenerationJob({
+        id: jobId,
+        animName: task.animName,
+        frameIndex: task.frameIndex,
+        status: 'running',
+      });
+
+      try {
+        const prompt = buildFramePrompt(manifest, anim, task.frameIndex);
+        const negative = buildNegativePrompt(manifest);
+        const seed = aiConfig.seed === -1
+          ? Math.floor(Math.random() * 2147483647)
+          : aiConfig.seed + task.frameIndex; // offset seed per frame for variety
+
+        let pngBytes: Uint8Array;
+
+        if (conceptBytes) {
+          // img2img: use concept art as reference
+          pngBytes = await comfy.generateImg2Img(prompt, conceptBytes, {
+            width: manifest.spritesheet.frame_width,
+            height: manifest.spritesheet.frame_height,
+            steps: aiConfig.steps,
+            seed,
+            cfgScale: aiConfig.cfg,
+            samplerName: aiConfig.sampler,
+            negativePrompt: negative,
+            denoise: aiConfig.denoise,
+          });
+        } else {
+          // txt2img fallback
+          pngBytes = await comfy.generateImageWithRetry(prompt, {
+            width: manifest.spritesheet.frame_width,
+            height: manifest.spritesheet.frame_height,
+            steps: aiConfig.steps,
+            seed,
+            cfgScale: aiConfig.cfg,
+            samplerName: aiConfig.sampler,
+            negativePrompt: negative,
+          });
+        }
+
+        // Save frame image to bridge
+        await api.saveFrameImage(manifest.character_id, task.animName, task.frameIndex, pngBytes);
+
+        // Update manifest in store
+        const current = get().manifest;
+        if (current) {
+          const updated = structuredClone(current);
+          const a = updated.animations.find((x) => x.name === task.animName);
+          const f = a?.frames.find((x) => x.index === task.frameIndex);
+          if (f) {
+            f.status = 'generated';
+            f.file = `${task.animName}/${task.animName}_${task.frameIndex}.png`;
+          }
+          set({ manifest: updated });
+        }
+
+        get().updateGenerationJob(jobId, { status: 'done' });
+      } catch (err) {
+        get().updateGenerationJob(jobId, {
+          status: 'error',
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Save final manifest state
+    try { await api.saveManifest(get().manifest!); } catch { /* best effort */ }
+  },
 
   // Review
   reviewFilter: 'all',

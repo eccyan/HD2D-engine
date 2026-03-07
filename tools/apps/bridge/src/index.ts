@@ -385,6 +385,53 @@ app.get('/api/characters/:id/concept-image', async (req: Request, res: Response)
   }
 });
 
+// POST /api/characters/:id/frames/:anim/:frame/image — save a frame PNG
+app.post('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const animDir = path.join(charDir, req.params['anim']!);
+    await fs.mkdir(animDir, { recursive: true });
+    const filename = `${req.params['anim']}_${req.params['frame']}.png`;
+    const filePath = path.join(animDir, filename);
+
+    let data: Buffer;
+    const contentType = req.headers['content-type'] ?? '';
+    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
+      data = Buffer.from(req.body['data'] as string, 'base64');
+    } else {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+      }
+      data = Buffer.concat(chunks);
+    }
+
+    await fs.writeFile(filePath, data);
+    console.log(`[REST] Frame image written: ${filePath} (${data.length} bytes)`);
+
+    // Also update the manifest frame entry with the file path
+    const manifestPath = path.join(charDir, 'manifest.json');
+    try {
+      const raw = await fs.readFile(manifestPath, 'utf8');
+      const manifest = JSON.parse(raw);
+      const anim = manifest.animations?.find((a: { name: string }) => a.name === req.params['anim']);
+      const frameIdx = parseInt(req.params['frame']!, 10);
+      const frame = anim?.frames?.find((f: { index: number }) => f.index === frameIdx);
+      if (frame) {
+        frame.file = `${req.params['anim']}/${filename}`;
+        if (frame.status === 'pending') frame.status = 'generated';
+        await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+      }
+    } catch { /* manifest update optional */ }
+
+    res.json({ ok: true, path: filePath, bytes: data.length, file: `${req.params['anim']}/${filename}` });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const statusCode = message.includes('Path traversal') ? 400 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+});
+
 // GET /api/characters/:id/frames/:anim/:frame — get a specific frame's status
 app.get('/api/characters/:id/frames/:anim/:frame', async (req: Request, res: Response) => {
   try {

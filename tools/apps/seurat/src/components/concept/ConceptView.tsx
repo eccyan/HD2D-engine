@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import type { ConceptArt } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 
@@ -9,6 +9,8 @@ export function ConceptView() {
   const conceptGenerating = useSeuratStore((s) => s.conceptGenerating);
   const conceptError = useSeuratStore((s) => s.conceptError);
   const generateConceptArt = useSeuratStore((s) => s.generateConceptArt);
+  const uploadConceptImage = useSeuratStore((s) => s.uploadConceptImage);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [description, setDescription] = useState('');
   const [stylePrompt, setStylePrompt] = useState('');
@@ -129,21 +131,44 @@ export function ConceptView() {
             )}
           </div>
 
-          <button
-            onClick={handleGenerate}
-            disabled={conceptGenerating || (!description && !stylePrompt)}
-            style={{
-              ...styles.generateBtn,
-              opacity: conceptGenerating || (!description && !stylePrompt) ? 0.5 : 1,
-            }}
-            data-testid="concept-generate-btn"
-          >
-            {conceptGenerating ? 'Generating...' : 'Generate Concept Art'}
-          </button>
+          <div style={styles.buttonRow}>
+            <button
+              onClick={handleGenerate}
+              disabled={conceptGenerating || (!description && !stylePrompt)}
+              style={{
+                ...styles.generateBtn,
+                opacity: conceptGenerating || (!description && !stylePrompt) ? 0.5 : 1,
+              }}
+              data-testid="concept-generate-btn"
+            >
+              {conceptGenerating ? 'Generating...' : 'Generate via AI'}
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={conceptGenerating}
+              style={styles.uploadBtn}
+              data-testid="concept-upload-btn"
+            >
+              Upload Image
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  uploadConceptImage(file);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </div>
 
           {conceptGenerating && (
             <div style={styles.progressText}>
-              Sending to ComfyUI... This may take a minute.
+              {conceptError?.includes('retrying') ? conceptError : 'Sending to ComfyUI... This may take a minute.'}
             </div>
           )}
 
@@ -283,14 +308,32 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     padding: 16,
   },
+  buttonRow: {
+    display: 'flex',
+    gap: 8,
+  },
   generateBtn: {
+    flex: 1,
     background: '#3a1e6e',
     border: '1px solid #8a4af8',
     borderRadius: 4,
     color: '#b890f8',
     fontFamily: 'monospace',
-    fontSize: 12,
-    padding: '10px 20px',
+    fontSize: 11,
+    padding: '10px 12px',
+    cursor: 'pointer',
+    fontWeight: 600,
+    textAlign: 'center',
+  },
+  uploadBtn: {
+    flex: 1,
+    background: '#1e3a3a',
+    border: '1px solid #4ac8c8',
+    borderRadius: 4,
+    color: '#90d8d8',
+    fontFamily: 'monospace',
+    fontSize: 11,
+    padding: '10px 12px',
     cursor: 'pointer',
     fontWeight: 600,
     textAlign: 'center',

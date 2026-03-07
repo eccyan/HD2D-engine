@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
-import { buildComfyParams } from '../../lib/ai-generate.js';
 
 type GenerateScope = 'single' | 'row' | 'all_pending';
 
@@ -11,9 +10,11 @@ export function GenerateView() {
   const setAIConfig = useSeuratStore((s) => s.setAIConfig);
   const generationJobs = useSeuratStore((s) => s.generationJobs);
   const clearCompletedJobs = useSeuratStore((s) => s.clearCompletedJobs);
+  const generateFrames = useSeuratStore((s) => s.generateFrames);
   const [scope, setScope] = useState<GenerateScope>('row');
   const [selectedAnim, setSelectedAnim] = useState<string>('');
   const [selectedFrame, setSelectedFrame] = useState(0);
+  const [generating, setGenerating] = useState(false);
 
   if (!manifest) {
     return (
@@ -24,28 +25,14 @@ export function GenerateView() {
   }
 
   const effectiveAnim = selectedAnim || manifest.animations[0]?.name || '';
+  const hasConceptImage = manifest.concept.reference_images.length > 0;
 
-  const handleGenerate = () => {
-    const anim = manifest.animations.find((a) => a.name === effectiveAnim);
-    if (!anim) return;
-
-    if (scope === 'single') {
-      const params = buildComfyParams(manifest, anim, selectedFrame, aiConfig);
-      console.log('[Generate] Single frame:', params);
-    } else if (scope === 'row') {
-      for (let i = 0; i < anim.frames.length; i++) {
-        const params = buildComfyParams(manifest, anim, i, aiConfig);
-        console.log(`[Generate] Row frame ${i}:`, params);
-      }
-    } else {
-      for (const a of manifest.animations) {
-        for (const f of a.frames) {
-          if (f.status === 'pending') {
-            const params = buildComfyParams(manifest, a, f.index, aiConfig);
-            console.log(`[Generate] Pending ${a.name}/${f.index}:`, params);
-          }
-        }
-      }
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      await generateFrames(scope, effectiveAnim, selectedFrame);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -109,6 +96,40 @@ export function GenerateView() {
             ))}
           </select>
         </div>
+        <div style={styles.row}>
+          <label style={styles.label}>Denoise</label>
+          <input
+            type="range"
+            min={0.1}
+            max={1.0}
+            step={0.05}
+            value={aiConfig.denoise}
+            onChange={(e) => setAIConfig({ denoise: parseFloat(e.target.value) })}
+            style={{ flex: 1 }}
+            data-testid="gen-denoise"
+          />
+          <span style={{ fontSize: 10, color: '#888', fontFamily: 'monospace', minWidth: 30 }}>
+            {aiConfig.denoise.toFixed(2)}
+          </span>
+        </div>
+        <div style={{ fontSize: 9, color: '#555', fontFamily: 'monospace' }}>
+          Lower denoise = closer to concept art. Higher = more creative freedom.
+        </div>
+      </div>
+
+      {/* Generation mode indicator */}
+      <div style={{
+        ...styles.section,
+        borderColor: hasConceptImage ? '#4ac8c8' : '#3a3a5a',
+      }}>
+        <div style={styles.sectionTitle}>
+          {hasConceptImage ? 'img2img Mode (Concept Art Reference)' : 'txt2img Mode (No Concept Art)'}
+        </div>
+        <div style={{ fontSize: 10, color: '#888', fontFamily: 'monospace' }}>
+          {hasConceptImage
+            ? `Using concept art as reference with denoise=${aiConfig.denoise.toFixed(2)}. Each frame is generated as a variation of your concept art guided by pose/direction prompts.`
+            : 'No concept art uploaded. Frames will be generated from text prompts only. Upload or generate concept art in the Concept tab for better consistency.'}
+        </div>
       </div>
 
       {/* Scope */}
@@ -161,8 +182,16 @@ export function GenerateView() {
           </div>
         )}
 
-        <button onClick={handleGenerate} style={styles.generateBtn} data-testid="gen-generate-btn">
-          Generate
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          style={{
+            ...styles.generateBtn,
+            opacity: generating ? 0.5 : 1,
+          }}
+          data-testid="gen-generate-btn"
+        >
+          {generating ? 'Generating...' : hasConceptImage ? 'Generate (img2img)' : 'Generate (txt2img)'}
         </button>
       </div>
 
