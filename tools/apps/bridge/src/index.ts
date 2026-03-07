@@ -432,6 +432,27 @@ app.post('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, r
   }
 });
 
+// GET /api/characters/:id/frames/:anim/:frame/image — serve a frame PNG
+app.get('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const filename = `${req.params['anim']}_${req.params['frame']}.png`;
+    const filePath = path.join(charDir, req.params['anim']!, filename);
+    await fs.access(filePath);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-cache');
+    const data = await fs.readFile(filePath);
+    res.send(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('ENOENT') || message.includes('no such file')) {
+      res.status(404).json({ error: 'Frame image not found' });
+    } else {
+      res.status(500).json({ error: message });
+    }
+  }
+});
+
 // GET /api/characters/:id/frames/:anim/:frame — get a specific frame's status
 app.get('/api/characters/:id/frames/:anim/:frame', async (req: Request, res: Response) => {
   try {

@@ -898,5 +898,9 @@ function isBlankImage(pngBytes: Uint8Array): boolean {
   // A non-blank 512x512 image typically has 100+ unique byte values
   // in its compressed data. A pure black image has < 20.
   const uniqueRatio = seen.size / sampleSize;
-  return uniqueRatio < 0.03 || seen.size < 15;
+  const isBlank = uniqueRatio < 0.03 || seen.size < 15;
+  if (isBlank) {
+    console.warn(`[ComfyUI] Blank image detected: ${seen.size} unique bytes in ${sampleSize} sampled (ratio ${uniqueRatio.toFixed(4)}), total IDAT ${idatBytes.length} bytes`);
+  }
+  return isBlank;
 }

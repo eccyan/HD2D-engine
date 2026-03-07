@@ -1,5 +1,6 @@
 import React from 'react';
 import type { CharacterFrame, FrameStatus } from '@vulkan-game-tools/asset-types';
+import { frameThumbnailUrl } from '../../lib/bridge-api.js';
 
 const STATUS_COLORS: Record<FrameStatus, string> = {
   pending: '#666',
@@ -20,21 +21,33 @@ const STATUS_LABELS: Record<FrameStatus, string> = {
 interface Props {
   frame: CharacterFrame;
   animName: string;
+  characterId: string;
   onApprove: () => void;
   onReject: () => void;
   onRegenerate: () => void;
   onClick: () => void;
 }
 
-export function FrameCell({ frame, animName, onApprove, onReject, onRegenerate, onClick }: Props) {
+export function FrameCell({ frame, animName, characterId, onApprove, onReject, onRegenerate, onClick }: Props) {
+  const hasImage = frame.status !== 'pending' && frame.status !== 'generating';
+
   return (
     <div onClick={onClick} style={{ ...styles.cell, borderColor: STATUS_COLORS[frame.status] }} data-testid={`frame-cell-${animName}-${frame.index}`}>
       <div style={{ ...styles.badge, background: STATUS_COLORS[frame.status] }}>
         {STATUS_LABELS[frame.status]}
       </div>
 
-      <div style={styles.frameIndex}>f{frame.index}</div>
-      <div style={styles.fileName}>{frame.file}</div>
+      <div style={styles.imageBox}>
+        {hasImage ? (
+          <img
+            src={frameThumbnailUrl(characterId, animName, frame.index)}
+            alt={`${animName} f${frame.index}`}
+            style={styles.frameImage}
+          />
+        ) : (
+          <div style={styles.frameIndex}>f{frame.index}</div>
+        )}
+      </div>
 
       <div style={styles.actions}>
         <button
@@ -65,7 +78,7 @@ export function FrameCell({ frame, animName, onApprove, onReject, onRegenerate, 
 
 const styles: Record<string, React.CSSProperties> = {
   cell: {
-    width: 64,
+    width: 72,
     border: '2px solid',
     borderRadius: 4,
     background: '#161624',
@@ -82,23 +95,29 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 3px',
     borderRadius: 2,
     fontFamily: 'monospace',
+    zIndex: 1,
+  },
+  imageBox: {
+    width: '100%',
+    height: 64,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: '#111120',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  frameImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    imageRendering: 'pixelated',
   },
   frameIndex: {
     textAlign: 'center',
     fontSize: 11,
     fontFamily: 'monospace',
     color: '#ccc',
-    padding: '10px 0 2px',
-  },
-  fileName: {
-    textAlign: 'center',
-    fontSize: 7,
-    fontFamily: 'monospace',
-    color: '#555',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    padding: '0 2px',
   },
   actions: {
     display: 'flex',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { CharacterFrame, FrameStatus } from '@vulkan-game-tools/asset-types';
+import { frameThumbnailUrl } from '../../lib/bridge-api.js';
 
 interface Props {
   frame: CharacterFrame;
@@ -11,6 +12,7 @@ interface Props {
 
 export function FrameDetailModal({ frame, animName, characterId, onClose, onUpdateStatus }: Props) {
   const [notes, setNotes] = useState(frame.review?.notes ?? '');
+  const hasImage = frame.status !== 'pending' && frame.status !== 'generating';
 
   return (
     <div style={styles.overlay} onClick={onClose}>
@@ -22,10 +24,18 @@ export function FrameDetailModal({ frame, animName, characterId, onClose, onUpda
 
         <div style={styles.body}>
           <div style={styles.previewArea}>
-            <div style={styles.placeholder}>
-              <span style={{ fontSize: 11 }}>{frame.file}</span>
-              <span style={{ fontSize: 9, color: '#555' }}>Status: {frame.status}</span>
-            </div>
+            {hasImage ? (
+              <img
+                src={frameThumbnailUrl(characterId, animName, frame.index)}
+                alt={`${animName} f${frame.index}`}
+                style={styles.previewImage}
+              />
+            ) : (
+              <div style={styles.placeholder}>
+                <span style={{ fontSize: 11 }}>{frame.file}</span>
+                <span style={{ fontSize: 9, color: '#555' }}>Status: {frame.status}</span>
+              </div>
+            )}
           </div>
 
           <div style={styles.details}>
@@ -129,13 +139,20 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
   },
   previewArea: {
-    height: 160,
+    height: 200,
     background: '#111120',
     borderRadius: 4,
     border: '1px solid #2a2a3a',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  previewImage: {
+    maxWidth: '100%',
+    maxHeight: '100%',
+    objectFit: 'contain',
+    imageRendering: 'pixelated',
   },
   placeholder: {
     display: 'flex',

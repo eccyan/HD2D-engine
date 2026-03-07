@@ -293,9 +293,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     if (hasConceptImage) {
       try {
         conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
-      } catch {
-        // Fall back to txt2img if concept image can't be loaded
+        console.log(`[Seurat] Loaded concept image: ${conceptBytes.length} bytes`);
+      } catch (err) {
+        console.warn('[Seurat] Failed to load concept image, falling back to txt2img:', err);
       }
+    } else {
+      console.log('[Seurat] No concept image, using txt2img mode');
     }
 
     // Import prompt builders
@@ -313,26 +316,31 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
       try {
         const prompt = buildFramePrompt(manifest, anim, frameIndex);
+        console.log('[Seurat] Single frame prompt:', prompt);
         const seed = aiConfig.seed === -1
           ? Math.floor(Math.random() * 2147483647)
           : aiConfig.seed + frameIndex;
 
         let pngBytes: Uint8Array;
         if (conceptBytes) {
+          console.log('[Seurat] Generating single frame via img2img...');
           pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
             width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
             steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
             negativePrompt: negative, denoise: aiConfig.denoise, loras,
           });
         } else {
+          console.log('[Seurat] Generating single frame via txt2img...');
           pngBytes = await comfy.generateImageWithRetry(prompt, {
             width: manifest.spritesheet.frame_width, height: manifest.spritesheet.frame_height,
             steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
             negativePrompt: negative, loras,
           });
         }
+        console.log(`[Seurat] Got ${pngBytes.length} bytes from ComfyUI, saving frame...`);
 
         await api.saveFrameImage(manifest.character_id, animName, frameIndex, pngBytes);
+        console.log('[Seurat] Frame saved successfully');
         const current = get().manifest;
         if (current) {
           const updated = structuredClone(current);
@@ -342,6 +350,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         }
         get().updateGenerationJob(jobId, { status: 'done' });
       } catch (err) {
+        console.error('[Seurat] Single frame generation error:', err);
         get().updateGenerationJob(jobId, { status: 'error', error: err instanceof Error ? err.message : String(err) });
       }
     } else {
@@ -365,17 +374,20 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
         try {
           const prompt = buildSheetRowPrompt(manifest, anim);
+          console.log(`[Seurat] Row "${an}" prompt:`, prompt);
           const seed = aiConfig.seed === -1
             ? Math.floor(Math.random() * 2147483647)
             : aiConfig.seed;
           const frameCount = anim.frames.length;
           const sheetWidth = manifest.spritesheet.frame_width * frameCount;
           const sheetHeight = manifest.spritesheet.frame_height;
+          console.log(`[Seurat] Row "${an}": ${frameCount} frames, ${sheetWidth}x${sheetHeight}`);
 
           let pngBytes: Uint8Array;
           if (conceptBytes && aiConfig.controlNetModel) {
-            // ControlNet mode: tile concept art into a horizontal strip as conditioning
+            console.log(`[Seurat] Row "${an}": ControlNet mode, tiling concept image...`);
             const tiledBytes = await tileImageHorizontally(conceptBytes, frameCount, sheetWidth, sheetHeight);
+            console.log(`[Seurat] Tiled image: ${tiledBytes.length} bytes, sending to ComfyUI...`);
             pngBytes = await comfy.generateControlNetWithRetry(prompt, tiledBytes, {
               width: sheetWidth, height: sheetHeight,
               steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
@@ -384,24 +396,28 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
               controlStrength: aiConfig.controlStrength,
             });
           } else if (conceptBytes) {
-            // img2img fallback (no ControlNet)
+            console.log(`[Seurat] Row "${an}": img2img mode, tiling concept image...`);
             const tiledBytes = await tileImageHorizontally(conceptBytes, frameCount, sheetWidth, sheetHeight);
+            console.log(`[Seurat] Tiled image: ${tiledBytes.length} bytes, sending to ComfyUI...`);
             pngBytes = await comfy.generateImg2ImgWithRetry(prompt, tiledBytes, {
               width: sheetWidth, height: sheetHeight,
               steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
               negativePrompt: negative, denoise: aiConfig.denoise, loras,
             });
           } else {
+            console.log(`[Seurat] Row "${an}": txt2img mode...`);
             pngBytes = await comfy.generateImageWithRetry(prompt, {
               width: sheetWidth, height: sheetHeight,
               steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
               negativePrompt: negative, loras,
             });
           }
+          console.log(`[Seurat] Row "${an}": got ${pngBytes.length} bytes from ComfyUI, slicing...`);
 
           // Slice the wide image into individual frames
           const blob = new Blob([pngBytes as BlobPart], { type: 'image/png' });
           const bitmap = await createImageBitmap(blob);
+          console.log(`[Seurat] Row "${an}": bitmap ${bitmap.width}x${bitmap.height}, slicing into ${frameCount} frames of ${manifest.spritesheet.frame_width}x${manifest.spritesheet.frame_height}`);
           const fw = manifest.spritesheet.frame_width;
           const fh = manifest.spritesheet.frame_height;
 
@@ -412,8 +428,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             const frameBlob = await canvas.convertToBlob({ type: 'image/png' });
             const frameBuf = await frameBlob.arrayBuffer();
             const frameBytes = new Uint8Array(frameBuf);
+            console.log(`[Seurat] Row "${an}" frame ${i}: ${frameBytes.length} bytes, saving...`);
 
             await api.saveFrameImage(manifest.character_id, an, i, frameBytes);
+            console.log(`[Seurat] Row "${an}" frame ${i}: saved successfully`);
             const current = get().manifest;
             if (current) {
               const updated = structuredClone(current);
@@ -425,6 +443,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           bitmap.close();
           get().updateGenerationJob(jobId, { status: 'done' });
         } catch (err) {
+          console.error(`[Seurat] Row "${an}" generation error:`, err);
           get().updateGenerationJob(jobId, { status: 'error', error: err instanceof Error ? err.message : String(err) });
         }
       }

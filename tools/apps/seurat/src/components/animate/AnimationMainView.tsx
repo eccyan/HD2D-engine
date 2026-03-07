@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { CharacterFrame, FrameStatus } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { AnimationPreviewCanvas } from './AnimationPreviewCanvas.js';
+import { FramePreviewCanvas } from './FramePreviewCanvas.js';
 import { ClipTimeline } from './ClipTimeline.js';
 import { FrameCell } from '../review/FrameCell.js';
 import { FrameDetailModal } from '../review/FrameDetailModal.js';
@@ -41,23 +42,35 @@ export function AnimationMainView({ animName }: Props) {
     (f) => reviewFilter === 'all' || f.status === reviewFilter,
   );
 
+  const hasGeneratedFrames = clip.frames.some((f) => f.status !== 'pending' && f.status !== 'generating');
+  const useFramePreview = !spriteSheetUrl && hasGeneratedFrames;
+
   return (
     <div style={styles.container}>
       {/* Preview canvas */}
       <div style={styles.preview}>
-        {!spriteSheetUrl && (
+        {!spriteSheetUrl && !hasGeneratedFrames && (
           <div style={styles.loadOverlay}>
             <button onClick={loadSpriteSheet} style={styles.loadBtn}>Load Sprite Sheet</button>
           </div>
         )}
-        <AnimationPreviewCanvas
-          spriteSheetUrl={spriteSheetUrl}
-          spritesheet={manifest.spritesheet}
-          clip={clip}
-          currentTime={currentTime}
-          playbackState={playbackState}
-          selectedFrameIndex={0}
-        />
+        {useFramePreview ? (
+          <FramePreviewCanvas
+            characterId={manifest.character_id}
+            clip={clip}
+            currentTime={currentTime}
+            playbackState={playbackState}
+          />
+        ) : (
+          <AnimationPreviewCanvas
+            spriteSheetUrl={spriteSheetUrl}
+            spritesheet={manifest.spritesheet}
+            clip={clip}
+            currentTime={currentTime}
+            playbackState={playbackState}
+            selectedFrameIndex={0}
+          />
+        )}
       </div>
 
       {/* Timeline */}
@@ -79,6 +92,7 @@ export function AnimationMainView({ animName }: Props) {
               key={frame.index}
               frame={frame}
               animName={clip.name}
+              characterId={manifest.character_id}
               onApprove={() => updateFrameStatus(clip.name, frame.index, 'approved')}
               onReject={() => updateFrameStatus(clip.name, frame.index, 'rejected')}
               onRegenerate={() => {}}
