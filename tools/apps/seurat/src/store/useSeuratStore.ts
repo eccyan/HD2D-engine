@@ -373,8 +373,20 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           const sheetHeight = manifest.spritesheet.frame_height;
 
           let pngBytes: Uint8Array;
-          if (conceptBytes) {
-            pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
+          if (conceptBytes && aiConfig.controlNetModel) {
+            // ControlNet mode: tile concept art into a horizontal strip as conditioning
+            const tiledBytes = await tileImageHorizontally(conceptBytes, frameCount, sheetWidth, sheetHeight);
+            pngBytes = await comfy.generateControlNetWithRetry(prompt, tiledBytes, {
+              width: sheetWidth, height: sheetHeight,
+              steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
+              negativePrompt: negative, denoise: aiConfig.denoise, loras,
+              controlNetModel: aiConfig.controlNetModel,
+              controlStrength: aiConfig.controlStrength,
+            });
+          } else if (conceptBytes) {
+            // img2img fallback (no ControlNet)
+            const tiledBytes = await tileImageHorizontally(conceptBytes, frameCount, sheetWidth, sheetHeight);
+            pngBytes = await comfy.generateImg2ImgWithRetry(prompt, tiledBytes, {
               width: sheetWidth, height: sheetHeight,
               steps: aiConfig.steps, seed, cfgScale: aiConfig.cfg, samplerName: aiConfig.sampler,
               negativePrompt: negative, denoise: aiConfig.denoise, loras,
@@ -519,3 +531,38 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     });
   },
 }));
+
+/**
+ * Tile a source image horizontally N times, resizing each tile to fit
+ * within the target strip dimensions (targetWidth x targetHeight).
+ * Returns PNG bytes of the tiled strip.
+ */
+async function tileImageHorizontally(
+  sourceBytes: Uint8Array,
+  tileCount: number,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<Uint8Array> {
+  const blob = new Blob([sourceBytes as BlobPart], { type: 'image/png' });
+  const bitmap = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(targetWidth, targetHeight);
+  const ctx = canvas.getContext('2d')!;
+
+  const tileWidth = targetWidth / tileCount;
+
+  // Scale source to fit each tile slot while maintaining aspect ratio
+  const scale = Math.min(tileWidth / bitmap.width, targetHeight / bitmap.height);
+  const drawW = bitmap.width * scale;
+  const drawH = bitmap.height * scale;
+  const offsetY = (targetHeight - drawH) / 2;
+
+  for (let i = 0; i < tileCount; i++) {
+    const offsetX = i * tileWidth + (tileWidth - drawW) / 2;
+    ctx.drawImage(bitmap, offsetX, offsetY, drawW, drawH);
+  }
+
+  bitmap.close();
+  const resultBlob = await canvas.convertToBlob({ type: 'image/png' });
+  const buf = await resultBlob.arrayBuffer();
+  return new Uint8Array(buf);
+}

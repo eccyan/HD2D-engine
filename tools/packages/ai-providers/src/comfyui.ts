@@ -1,4 +1,4 @@
-import type { ImageProvider, ImageGenerateOptions, Img2ImgOptions, AvailabilityResult } from "./types.js";
+import type { ImageProvider, ImageGenerateOptions, Img2ImgOptions, ControlNetOptions, AvailabilityResult } from "./types.js";
 
 /** A single node entry in a ComfyUI workflow graph. */
 interface WorkflowNode {
@@ -230,6 +230,144 @@ function buildImg2ImgWorkflow(
       class_type: "SaveImage",
       inputs: {
         filename_prefix: "vulkan_game_i2i_",
+        images: ["8", 0],
+      },
+    },
+  };
+
+  // Chain LoRA loaders
+  if (opts.loras.length > 0) {
+    let prevModelRef: [string, number] = ["4", 0];
+    let prevClipRef: [string, number] = ["4", 1];
+
+    opts.loras.forEach((lora, i) => {
+      const nodeId = `lora_${i}`;
+      const weight = lora.weight ?? 1.0;
+      nodes[nodeId] = {
+        class_type: "LoraLoader",
+        inputs: {
+          lora_name: lora.name.includes(".") ? lora.name : `${lora.name}.safetensors`,
+          strength_model: weight,
+          strength_clip: weight,
+          model: prevModelRef,
+          clip: prevClipRef,
+        },
+      };
+      prevModelRef = [nodeId, 0];
+      prevClipRef = [nodeId, 1];
+    });
+
+    (nodes["3"].inputs as Record<string, unknown>).model = prevModelRef;
+    (nodes["6"].inputs as Record<string, unknown>).clip = prevClipRef;
+    (nodes["7"].inputs as Record<string, unknown>).clip = prevClipRef;
+  }
+
+  return nodes;
+}
+
+/** Options for building the ControlNet-guided workflow. */
+interface ControlNetWorkflowOptions extends WorkflowOptions {
+  /** Uploaded reference image filename. */
+  imageName: string;
+  /** Denoise strength. */
+  denoise: number;
+  /** ControlNet model filename. */
+  controlNetModel: string;
+  /** ControlNet conditioning strength. */
+  controlStrength: number;
+  /** ControlNet start percent. */
+  controlStart: number;
+  /** ControlNet end percent. */
+  controlEnd: number;
+}
+
+function buildControlNetWorkflow(
+  opts: ControlNetWorkflowOptions
+): Record<string, WorkflowNode> {
+  const nodes: Record<string, WorkflowNode> = {
+    "4": {
+      class_type: "CheckpointLoaderSimple",
+      inputs: {
+        ckpt_name: "v1-5-pruned-emaonly.safetensors",
+      },
+    },
+    // Load the reference image for ControlNet conditioning
+    "10": {
+      class_type: "LoadImage",
+      inputs: {
+        image: opts.imageName,
+      },
+    },
+    // Also use it as the img2img starting latent
+    "11": {
+      class_type: "VAEEncode",
+      inputs: {
+        pixels: ["10", 0],
+        vae: ["4", 2],
+      },
+    },
+    // ControlNet model loader
+    "20": {
+      class_type: "ControlNetLoader",
+      inputs: {
+        control_net_name: opts.controlNetModel,
+      },
+    },
+    // Positive CLIP
+    "6": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: opts.prompt,
+        clip: ["4", 1],
+      },
+    },
+    // Negative CLIP
+    "7": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: opts.negativePrompt,
+        clip: ["4", 1],
+      },
+    },
+    // Apply ControlNet to positive and negative conditioning
+    "21": {
+      class_type: "ControlNetApplyAdvanced",
+      inputs: {
+        positive: ["6", 0],
+        negative: ["7", 0],
+        control_net: ["20", 0],
+        image: ["10", 0],
+        strength: opts.controlStrength,
+        start_percent: opts.controlStart,
+        end_percent: opts.controlEnd,
+      },
+    },
+    "3": {
+      class_type: "KSampler",
+      inputs: {
+        seed: opts.seed,
+        steps: opts.steps,
+        cfg: opts.cfg,
+        sampler_name: opts.samplerName,
+        scheduler: "normal",
+        denoise: opts.denoise,
+        model: ["4", 0],
+        positive: ["21", 0],  // ControlNet-conditioned positive
+        negative: ["21", 1],  // ControlNet-conditioned negative
+        latent_image: ["11", 0],
+      },
+    },
+    "8": {
+      class_type: "VAEDecode",
+      inputs: {
+        samples: ["3", 0],
+        vae: ["4", 2],
+      },
+    },
+    "9": {
+      class_type: "SaveImage",
+      inputs: {
+        filename_prefix: "vulkan_game_cn_",
         images: ["8", 0],
       },
     },
@@ -552,6 +690,106 @@ export class ComfyUIClient implements ImageProvider {
 
     throw new Error(
       `ComfyUI returned a blank/black image after ${maxRetries} img2img attempts. ` +
+      `Try different prompts, check the model is loaded, or increase steps.`
+    );
+  }
+
+  /**
+   * Generate an image using ControlNet conditioning.
+   * Uploads the reference image, uses it for both ControlNet and img2img latent.
+   */
+  async generateControlNet(
+    prompt: string,
+    referenceImage: Uint8Array,
+    opts: ControlNetOptions,
+  ): Promise<Uint8Array> {
+    const imageName = await this.uploadImage(referenceImage);
+
+    const controlNetModel = opts.controlNetModel.includes(".")
+      ? opts.controlNetModel
+      : `${opts.controlNetModel}.pth`;
+
+    const workflow = buildControlNetWorkflow({
+      prompt,
+      negativePrompt: opts.negativePrompt ?? "bad quality, blurry, deformed",
+      width: opts.width ?? 512,
+      height: opts.height ?? 512,
+      steps: opts.steps ?? 20,
+      seed: opts.seed ?? Math.floor(Math.random() * 2 ** 32),
+      cfg: opts.cfgScale ?? 7,
+      samplerName: opts.samplerName ?? "euler",
+      loras: opts.loras ?? [],
+      imageName,
+      denoise: opts.denoise ?? 0.75,
+      controlNetModel,
+      controlStrength: opts.controlStrength ?? 0.7,
+      controlStart: opts.controlStart ?? 0.0,
+      controlEnd: opts.controlEnd ?? 1.0,
+    });
+
+    const submitBody: PromptRequest = { prompt: workflow };
+    const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitBody),
+    });
+
+    if (!submitResponse.ok) {
+      const text = await submitResponse.text().catch(() => "(no body)");
+      throw new Error(
+        `ComfyUI ControlNet prompt failed: HTTP ${submitResponse.status} ${submitResponse.statusText} — ${text}`
+      );
+    }
+
+    const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+    const imageFile = await this.pollForCompletion(prompt_id);
+
+    const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
+      imageFile.filename
+    )}&subfolder=${encodeURIComponent(imageFile.subfolder)}&type=${encodeURIComponent(
+      imageFile.type
+    )}`;
+
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(
+        `ComfyUI image fetch failed: HTTP ${imageResponse.status} ${imageResponse.statusText}`
+      );
+    }
+
+    const buffer = await imageResponse.arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+
+  /**
+   * Generate a ControlNet image with retry on blank/black results.
+   */
+  async generateControlNetWithRetry(
+    prompt: string,
+    referenceImage: Uint8Array,
+    opts: ControlNetOptions,
+    maxRetries = 3,
+    onRetry?: (attempt: number, max: number) => void,
+  ): Promise<Uint8Array> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const seed = attempt === 1
+        ? (opts.seed ?? Math.floor(Math.random() * 2 ** 32))
+        : Math.floor(Math.random() * 2 ** 32);
+
+      const pngBytes = await this.generateControlNet(prompt, referenceImage, { ...opts, seed });
+
+      if (!isBlankImage(pngBytes)) {
+        return pngBytes;
+      }
+
+      if (attempt < maxRetries) {
+        onRetry?.(attempt + 1, maxRetries);
+        await sleep(1000);
+      }
+    }
+
+    throw new Error(
+      `ComfyUI returned a blank/black image after ${maxRetries} ControlNet attempts. ` +
       `Try different prompts, check the model is loaded, or increase steps.`
     );
   }

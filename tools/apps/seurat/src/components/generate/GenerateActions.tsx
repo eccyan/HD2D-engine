@@ -124,9 +124,31 @@ export function GenerateActions({ animName: preselectedAnim }: Props) {
         ))}
       </div>
 
+      {/* ControlNet */}
+      <div style={styles.section}>
+        <div style={styles.subTitle}>ControlNet (Row mode)</div>
+        <Row>
+          <label style={styles.label}>Model</label>
+          <input
+            value={aiConfig.controlNetModel}
+            onChange={(e) => setAIConfig({ controlNetModel: e.target.value })}
+            style={styles.input}
+            placeholder="control_v11f1e_sd15_tile"
+          />
+        </Row>
+        <Row>
+          <label style={styles.label}>Strength</label>
+          <input type="range" min={0} max={1.5} step={0.05} value={aiConfig.controlStrength} onChange={(e) => setAIConfig({ controlStrength: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+          <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.controlStrength.toFixed(2)}</span>
+        </Row>
+        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
+          Tiles concept art and uses ControlNet to keep character consistent across frames. Clear model name to disable.
+        </div>
+      </div>
+
       {/* Mode */}
-      <div style={{ fontSize: 9, color: hasConceptImage ? '#4ac8c8' : '#666', fontFamily: 'monospace', marginBottom: 4 }}>
-        {hasConceptImage ? 'img2img mode' : 'txt2img mode'}
+      <div style={{ fontSize: 9, fontFamily: 'monospace', marginBottom: 4, color: !hasConceptImage ? '#666' : aiConfig.controlNetModel ? '#c890f8' : '#4ac8c8' }}>
+        {!hasConceptImage ? 'txt2img mode' : aiConfig.controlNetModel ? 'ControlNet + img2img mode' : 'img2img mode'}
       </div>
 
       {/* Scope */}

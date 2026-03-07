@@ -49,6 +49,22 @@ export interface Img2ImgOptions extends ImageGenerateOptions {
 }
 
 /**
+ * Options for ControlNet-guided generation.
+ */
+export interface ControlNetOptions extends ImageGenerateOptions {
+  /** Denoise strength (0.0 = no change, 1.0 = full regeneration). Default 0.75. */
+  denoise?: number;
+  /** ControlNet model filename (without .pth/.safetensors if omitted). */
+  controlNetModel: string;
+  /** ControlNet conditioning strength (0.0–2.0). Default 0.7. */
+  controlStrength?: number;
+  /** Start percent for ControlNet application (0.0–1.0). Default 0.0. */
+  controlStart?: number;
+  /** End percent for ControlNet application (0.0–1.0). Default 1.0. */
+  controlEnd?: number;
+}
+
+/**
  * A provider that generates images from text prompts.
  */
 export interface ImageProvider {

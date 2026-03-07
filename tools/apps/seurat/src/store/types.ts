@@ -27,6 +27,8 @@ export interface AIConfig {
   sampler: string;
   denoise: number;
   loras: LoraConfig[];
+  controlNetModel: string;
+  controlStrength: number;
 }
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
@@ -37,6 +39,8 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   sampler: 'euler_ancestral',
   denoise: 0.55,
   loras: [{ name: 'PixelArtRedmond15V-PixelArt-PIXARFK', weight: 0.8 }],
+  controlNetModel: 'control_v11f1e_sd15_tile',
+  controlStrength: 0.7,
 };
 
 export interface GenerationJob {
