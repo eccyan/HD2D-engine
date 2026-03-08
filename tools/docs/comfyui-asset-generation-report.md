@@ -225,6 +225,84 @@ Extensive parameter sweep experiments were conducted (see `tools/animatediff-exp
 
 **AnimateDiff is not recommended for sprite animation.** The existing **IP-Adapter + OpenPose** per-frame pipeline provides explicit pose control without background animation issues. AnimateDiff may still be useful for environmental animation (water, fire, foliage tiles) or motion prototyping.
 
+## Two-Pass IP-Adapter Pipeline (Concept→Pose→Chibi→Pixel)
+
+### Overview
+
+The recommended sprite generation pipeline uses a **two-pass ComfyUI workflow** that separates posing from style transfer:
+
+1. **Pass 1 (Pose)**: IP-Adapter (concept art reference) + OpenPose ControlNet → posed character at 512x512
+2. **Pass 2 (Chibi-fy)**: IP-Adapter (chibi reference) + img2img on Pass 1 output → chibi-fied character
+3. **Downscale**: Nearest-neighbor to final sprite size (e.g. 128x128)
+
+This approach gives better control than single-pass because the concept art drives the character identity/pose while the chibi reference drives the final art style.
+
+### Workflow Architecture
+
+```
+Pass 1:
+CheckpointLoader → IPAdapterUnifiedLoader → IPAdapterAdvanced (concept art)
+                                               ↓
+ControlNetLoader (OpenPose) → ControlNetApplyAdvanced (pose skeleton)
+                                               ↓
+EmptyLatentImage → KSampler (denoise=1.0) → VAEDecode → Pass 1 output
+
+Pass 2:
+Pass 1 output → VAEEncode → KSampler (denoise=0.7) → VAEDecode → ImageScale → SaveImage
+                               ↑
+IPAdapterUnifiedLoader → IPAdapterAdvanced (chibi reference)
+```
+
+### API Usage
+
+```typescript
+import { ComfyUIClient } from "@vulkan-game-tools/ai-providers";
+
+const client = new ComfyUIClient("http://localhost:8188", 1000, 600_000);
+
+const frame = await client.generateTwoPassIPAdapterWithRetry(
+  prompt, conceptImageBytes, chibiImageBytes, poseSkeletonBytes,
+  {
+    width: 512, height: 512,
+    steps: 20, seed: 42, cfgScale: 5, samplerName: "euler",
+    checkpoint: "AnythingV5_v5PrtRE.safetensors",
+    vae: "vae-ft-mse-840000-ema-pruned.safetensors",
+    ipAdapterWeight: 0.7,
+    ipAdapterPreset: "PLUS (high strength)",
+    ipAdapterStartAt: 0.0,
+    ipAdapterEndAt: 0.8,
+    openPoseModel: "control_v11p_sd15_openpose.pth",
+    openPoseStrength: 0.5,
+    chibiWeight: 0.7,
+    chibiDenoise: 0.7,
+    outputWidth: 128, outputHeight: 128,
+  },
+);
+```
+
+### MPS / Apple Silicon Notes
+
+- **`--force-fp32` is required** for the two-pass workflow on MPS. The intermediate VAEEncode/VAEDecode between passes produces all-black images without fp32 precision (`--cpu-vae` is not sufficient).
+- Expect ~40s per frame at 512x512 with 20 steps on Apple Silicon.
+
+### Experiment Results
+
+A parameter sweep of 14 experiments (56 frames total) was conducted. See `tools/twopass-experiments/`. Key findings:
+
+| Parameter | Best Value | Notes |
+|-----------|-----------|-------|
+| **chibiDenoise** | **0.7** | Lower values (0.3-0.5) barely change the concept art style. 0.7 produces visible chibi proportions. |
+| **openPoseStrength** | **0.5** | Lower strength gives more natural, fluid poses. 1.0 is too rigid. |
+| **consistentSeed** | **true** | Same seed across all frames ensures character appearance stays consistent; the pose skeleton drives variation. |
+| chibiWeight | 0.7 | Weight has minimal effect compared to denoise. 0.5-0.9 all look similar. |
+| ipAdapterEndAt | 0.8 | Stopping IP-Adapter at 80% lets the model refine details in the final denoising steps. |
+| ipAdapterWeight | 0.7 | Standard value; balances identity preservation with prompt adherence. |
+
+**Two-pass vs single-pass comparison:**
+- Two-pass produces more detailed, higher-quality sprites with better concept art fidelity
+- Single-pass with chibi reference is faster (~22s vs ~40s) and produces warmer colors
+- Single-pass with concept reference produces the most ornate/detailed output but lacks chibi proportions
+
 ## Recommendations for Future Work
 
 1. **Use SDXL or a dedicated pixel art model** for better tile generation. SD 1.5 lacks understanding of top-down game tiles.
