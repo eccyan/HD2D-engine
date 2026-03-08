@@ -340,101 +340,77 @@ app.post('/api/characters/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/characters/:id/concept-image — save concept art image (base64 PNG)
-app.post('/api/characters/:id/concept-image', async (req: Request, res: Response) => {
+// Allowed concept/chibi view directions
+const VALID_VIEWS = ['front', 'back', 'right', 'left'];
+
+// Helper: read binary from request (JSON base64 or raw)
+async function readBinaryBody(req: Request): Promise<Buffer> {
+  const contentType = req.headers['content-type'] ?? '';
+  if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
+    return Buffer.from(req.body['data'] as string, 'base64');
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+  }
+  return Buffer.concat(chunks);
+}
+
+// POST /api/characters/:id/concept-image/:view? — save concept art image
+// When :view is provided (front|back|right|left) → saves concept_{view}.png
+// When :view is omitted → saves concept.png
+app.post('/api/characters/:id/concept-image/:view', saveConceptImageHandler);
+app.post('/api/characters/:id/concept-image', saveConceptImageHandler);
+
+async function saveConceptImageHandler(req: Request, res: Response) {
   try {
     const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    await fs.mkdir(charDir, { recursive: true });
-    const filePath = path.join(charDir, 'concept.png');
-
-    let data: Buffer;
-    const contentType = req.headers['content-type'] ?? '';
-
-    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
-      data = Buffer.from(req.body['data'] as string, 'base64');
-    } else {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-      }
-      data = Buffer.concat(chunks);
+    const view = req.params['view'];
+    if (view && !VALID_VIEWS.includes(view)) {
+      res.status(400).json({ error: `Invalid view: ${view}` });
+      return;
     }
+    await fs.mkdir(charDir, { recursive: true });
+    const filename = view ? `concept_${view}.png` : 'concept.png';
+    const filePath = path.join(charDir, filename);
+    const data = await readBinaryBody(req);
 
     await fs.writeFile(filePath, data);
-    console.log(`[REST] Concept image written: ${filePath} (${data.length} bytes)`);
+    console.log(`[REST] Concept image${view ? ` (${view})` : ''} written: ${filePath} (${data.length} bytes)`);
     res.json({ ok: true, path: filePath, bytes: data.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const statusCode = message.includes('Path traversal') ? 400 : 500;
     res.status(statusCode).json({ error: message });
   }
-});
+}
 
-// GET /api/characters/:id/concept-image/:view — serve directional concept art
-app.get('/api/characters/:id/concept-image/:view', async (req: Request, res: Response) => {
+// GET /api/characters/:id/concept-image/:view? — serve concept art image
+// When :view is provided → serves concept_{view}.png
+// When :view is omitted → serves concept.png with fallback to concept_front.png
+app.get('/api/characters/:id/concept-image/:view', serveConceptImageHandler);
+app.get('/api/characters/:id/concept-image', serveConceptImageHandler);
+
+async function serveConceptImageHandler(req: Request, res: Response) {
   try {
     const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    const view = req.params['view']!;
-    if (!['front', 'back', 'right', 'left'].includes(view)) {
+    const view = req.params['view'];
+    if (view && !VALID_VIEWS.includes(view)) {
       res.status(400).json({ error: `Invalid view: ${view}` });
       return;
     }
-    const filePath = path.join(charDir, `concept_${view}.png`);
-    const data = await fs.readFile(filePath);
-    res.setHeader('Content-Type', 'image/png');
-    res.send(data);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const statusCode = message.includes('Path traversal') ? 400 : 404;
-    res.status(statusCode).json({ error: message });
-  }
-});
 
-// POST /api/characters/:id/concept-image/:view — save directional concept art
-app.post('/api/characters/:id/concept-image/:view', async (req: Request, res: Response) => {
-  try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    const view = req.params['view']!;
-    if (!['front', 'back', 'right', 'left'].includes(view)) {
-      res.status(400).json({ error: `Invalid view: ${view}` });
-      return;
-    }
-    await fs.mkdir(charDir, { recursive: true });
-    const filePath = path.join(charDir, `concept_${view}.png`);
-
-    let data: Buffer;
-    const contentType = req.headers['content-type'] ?? '';
-    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
-      data = Buffer.from(req.body['data'] as string, 'base64');
-    } else {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-      }
-      data = Buffer.concat(chunks);
-    }
-
-    await fs.writeFile(filePath, data);
-    console.log(`[REST] Concept image (${view}) written: ${filePath} (${data.length} bytes)`);
-    res.json({ ok: true, path: filePath, bytes: data.length });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const statusCode = message.includes('Path traversal') ? 400 : 500;
-    res.status(statusCode).json({ error: message });
-  }
-});
-
-// GET /api/characters/:id/concept-image — serve concept art image (fallback: concept.png or concept_front.png)
-app.get('/api/characters/:id/concept-image', async (req: Request, res: Response) => {
-  try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    // Try concept.png first (backward compat), then concept_front.png
     let data: Buffer | null = null;
-    for (const filename of ['concept.png', 'concept_front.png']) {
-      try {
-        data = await fs.readFile(path.join(charDir, filename));
-        break;
-      } catch { /* try next */ }
+    if (view) {
+      data = await fs.readFile(path.join(charDir, `concept_${view}.png`));
+    } else {
+      // Backward compat: try concept.png first, then concept_front.png
+      for (const filename of ['concept.png', 'concept_front.png']) {
+        try {
+          data = await fs.readFile(path.join(charDir, filename));
+          break;
+        } catch { /* try next */ }
+      }
     }
     if (!data) throw new Error('No concept image found');
     res.setHeader('Content-Type', 'image/png');
@@ -444,102 +420,58 @@ app.get('/api/characters/:id/concept-image', async (req: Request, res: Response)
     const statusCode = message.includes('Path traversal') ? 400 : 404;
     res.status(statusCode).json({ error: message });
   }
-});
+}
 
-// POST /api/characters/:id/chibi-image — save chibi art image (base64 PNG)
-app.post('/api/characters/:id/chibi-image', async (req: Request, res: Response) => {
+// POST /api/characters/:id/chibi-image/:view? — save chibi art image
+app.post('/api/characters/:id/chibi-image/:view', saveChibiImageHandler);
+app.post('/api/characters/:id/chibi-image', saveChibiImageHandler);
+
+async function saveChibiImageHandler(req: Request, res: Response) {
   try {
     const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    await fs.mkdir(charDir, { recursive: true });
-    const filePath = path.join(charDir, 'chibi.png');
-
-    let data: Buffer;
-    const contentType = req.headers['content-type'] ?? '';
-
-    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
-      data = Buffer.from(req.body['data'] as string, 'base64');
-    } else {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-      }
-      data = Buffer.concat(chunks);
+    const view = req.params['view'];
+    if (view && !VALID_VIEWS.includes(view)) {
+      res.status(400).json({ error: `Invalid view: ${view}` });
+      return;
     }
+    await fs.mkdir(charDir, { recursive: true });
+    const filename = view ? `chibi_${view}.png` : 'chibi.png';
+    const filePath = path.join(charDir, filename);
+    const data = await readBinaryBody(req);
 
     await fs.writeFile(filePath, data);
-    console.log(`[REST] Chibi image written: ${filePath} (${data.length} bytes)`);
+    console.log(`[REST] Chibi image${view ? ` (${view})` : ''} written: ${filePath} (${data.length} bytes)`);
     res.json({ ok: true, path: filePath, bytes: data.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const statusCode = message.includes('Path traversal') ? 400 : 500;
     res.status(statusCode).json({ error: message });
   }
-});
+}
 
-// GET /api/characters/:id/chibi-image/:view — serve directional chibi art
-app.get('/api/characters/:id/chibi-image/:view', async (req: Request, res: Response) => {
+// GET /api/characters/:id/chibi-image/:view? — serve chibi art image
+app.get('/api/characters/:id/chibi-image/:view', serveChibiImageHandler);
+app.get('/api/characters/:id/chibi-image', serveChibiImageHandler);
+
+async function serveChibiImageHandler(req: Request, res: Response) {
   try {
     const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    const view = req.params['view']!;
-    if (!['front', 'back', 'right', 'left'].includes(view)) {
+    const view = req.params['view'];
+    if (view && !VALID_VIEWS.includes(view)) {
       res.status(400).json({ error: `Invalid view: ${view}` });
       return;
     }
-    const filePath = path.join(charDir, `chibi_${view}.png`);
-    const data = await fs.readFile(filePath);
-    res.setHeader('Content-Type', 'image/png');
-    res.send(data);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const statusCode = message.includes('Path traversal') ? 400 : 404;
-    res.status(statusCode).json({ error: message });
-  }
-});
 
-// POST /api/characters/:id/chibi-image/:view — save directional chibi art
-app.post('/api/characters/:id/chibi-image/:view', async (req: Request, res: Response) => {
-  try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
-    const view = req.params['view']!;
-    if (!['front', 'back', 'right', 'left'].includes(view)) {
-      res.status(400).json({ error: `Invalid view: ${view}` });
-      return;
-    }
-    await fs.mkdir(charDir, { recursive: true });
-    const filePath = path.join(charDir, `chibi_${view}.png`);
-
-    let data: Buffer;
-    const contentType = req.headers['content-type'] ?? '';
-    if (contentType.includes('application/json') && req.body && typeof req.body['data'] === 'string') {
-      data = Buffer.from(req.body['data'] as string, 'base64');
-    } else {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-      }
-      data = Buffer.concat(chunks);
-    }
-
-    await fs.writeFile(filePath, data);
-    console.log(`[REST] Chibi image (${view}) written: ${filePath} (${data.length} bytes)`);
-    res.json({ ok: true, path: filePath, bytes: data.length });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const statusCode = message.includes('Path traversal') ? 400 : 500;
-    res.status(statusCode).json({ error: message });
-  }
-});
-
-// GET /api/characters/:id/chibi-image — serve chibi art image (fallback: chibi.png or chibi_front.png)
-app.get('/api/characters/:id/chibi-image', async (req: Request, res: Response) => {
-  try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
     let data: Buffer | null = null;
-    for (const filename of ['chibi.png', 'chibi_front.png']) {
-      try {
-        data = await fs.readFile(path.join(charDir, filename));
-        break;
-      } catch { /* try next */ }
+    if (view) {
+      data = await fs.readFile(path.join(charDir, `chibi_${view}.png`));
+    } else {
+      for (const filename of ['chibi.png', 'chibi_front.png']) {
+        try {
+          data = await fs.readFile(path.join(charDir, filename));
+          break;
+        } catch { /* try next */ }
+      }
     }
     if (!data) throw new Error('No chibi image found');
     res.setHeader('Content-Type', 'image/png');
@@ -549,7 +481,7 @@ app.get('/api/characters/:id/chibi-image', async (req: Request, res: Response) =
     const statusCode = message.includes('Path traversal') ? 400 : 404;
     res.status(statusCode).json({ error: message });
   }
-});
+}
 
 // POST /api/characters/:id/pixel-image — save pixel art image (base64 PNG)
 app.post('/api/characters/:id/pixel-image', async (req: Request, res: Response) => {
