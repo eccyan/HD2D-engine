@@ -1,29 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { ViewDirection } from '@vulkan-game-tools/asset-types';
-import { VIEW_DIRECTIONS } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 
-type Stage = 'concept' | 'chibi';
+const VIEW_ORDER: { view: ViewDirection; label: string }[] = [
+  { view: 'front', label: 'Front' },
+  { view: 'back',  label: 'Back' },
+  { view: 'right', label: 'Right' },
+  { view: 'left',  label: 'Left' },
+];
 
-function getStageStatus(
-  manifest: { concept: { reference_images: string[] }; chibi?: { reference_image: string } },
-  stage: Stage,
-): 'ready' | 'empty' {
-  if (stage === 'concept') return manifest.concept.reference_images.length > 0 ? 'ready' : 'empty';
-  return manifest.chibi?.reference_image ? 'ready' : 'empty';
+function ImageCell({
+  url,
+  alt,
+  errorKey,
+  imgError,
+  setImgError,
+}: {
+  url: string | null;
+  alt: string;
+  errorKey: string;
+  imgError: Record<string, boolean>;
+  setImgError: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+}) {
+  return (
+    <div style={styles.cell}>
+      {url && !imgError[errorKey] ? (
+        <img
+          src={url}
+          alt={alt}
+          style={styles.cellImg}
+          onError={() => setImgError((prev) => ({ ...prev, [errorKey]: true }))}
+        />
+      ) : (
+        <div style={styles.cellPlaceholder}>—</div>
+      )}
+    </div>
+  );
 }
-
-const STATUS_COLORS: Record<string, { border: string; text: string; bg: string }> = {
-  ready: { border: '#44aa44', text: '#70d870', bg: '#1e3a2e' },
-  empty: { border: '#aa8822', text: '#ddaa44', bg: '#2a2a1a' },
-};
-
-const VIEW_LABELS: Record<ViewDirection, string> = {
-  front: 'F',
-  right: 'R',
-  back: 'B',
-  left: 'L',
-};
 
 export function ConceptPreview() {
   const manifest = useSeuratStore((s) => s.manifest);
@@ -31,8 +44,6 @@ export function ConceptPreview() {
   const chibiImageUrl = useSeuratStore((s) => s.chibiImageUrl);
   const conceptViewUrls = useSeuratStore((s) => s.conceptViewUrls);
   const chibiViewUrls = useSeuratStore((s) => s.chibiViewUrls);
-  const [selectedStage, setSelectedStage] = useState<Stage>('concept');
-  const [selectedView, setSelectedView] = useState<ViewDirection | null>(null);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
 
   // Reset error state when image URLs change
@@ -51,135 +62,64 @@ export function ConceptPreview() {
     );
   }
 
-  const stages: { key: Stage; label: string; url: string | null }[] = [
-    { key: 'concept', label: 'Concept Art', url: conceptImageUrl },
-    { key: 'chibi', label: 'Chibi/Deformed', url: chibiImageUrl },
-  ];
+  const hasConceptImage = manifest.concept.reference_images.length > 0;
+  const hasChibiImage = !!manifest.chibi?.reference_image;
 
-  // Determine which URL to show in the large preview
-  const viewUrls = selectedStage === 'concept' ? conceptViewUrls : chibiViewUrls;
-  const stageHasImage = selectedStage === 'concept'
-    ? manifest.concept.reference_images.length > 0
-    : !!manifest.chibi?.reference_image;
-  const defaultUrl = stages.find((s) => s.key === selectedStage)?.url ?? null;
-  const currentUrl = selectedView && viewUrls[selectedView]
-    ? viewUrls[selectedView]
-    : defaultUrl;
+  if (!hasConceptImage && !hasChibiImage) {
+    return (
+      <div style={styles.empty}>No concept or chibi art yet. Generate or upload from the panel on the right.</div>
+    );
+  }
 
   return (
     <div style={styles.container}>
-      {/* Pipeline stepper */}
-      <div style={styles.stepper}>
-        {stages.map((stage, i) => {
-          const status = getStageStatus(manifest, stage.key);
-          const colors = STATUS_COLORS[status];
-          const isSelected = selectedStage === stage.key;
-          return (
-            <React.Fragment key={stage.key}>
-              {i > 0 && <div style={styles.arrow}>→</div>}
-              <button
-                onClick={() => { setSelectedStage(stage.key); setSelectedView(null); }}
-                style={{
-                  ...styles.stageCard,
-                  borderColor: isSelected ? '#8a8af8' : colors.border,
-                  background: isSelected ? '#1e1e3e' : colors.bg,
-                }}
-              >
-                <div style={styles.stageThumbnailBox}>
-                  {stage.url && !imgError[stage.key] ? (
-                    <img
-                      src={stage.url}
-                      alt={stage.label}
-                      style={styles.stageThumbnail}
-                      onError={() => setImgError((prev) => ({ ...prev, [stage.key]: true }))}
-                    />
-                  ) : (
-                    <div style={styles.stagePlaceholder}>—</div>
-                  )}
-                </div>
-                <div style={{ fontFamily: 'monospace', fontSize: 9, color: '#ccc', textAlign: 'center' }}>{stage.label}</div>
-                <div style={{ fontFamily: 'monospace', fontSize: 8, color: colors.text, textAlign: 'center' }}>
-                  {status}
-                </div>
-              </button>
-            </React.Fragment>
-          );
-        })}
+      {/* Column headers */}
+      <div style={styles.headerRow}>
+        <div style={styles.dirLabel} />
+        <div style={styles.colHeader}>Concept</div>
+        <div style={styles.colHeader}>Chibi</div>
       </div>
 
-      {/* 4-view strip (always shown when stage has an image) */}
-      {stageHasImage && (
-        <div style={styles.viewStrip}>
-          {VIEW_DIRECTIONS.map((view) => {
-            const url = viewUrls[view];
-            const isActive = selectedView === view;
-            const hasImage = !!url;
-            return (
-              <button
-                key={view}
-                onClick={() => setSelectedView(isActive ? null : view)}
-                style={{
-                  ...styles.viewCard,
-                  borderColor: isActive ? '#8a8af8' : hasImage ? '#44aa44' : '#444',
-                  background: isActive ? '#1e1e3e' : '#0e0e1a',
-                }}
-              >
-                <div style={styles.viewThumbnailBox}>
-                  {url && !imgError[`${selectedStage}_${view}`] ? (
-                    <img
-                      src={url}
-                      alt={`${view} view`}
-                      style={styles.viewThumbnail}
-                      onError={() => setImgError((prev) => ({ ...prev, [`${selectedStage}_${view}`]: true }))}
-                    />
-                  ) : (
-                    <div style={styles.viewPlaceholder}>—</div>
-                  )}
-                </div>
-                <div style={{
-                  fontFamily: 'monospace',
-                  fontSize: 8,
-                  color: hasImage ? '#70d870' : '#666',
-                  textAlign: 'center',
-                }}>
-                  {VIEW_LABELS[view]}
-                  {hasImage && ' ✓'}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* One row per direction */}
+      {VIEW_ORDER.map(({ view, label }) => {
+        const conceptUrl = conceptViewUrls[view] ?? (view === 'front' ? conceptImageUrl : null);
+        const chibiUrl = chibiViewUrls[view] ?? (view === 'front' ? chibiImageUrl : null);
+        const hasAny = !!conceptUrl || !!chibiUrl;
 
-      {/* Large preview of selected stage/view */}
-      <div style={styles.imageBox}>
-        {currentUrl && !imgError[selectedView ? `preview_${selectedView}` : `preview_${selectedStage}`] ? (
-          <img
-            src={currentUrl}
-            alt={selectedView ?? stages.find((s) => s.key === selectedStage)?.label}
-            style={styles.img}
-            onError={() => setImgError((prev) => ({
-              ...prev,
-              [selectedView ? `preview_${selectedView}` : `preview_${selectedStage}`]: true,
-            }))}
-          />
-        ) : (
-          <div style={styles.placeholder}>
-            {`No ${selectedView ?? selectedStage} art yet`}
+        return (
+          <div key={view} style={styles.row}>
+            <div style={styles.dirLabel}>{label}</div>
+            <ImageCell
+              url={conceptUrl}
+              alt={`${label} concept`}
+              errorKey={`concept_${view}`}
+              imgError={imgError}
+              setImgError={setImgError}
+            />
+            <ImageCell
+              url={chibiUrl}
+              alt={`${label} chibi`}
+              errorKey={`chibi_${view}`}
+              imgError={imgError}
+              setImgError={setImgError}
+            />
+            {!hasAny && (
+              <div style={styles.rowHint}>—</div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    padding: 24,
+    padding: 16,
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
+    gap: 8,
     overflowY: 'auto',
   },
   empty: {
@@ -189,29 +129,39 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'monospace',
     fontSize: 12,
   },
-  stepper: {
+  headerRow: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+    paddingBottom: 4,
+    borderBottom: '1px solid #2a2a3a',
   },
-  stageCard: {
-    border: '1px solid #444',
-    borderRadius: 6,
-    padding: 8,
-    cursor: 'pointer',
+  colHeader: {
+    flex: 1,
+    fontFamily: 'monospace',
+    fontSize: 10,
+    fontWeight: 600,
+    color: '#888',
+    textAlign: 'center',
+  },
+  row: {
     display: 'flex',
-    flexDirection: 'column' as const,
     alignItems: 'center',
-    gap: 4,
-    minWidth: 100,
-    background: 'none',
+    gap: 8,
   },
-  stageThumbnailBox: {
-    width: 80,
-    height: 80,
+  dirLabel: {
+    width: 40,
+    fontFamily: 'monospace',
+    fontSize: 10,
+    fontWeight: 600,
+    color: '#aaa',
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  cell: {
+    flex: 1,
+    aspectRatio: '1',
+    maxWidth: 200,
     background: '#0e0e1a',
     border: '1px solid #2a2a3a',
     borderRadius: 4,
@@ -220,84 +170,20 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stageThumbnail: {
+  cellImg: {
     width: '100%',
     height: '100%',
     objectFit: 'contain',
     imageRendering: 'pixelated' as const,
   },
-  stagePlaceholder: {
+  cellPlaceholder: {
     fontFamily: 'monospace',
-    fontSize: 16,
-    color: '#444',
-  },
-  arrow: {
-    fontFamily: 'monospace',
-    fontSize: 18,
-    color: '#555',
-  },
-  viewStrip: {
-    display: 'flex',
-    gap: 6,
-    marginBottom: 12,
-    justifyContent: 'center',
-  },
-  viewCard: {
-    border: '1px solid #444',
-    borderRadius: 4,
-    padding: 4,
-    cursor: 'pointer',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: 2,
-    background: 'none',
-  },
-  viewThumbnailBox: {
-    width: 56,
-    height: 56,
-    background: '#0e0e1a',
-    border: '1px solid #2a2a3a',
-    borderRadius: 3,
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  viewThumbnail: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    imageRendering: 'pixelated' as const,
-  },
-  viewPlaceholder: {
-    fontFamily: 'monospace',
-    fontSize: 12,
+    fontSize: 14,
     color: '#333',
   },
-  imageBox: {
-    width: '100%',
-    maxWidth: 480,
-    aspectRatio: '1',
-    background: '#0e0e1a',
-    border: '1px solid #2a2a3a',
-    borderRadius: 6,
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  img: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    imageRendering: 'pixelated' as const,
-  },
-  placeholder: {
+  rowHint: {
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 8,
     color: '#444',
-    textAlign: 'center',
-    padding: 16,
   },
 };
