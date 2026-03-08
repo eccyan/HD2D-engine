@@ -58,7 +58,9 @@ export function ConceptPreview() {
 
   // Determine which URL to show in the large preview
   const viewUrls = selectedStage === 'concept' ? conceptViewUrls : chibiViewUrls;
-  const hasViews = VIEW_DIRECTIONS.some((v) => viewUrls[v] !== null);
+  const stageHasImage = selectedStage === 'concept'
+    ? manifest.concept.reference_images.length > 0
+    : !!manifest.chibi?.reference_image;
   const defaultUrl = stages.find((s) => s.key === selectedStage)?.url ?? null;
   const currentUrl = selectedView && viewUrls[selectedView]
     ? viewUrls[selectedView]
@@ -105,8 +107,8 @@ export function ConceptPreview() {
         })}
       </div>
 
-      {/* 4-view strip (if views exist) */}
-      {hasViews && (
+      {/* 4-view strip (always shown when stage has an image) */}
+      {stageHasImage && (
         <div style={styles.viewStrip}>
           {VIEW_DIRECTIONS.map((view) => {
             const url = viewUrls[view];
