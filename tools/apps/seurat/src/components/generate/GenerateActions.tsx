@@ -100,11 +100,14 @@ export function GenerateActions({ animName }: Props) {
             {SAMPLER_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </Row>
-        <Row>
-          <label style={styles.label}>Denoise</label>
-          <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.denoise} onChange={(e) => setAIConfig({ denoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-          <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.denoise.toFixed(2)}</span>
-        </Row>
+        {/* Denoise only used in non-IP-Adapter modes (img2img / ControlNet) */}
+        {!aiConfig.useIPAdapter && (
+          <Row>
+            <label style={styles.label}>Denoise</label>
+            <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.denoise} onChange={(e) => setAIConfig({ denoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+            <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.denoise.toFixed(2)}</span>
+          </Row>
+        )}
       </div>
 
       {/* LoRA */}
