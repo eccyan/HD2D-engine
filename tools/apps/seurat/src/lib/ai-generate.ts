@@ -69,19 +69,19 @@ export function buildFramePrompt(
   const frameCount = anim.frames.length;
 
   return [
-    concept.style_prompt,
+    sanitizeStylePrompt(concept.style_prompt),
     concept.description,
     dirDesc,
     `${anim.state} pose`,
     phase,
     `${spritesheet.frame_width}x${spritesheet.frame_height}`,
-    'pixel art, 8-bit, retro game graphics, clean edges, game asset, single character, centered, transparent background, same character',
+    'pixel art, 8-bit, retro game graphics, clean edges, game asset, single character, centered, transparent background, no background, same character',
   ].join(', ');
 }
 
 export function buildNegativePrompt(manifest: CharacterManifest): string {
   const custom = manifest.concept.negative_prompt;
-  if (custom) return `${custom}, watermark, text, signature`;
+  if (custom) return `${custom}, ${DEFAULT_NEGATIVE_PROMPT}`;
   return DEFAULT_NEGATIVE_PROMPT;
 }
 
