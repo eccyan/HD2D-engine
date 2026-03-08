@@ -1281,6 +1281,13 @@ export class ComfyUIClient implements ImageProvider {
   }
 
   /**
+   * Interrupt the currently running generation on ComfyUI.
+   */
+  async interrupt(): Promise<void> {
+    await fetch(`${this.baseUrl}/interrupt`, { method: 'POST' });
+  }
+
+  /**
    * Generate an image from a text prompt via ComfyUI's txt2img workflow.
    *
    * @param prompt - Text description of the desired image

@@ -42,6 +42,9 @@ export interface SeuratState {
   createCharacter: (id: string, name: string) => Promise<void>;
   saveManifest: () => Promise<void>;
 
+  // Cancel
+  cancelGeneration: () => Promise<void>;
+
   // Concept
   saveConcept: (concept: ConceptArt) => Promise<void>;
   conceptImageUrl: string | null;
@@ -67,6 +70,7 @@ export interface SeuratState {
   chibiError: string | null;
   generateChibiArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; scheduler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; vae?: string; denoise?: number }) => Promise<void>;
   uploadChibiImage: (file: File) => Promise<void>;
+  uploadChibiImageForView: (file: File, view: ViewDirection) => Promise<void>;
 
   // Multi-view chibi
   chibiViewUrls: Record<ViewDirection, string | null>;
@@ -149,6 +153,25 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   setActiveSection: (s) => set({ activeSection: s }),
   treeSelection: { kind: 'manifest' } as TreeSelection,
   setTreeSelection: (s) => set({ treeSelection: s }),
+
+  // Cancel
+  cancelGeneration: async () => {
+    const { aiConfig } = get();
+    try {
+      const comfy = new ComfyUIClient(aiConfig.comfyUrl);
+      await comfy.interrupt();
+    } catch { /* best effort */ }
+    set({
+      conceptGenerating: false,
+      conceptViewsGenerating: false,
+      chibiGenerating: false,
+      chibiViewsGenerating: false,
+      conceptError: 'Cancelled.',
+      conceptViewsError: null,
+      chibiError: null,
+      chibiViewsError: null,
+    });
+  },
 
   // Characters
   characters: [],
@@ -707,6 +730,47 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       await api.saveManifest(updated);
 
       set({ chibiImageUrl: api.chibiImageUrl(manifest.character_id), chibiError: null });
+    } catch (err) {
+      set({ chibiError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ chibiGenerating: false });
+    }
+  },
+
+  uploadChibiImageForView: async (file, view) => {
+    const { manifest } = get();
+    if (!manifest) return;
+
+    set({ chibiGenerating: true, chibiError: null });
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const pngBytes = new Uint8Array(arrayBuf);
+
+      await api.saveChibiImage(manifest.character_id, pngBytes, view);
+
+      const viewFile = `chibi_${view}.png`;
+      const existingRefs = manifest.chibi?.reference_images ?? {};
+      const updated = {
+        ...manifest,
+        chibi: {
+          style_prompt: manifest.chibi?.style_prompt || 'chibi, super deformed, 2-3 head body ratio, cute, simple features',
+          negative_prompt: manifest.chibi?.negative_prompt || 'realistic, photograph, 3d render',
+          reference_image: manifest.chibi?.reference_image || 'chibi.png',
+          reference_images: { ...existingRefs, [view]: viewFile },
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      const { chibiViewUrls } = get();
+      set({
+        chibiViewUrls: {
+          ...chibiViewUrls,
+          [view]: api.chibiImageUrl(manifest.character_id, view) + '&t=' + Date.now(),
+        },
+        chibiError: null,
+      });
     } catch (err) {
       set({ chibiError: err instanceof Error ? err.message : String(err) });
     } finally {

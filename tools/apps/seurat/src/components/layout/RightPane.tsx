@@ -71,13 +71,13 @@ function CharacterSections() {
       <Collapsible title="Concept Art" defaultOpen>
         <ConceptActions />
       </Collapsible>
-      <Collapsible title="Chibi / Deformed" defaultOpen={false}>
+      <Collapsible title="Chibi / Deformed" defaultOpen>
         <ChibiActions />
       </Collapsible>
-      <Collapsible title="Sprite Generation" defaultOpen={false}>
+      <Collapsible title="Sprite Generation" defaultOpen>
         <SpriteGenerationSection />
       </Collapsible>
-      <Collapsible title="Atlas" defaultOpen={false}>
+      <Collapsible title="Atlas" defaultOpen>
         <AtlasActions />
       </Collapsible>
     </>

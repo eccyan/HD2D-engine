@@ -1,15 +1,24 @@
 import React, { useRef, useState, useEffect } from 'react';
 import type { ConceptArt, ViewDirection } from '@vulkan-game-tools/asset-types';
-import { VIEW_DIRECTIONS } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { ComfySettingsPanel, type ComfySettings } from './ComfySettingsPanel.js';
 
-const VIEW_LABELS: Record<ViewDirection, string> = {
-  front: 'Front',
-  back: 'Back',
-  right: 'Right',
-  left: 'Left',
-};
+type GenerateOption = 'all' | ViewDirection;
+
+const GENERATE_OPTIONS: { value: GenerateOption; label: string }[] = [
+  { value: 'all',   label: 'All' },
+  { value: 'front', label: 'Front' },
+  { value: 'back',  label: 'Back' },
+  { value: 'right', label: 'Right' },
+  { value: 'left',  label: 'Left' },
+];
+
+const UPLOAD_OPTIONS: { value: ViewDirection; label: string }[] = [
+  { value: 'front', label: 'Front' },
+  { value: 'back',  label: 'Back' },
+  { value: 'right', label: 'Right' },
+  { value: 'left',  label: 'Left' },
+];
 
 export function ConceptActions() {
   const manifest = useSeuratStore((s) => s.manifest);
@@ -18,13 +27,17 @@ export function ConceptActions() {
   const setAIConfig = useSeuratStore((s) => s.setAIConfig);
   const conceptGenerating = useSeuratStore((s) => s.conceptGenerating);
   const conceptError = useSeuratStore((s) => s.conceptError);
+  const generateConceptArt = useSeuratStore((s) => s.generateConceptArt);
+  const cancelGeneration = useSeuratStore((s) => s.cancelGeneration);
   const uploadConceptImageForView = useSeuratStore((s) => s.uploadConceptImageForView);
   const conceptViewsGenerating = useSeuratStore((s) => s.conceptViewsGenerating);
   const conceptViewsError = useSeuratStore((s) => s.conceptViewsError);
   const conceptViewsProgress = useSeuratStore((s) => s.conceptViewsProgress);
   const generateConceptViews = useSeuratStore((s) => s.generateConceptViews);
-  const fileInputRefs = useRef<Record<ViewDirection, HTMLInputElement | null>>({ front: null, back: null, right: null, left: null });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [genDirection, setGenDirection] = useState<GenerateOption>('all');
+  const [uploadDirection, setUploadDirection] = useState<ViewDirection>('front');
   const [description, setDescription] = useState('');
   const [stylePrompt, setStylePrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
@@ -43,7 +56,6 @@ export function ConceptActions() {
     setDescription(manifest.concept.description);
     setStylePrompt(manifest.concept.style_prompt);
     setNegativePrompt(manifest.concept.negative_prompt);
-    // Load saved generation settings if available
     const gs = manifest.concept.generation_settings;
     if (gs) {
       setComfySettings({
@@ -62,6 +74,16 @@ export function ConceptActions() {
 
   if (!manifest) return null;
 
+  const busy = conceptGenerating || conceptViewsGenerating;
+  const noPrompt = !description && !stylePrompt;
+
+  const comfyOverrides = {
+    steps: comfySettings.steps, cfg: comfySettings.cfg, sampler: comfySettings.sampler,
+    scheduler: comfySettings.scheduler || undefined, seed: comfySettings.seed,
+    loras: comfySettings.loras, checkpoint: comfySettings.checkpoint || undefined,
+    vae: comfySettings.vae || undefined,
+  };
+
   const handleSave = async () => {
     setSaving(true);
     const concept: ConceptArt = {
@@ -74,7 +96,7 @@ export function ConceptActions() {
     setSaving(false);
   };
 
-  const handleGenerateAllViews = async () => {
+  const handleGenerate = async () => {
     const concept: ConceptArt = {
       ...manifest.concept,
       description,
@@ -82,12 +104,22 @@ export function ConceptActions() {
       negative_prompt: negativePrompt,
     };
     await saveConcept(concept);
-    await generateConceptViews({
-      steps: comfySettings.steps, cfg: comfySettings.cfg, sampler: comfySettings.sampler,
-      scheduler: comfySettings.scheduler || undefined, seed: comfySettings.seed,
-      loras: comfySettings.loras, checkpoint: comfySettings.checkpoint || undefined,
-      vae: comfySettings.vae || undefined,
-    });
+    if (genDirection === 'all') {
+      await generateConceptViews(comfyOverrides);
+    } else {
+      await generateConceptArt(comfyOverrides);
+    }
+  };
+
+  const handleUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadConceptImageForView(file, uploadDirection);
+    e.target.value = '';
   };
 
   return (
@@ -160,47 +192,59 @@ export function ConceptActions() {
         </div>
       </div>
 
-      <label style={styles.label}>Upload per Direction</label>
-      <div style={styles.uploadGrid}>
-        {VIEW_DIRECTIONS.map((view) => (
-          <React.Fragment key={view}>
-            <button
-              onClick={() => fileInputRefs.current[view]?.click()}
-              disabled={conceptGenerating || conceptViewsGenerating}
-              style={{
-                ...styles.uploadBtn,
-                opacity: conceptGenerating || conceptViewsGenerating ? 0.5 : 1,
-              }}
-            >
-              {VIEW_LABELS[view]}
-            </button>
-            <input
-              ref={(el) => { fileInputRefs.current[view] = el; }}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  uploadConceptImageForView(file, view);
-                  e.target.value = '';
-                }
-              }}
-            />
-          </React.Fragment>
-        ))}
+      {/* Generate */}
+      <div style={styles.actionRow}>
+        <select
+          value={genDirection}
+          onChange={(e) => setGenDirection(e.target.value as GenerateOption)}
+          style={styles.dirSelect}
+        >
+          {GENERATE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleGenerate}
+          disabled={busy || noPrompt}
+          style={{ ...styles.generateBtn, opacity: busy || noPrompt ? 0.5 : 1 }}
+        >
+          {busy ? 'Generating...' : 'Generate'}
+        </button>
+        <button
+          onClick={cancelGeneration}
+          disabled={!busy}
+          style={{ ...styles.cancelBtn, opacity: busy ? 1 : 0.3 }}
+        >
+          Cancel
+        </button>
       </div>
 
-      <button
-        onClick={handleGenerateAllViews}
-        disabled={conceptGenerating || conceptViewsGenerating || (!description && !stylePrompt)}
-        style={{
-          ...styles.generateAllBtn,
-          opacity: conceptGenerating || conceptViewsGenerating || (!description && !stylePrompt) ? 0.5 : 1,
-        }}
-      >
-        {conceptViewsGenerating ? 'Generating Views...' : 'Generate All 4 Views'}
-      </button>
+      {/* Upload */}
+      <div style={styles.actionRow}>
+        <select
+          value={uploadDirection}
+          onChange={(e) => setUploadDirection(e.target.value as ViewDirection)}
+          style={styles.dirSelect}
+        >
+          {UPLOAD_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleUpload}
+          disabled={busy}
+          style={{ ...styles.uploadBtn, opacity: busy ? 0.5 : 1 }}
+        >
+          Upload
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
+      </div>
 
       {conceptGenerating && (
         <div style={styles.progressText}>
@@ -225,17 +269,17 @@ export function ConceptActions() {
 
 const styles: Record<string, React.CSSProperties> = {
   container: { display: 'flex', flexDirection: 'column', gap: 4 },
-  sectionTitle: { fontFamily: 'monospace', fontSize: 12, color: '#aaa', fontWeight: 600, marginBottom: 4 },
   label: { fontFamily: 'monospace', fontSize: 10, color: '#666', marginTop: 4 },
   textarea: { background: '#1a1a2e', border: '1px solid #3a3a5a', borderRadius: 4, color: '#ddd', fontFamily: 'monospace', fontSize: 11, padding: '6px 8px', resize: 'vertical' as const, outline: 'none' },
   actions: { display: 'flex', gap: 6, marginTop: 6 },
   saveBtn: { flex: 1, background: '#1e3a6e', border: '1px solid #4a8af8', borderRadius: 4, color: '#90b8f8', fontFamily: 'monospace', fontSize: 10, padding: '6px 12px', cursor: 'pointer', fontWeight: 600 },
-  approveBtn: { flex: 1, background: '#1e3a2e', border: '1px solid #44aa44', borderRadius: 4, color: '#70d870', fontFamily: 'monospace', fontSize: 10, padding: '6px 12px', cursor: 'pointer', fontWeight: 600 },
   divider: { height: 1, background: '#2a2a3a', margin: '8px 0' },
-  uploadGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 },
   remBgSection: { background: '#12121e', border: '1px solid #2a2a3a', borderRadius: 4, padding: '6px 8px', display: 'flex', flexDirection: 'column' as const, gap: 2 },
   remBgInput: { flex: 1, background: '#1a1a2e', border: '1px solid #3a3a5a', borderRadius: 4, color: '#ddd', fontFamily: 'monospace', fontSize: 10, padding: '3px 6px', outline: 'none' },
-  generateAllBtn: { width: '100%', background: '#1e3a2e', border: '1px solid #44aa44', borderRadius: 4, color: '#70d870', fontFamily: 'monospace', fontSize: 10, padding: '8px 8px', cursor: 'pointer', fontWeight: 600, textAlign: 'center' },
+  actionRow: { display: 'flex', gap: 4, alignItems: 'center', marginTop: 4 },
+  dirSelect: { background: '#1a1a2e', border: '1px solid #3a3a5a', borderRadius: 4, color: '#ddd', fontFamily: 'monospace', fontSize: 10, padding: '6px 8px', outline: 'none' },
+  generateBtn: { flex: 1, background: '#1e3a2e', border: '1px solid #44aa44', borderRadius: 4, color: '#70d870', fontFamily: 'monospace', fontSize: 10, padding: '8px 8px', cursor: 'pointer', fontWeight: 600, textAlign: 'center' },
+  cancelBtn: { background: '#2a1a1a', border: '1px solid #553333', borderRadius: 4, color: '#d88', fontFamily: 'monospace', fontSize: 10, padding: '8px 10px', cursor: 'pointer', fontWeight: 600 },
   uploadBtn: { flex: 1, background: '#1e3a3a', border: '1px solid #4ac8c8', borderRadius: 4, color: '#90d8d8', fontFamily: 'monospace', fontSize: 10, padding: '8px 8px', cursor: 'pointer', fontWeight: 600, textAlign: 'center' },
   progressText: { fontFamily: 'monospace', fontSize: 9, color: '#8a4af8', textAlign: 'center' },
   errorText: { fontFamily: 'monospace', fontSize: 9, color: '#d88', background: '#2a1515', border: '1px solid #553333', borderRadius: 4, padding: '4px 6px' },
