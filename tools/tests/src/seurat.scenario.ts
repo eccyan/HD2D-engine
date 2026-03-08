@@ -189,7 +189,7 @@ export function runSeuratScenarios(runner: TestRunner): void {
   // Scenario: Review filter cycling
   // -----------------------------------------------------------------------
   runner.test('[Scenario] Review filter cycling', async (client) => {
-    const filters = ['all', 'pending', 'generating', 'generated', 'approved', 'rejected', 'all'] as const;
+    const filters = ['all', 'pending', 'generating', 'generated', 'all'] as const;
     for (const f of filters) {
       await client.dispatch('setReviewFilter', f);
       const current = await client.getStateSelector('reviewFilter');

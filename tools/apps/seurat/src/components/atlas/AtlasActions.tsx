@@ -43,7 +43,7 @@ export function AtlasActions() {
         <div style={styles.section}>
           <div style={styles.subTitle}>Result</div>
           <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#44aa44' }}>
-            {assemblyResult.approvedFrames} / {assemblyResult.totalFrames} approved
+            {assemblyResult.generatedFrames} / {assemblyResult.totalFrames} frames generated
           </div>
           {assemblyResult.errors.length > 0 && (
             <div>

@@ -76,9 +76,9 @@ export function runSeuratTests(runner: TestRunner): void {
   });
 
   runner.test('Review filter works', async (client) => {
-    await client.dispatch('setReviewFilter', 'approved');
+    await client.dispatch('setReviewFilter', 'generated');
     let filter = await client.getStateSelector('reviewFilter');
-    assertEqual(filter, 'approved', 'Review filter: approved');
+    assertEqual(filter, 'generated', 'Review filter: generated');
 
     await client.dispatch('setReviewFilter', 'pending');
     filter = await client.getStateSelector('reviewFilter');

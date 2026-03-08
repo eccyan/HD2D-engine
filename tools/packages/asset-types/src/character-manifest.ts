@@ -2,7 +2,7 @@
 // Per-Character Manifest — lifecycle tracking for AI-generated sprite assets
 // ---------------------------------------------------------------------------
 
-export type FrameStatus = "pending" | "generating" | "generated" | "approved" | "rejected";
+export type FrameStatus = "pending" | "generating" | "generated";
 export type FrameSource = "ai" | "manual" | "placeholder";
 export type DirectionCode = "S" | "N" | "E" | "W";
 export type AnimState = "idle" | "walk" | "run";
@@ -58,7 +58,6 @@ export interface ConceptArt {
   style_prompt: string;
   negative_prompt: string;
   reference_images: string[]; // relative paths
-  approved: boolean;
   generation_settings?: StageGenerationSettings;
 }
 
@@ -79,7 +78,6 @@ export interface ChibiArt {
   style_prompt: string;
   negative_prompt: string;
   reference_image: string;  // "chibi.png"
-  approved: boolean;
   generation_settings?: StageGenerationSettings;
 }
 
@@ -87,7 +85,6 @@ export interface PixelArt {
   style_prompt: string;
   negative_prompt: string;
   reference_image: string;  // "pixel.png"
-  approved: boolean;
   generation_settings?: StageGenerationSettings;
 }
 
@@ -177,7 +174,6 @@ export function createDefaultManifest(
       style_prompt: `pixel art, ${frameWidth}x${frameHeight}`,
       negative_prompt: "blurry, realistic, 3d render",
       reference_images: [],
-      approved: false,
     },
     spritesheet: { frame_width: frameWidth, frame_height: frameHeight, columns },
     animations,
@@ -190,13 +186,11 @@ export interface ManifestStats {
   pending: number;
   generating: number;
   generated: number;
-  approved: number;
-  rejected: number;
 }
 
 export function getManifestStats(manifest: CharacterManifest): ManifestStats {
   const stats: ManifestStats = {
-    total: 0, pending: 0, generating: 0, generated: 0, approved: 0, rejected: 0,
+    total: 0, pending: 0, generating: 0, generated: 0,
   };
   for (const anim of manifest.animations) {
     for (const frame of anim.frames) {

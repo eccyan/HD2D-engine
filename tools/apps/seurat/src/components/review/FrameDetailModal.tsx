@@ -69,8 +69,6 @@ const STATUS_COLORS: Record<string, string> = {
   pending: '#666',
   generating: '#cc8800',
   generated: '#aa8800',
-  approved: '#44aa44',
-  rejected: '#aa4444',
 };
 
 const styles: Record<string, React.CSSProperties> = {

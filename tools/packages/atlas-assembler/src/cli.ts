@@ -91,9 +91,8 @@ async function assembleOne(characterId: string, validate: boolean) {
     const result = await assembleCharacterAtlas(characterId, { validate });
 
     console.log(`  Total frames:       ${result.totalFrames}`);
-    console.log(`  Approved:           ${result.approvedFrames}`);
+    console.log(`  Generated:          ${result.generatedFrames}`);
     console.log(`  Placeholder:        ${result.placeholderFrames}`);
-    console.log(`  Rejected:           ${result.rejectedFrames}`);
 
     if (result.warnings.length > 0) {
       console.log(`  Warnings:`);

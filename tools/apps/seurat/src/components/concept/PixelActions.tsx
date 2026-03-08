@@ -47,16 +47,12 @@ export function PixelActions() {
 
   if (!manifest) return null;
 
-  const chibiApproved = manifest.chibi?.approved === true;
-  const disabled = !chibiApproved;
-
-  const handleSave = async (approved?: boolean) => {
+  const handleSave = async () => {
     setSaving(true);
     const pixel: PixelArt = {
       style_prompt: stylePrompt,
       negative_prompt: negativePrompt,
       reference_image: manifest.pixel?.reference_image || '',
-      approved: approved ?? manifest.pixel?.approved ?? false,
     };
     await savePixel(pixel);
     setSaving(false);
@@ -74,17 +70,12 @@ export function PixelActions() {
 
   return (
     <div style={styles.container}>
-      {disabled && (
-        <div style={styles.disabledMsg}>Approve chibi art first to enable pixel art generation.</div>
-      )}
-
       <label style={styles.label}>Style Prompt</label>
       <textarea
         value={stylePrompt}
         onChange={(e) => setStylePrompt(e.target.value)}
         rows={2}
         style={styles.textarea}
-        disabled={disabled}
         placeholder="pixel art, 8-bit..."
       />
 
@@ -94,19 +85,13 @@ export function PixelActions() {
         onChange={(e) => setNegativePrompt(e.target.value)}
         rows={2}
         style={styles.textarea}
-        disabled={disabled}
         placeholder="blurry, realistic..."
       />
 
       <div style={styles.actions}>
-        <button onClick={() => handleSave()} disabled={saving || disabled} style={styles.saveBtn}>
+        <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
           {saving ? 'Saving...' : 'Save'}
         </button>
-        {manifest.pixel?.reference_image && !manifest.pixel?.approved && (
-          <button onClick={() => handleSave(true)} disabled={saving || disabled} style={styles.approveBtn}>
-            Approve
-          </button>
-        )}
       </div>
 
       <div style={styles.divider} />
@@ -116,22 +101,21 @@ export function PixelActions() {
         settings={comfySettings}
         onChange={setComfySettings}
         showDenoise
-        disabled={disabled}
         savedSettings={manifest.pixel?.generation_settings}
       />
 
       <div style={styles.buttonRow}>
         <button
           onClick={handleGenerate}
-          disabled={pixelGenerating || disabled}
-          style={{ ...styles.generateBtn, opacity: pixelGenerating || disabled ? 0.5 : 1 }}
+          disabled={pixelGenerating}
+          style={{ ...styles.generateBtn, opacity: pixelGenerating ? 0.5 : 1 }}
         >
           {pixelGenerating ? 'Generating...' : 'Generate Pixel Art'}
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={pixelGenerating || disabled}
-          style={{ ...styles.uploadBtn, opacity: disabled ? 0.5 : 1 }}
+          disabled={pixelGenerating}
+          style={styles.uploadBtn}
         >
           Upload Image
         </button>

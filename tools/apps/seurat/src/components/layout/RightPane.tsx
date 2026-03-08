@@ -3,7 +3,6 @@ import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { ManifestJsonEditor } from '../manifest/ManifestJsonEditor.js';
 import { ConceptActions } from '../concept/ConceptActions.js';
 import { ChibiActions } from '../concept/ChibiActions.js';
-import { PixelActions } from '../concept/PixelActions.js';
 import { AtlasActions } from '../atlas/AtlasActions.js';
 import { GenerateActions } from '../generate/GenerateActions.js';
 import { ReviewActions } from '../review/ReviewActions.js';
@@ -67,38 +66,15 @@ function RightContent({ selection }: { selection: ReturnType<typeof useSeuratSto
 }
 
 function CharacterSections() {
-  const manifest = useSeuratStore((s) => s.manifest);
-  const conceptApproved = manifest?.concept.approved;
-  const chibiApproved = manifest?.chibi?.approved;
-  const pixelApproved = manifest?.pixel?.approved;
-
   return (
     <>
-      <Collapsible
-        title="Concept Art"
-        defaultOpen
-        badge={conceptApproved ? 'approved' : undefined}
-      >
+      <Collapsible title="Concept Art" defaultOpen>
         <ConceptActions />
       </Collapsible>
-      <Collapsible
-        title="Chibi / Deformed"
-        defaultOpen={!!conceptApproved && !chibiApproved}
-        badge={chibiApproved ? 'approved' : !conceptApproved ? 'locked' : undefined}
-      >
+      <Collapsible title="Chibi / Deformed" defaultOpen={false}>
         <ChibiActions />
       </Collapsible>
-      <Collapsible
-        title="Pixel Art"
-        defaultOpen={!!chibiApproved && !pixelApproved}
-        badge={pixelApproved ? 'approved' : !chibiApproved ? 'locked' : undefined}
-      >
-        <PixelActions />
-      </Collapsible>
-      <Collapsible
-        title="Sprite Generation"
-        defaultOpen={false}
-      >
+      <Collapsible title="Sprite Generation" defaultOpen={false}>
         <SpriteGenerationSection />
       </Collapsible>
       <Collapsible title="Atlas" defaultOpen={false}>
@@ -122,17 +98,8 @@ function SpriteGenerationSection() {
     0,
   );
 
-  const pixelApproved = manifest.pixel?.approved === true;
-  const backwardsCompat = manifest.concept.approved && manifest.chibi === undefined;
-  const enabled = pixelApproved || backwardsCompat;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {!enabled && (
-        <div style={styles.disabledMsg}>
-          Complete the pipeline (concept → chibi → pixel) and approve pixel art to enable frame generation.
-        </div>
-      )}
       <div style={{ fontSize: 9, fontFamily: 'monospace', color: '#888', marginBottom: 4 }}>
         Generate all pending animation frames ({pendingCount} pending across {manifest.animations.length} animations)
       </div>
@@ -141,8 +108,8 @@ function SpriteGenerationSection() {
           setGeneratingAll(true);
           try { await generateFrames('all_pending'); } finally { setGeneratingAll(false); }
         }}
-        disabled={generatingAll || pendingCount === 0 || !enabled}
-        style={{ ...styles.generateAllBtn, opacity: generatingAll || pendingCount === 0 || !enabled ? 0.5 : 1 }}
+        disabled={generatingAll || pendingCount === 0}
+        style={{ ...styles.generateAllBtn, opacity: generatingAll || pendingCount === 0 ? 0.5 : 1 }}
       >
         {generatingAll ? 'Generating...' : `Generate All Animations (${pendingCount})`}
       </button>

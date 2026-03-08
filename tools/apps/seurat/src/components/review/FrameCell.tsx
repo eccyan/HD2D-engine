@@ -6,16 +6,12 @@ const STATUS_COLORS: Record<FrameStatus, string> = {
   pending: '#666',
   generating: '#cc8800',
   generated: '#aa8800',
-  approved: '#44aa44',
-  rejected: '#aa4444',
 };
 
 const STATUS_LABELS: Record<FrameStatus, string> = {
   pending: 'P',
   generating: '...',
   generated: 'G',
-  approved: 'OK',
-  rejected: 'X',
 };
 
 interface Props {

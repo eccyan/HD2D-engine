@@ -199,9 +199,9 @@ export function GenerateActions({ animName }: Props) {
               </label>
               <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>same seed for all frames (pose drives variation)</span>
             </Row>
-            <div style={{ ...styles.subTitle, marginTop: 4 }}>Chibi Pass (two-pass mode)</div>
+            <div style={{ ...styles.subTitle, marginTop: 4 }}>Chibi Pass (two/three-pass mode)</div>
             <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', marginBottom: 2 }}>
-              When both concept art and chibi images exist: Pass 1 poses with concept, Pass 2 converts to chibi style.
+              When both concept art and chibi images exist: Pass 1 poses with concept, Pass 2 converts to chibi style, Pass 3 (optional) pixelizes.
             </div>
             <Row>
               <label style={styles.label}>Chibi Wt</label>
@@ -215,6 +215,27 @@ export function GenerateActions({ animName }: Props) {
             </Row>
             <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
               IPA Range: when IP-Adapter applies during denoising (early=identity, late=details). Chibi Den: lower = closer to posed concept, higher = more chibi style.
+            </div>
+            <div style={{ ...styles.subTitle, marginTop: 4 }}>Pixel Pass (three-pass mode)</div>
+            <Row>
+              <label style={{ ...styles.label, minWidth: 'auto' }}>
+                <input
+                  type="checkbox"
+                  checked={aiConfig.pixelPassEnabled}
+                  onChange={(e) => setAIConfig({ pixelPassEnabled: e.target.checked })}
+                />
+                {' '}Enable Pixel Pass
+              </label>
+            </Row>
+            {aiConfig.pixelPassEnabled && (
+              <Row>
+                <label style={styles.label}>Pixel Den</label>
+                <input type="range" min={0.1} max={0.7} step={0.05} value={aiConfig.pixelPassDenoise} onChange={(e) => setAIConfig({ pixelPassDenoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.pixelPassDenoise.toFixed(2)}</span>
+              </Row>
+            )}
+            <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
+              Pass 3 applies pixel art LoRA to chibi output. Uses LoRAs from the LoRA section above.
             </div>
           </>
         )}
@@ -290,7 +311,7 @@ export function GenerateActions({ animName }: Props) {
 
       {/* Mode */}
       <div style={{ fontSize: 9, fontFamily: 'monospace', marginBottom: 4, color: !hasConceptImage ? '#666' : aiConfig.useAnimateDiff ? '#f8c860' : (aiConfig.useIPAdapter && hasChibiImage) ? '#90f8b8' : aiConfig.useIPAdapter ? '#f890c8' : aiConfig.controlNetModel ? '#c890f8' : '#4ac8c8' }}>
-        {!hasConceptImage ? 'txt2img mode' : aiConfig.useAnimateDiff ? 'AnimateDiff mode (all frames)' : (aiConfig.useIPAdapter && hasChibiImage) ? 'Two-pass mode: Concept\u2192Pose\u2192Chibi\u2192Pixel' : aiConfig.useIPAdapter ? 'IP-Adapter + OpenPose mode (per-frame)' : aiConfig.controlNetModel ? 'ControlNet + img2img mode' : 'img2img mode'}
+        {!hasConceptImage ? 'txt2img mode' : aiConfig.useAnimateDiff ? 'AnimateDiff mode (all frames)' : (aiConfig.useIPAdapter && hasChibiImage && aiConfig.pixelPassEnabled) ? 'Three-pass: Pose\u2192Chibi\u2192Pixel' : (aiConfig.useIPAdapter && hasChibiImage) ? 'Two-pass: Pose\u2192Chibi' : aiConfig.useIPAdapter ? 'IP-Adapter + OpenPose mode (per-frame)' : aiConfig.controlNetModel ? 'ControlNet + img2img mode' : 'img2img mode'}
       </div>
 
       {/* Generate Animation */}

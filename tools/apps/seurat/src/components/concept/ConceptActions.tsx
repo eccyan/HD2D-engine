@@ -50,14 +50,13 @@ export function ConceptActions() {
 
   if (!manifest) return null;
 
-  const handleSave = async (approved?: boolean) => {
+  const handleSave = async () => {
     setSaving(true);
     const concept: ConceptArt = {
       ...manifest.concept,
       description,
       style_prompt: stylePrompt,
       negative_prompt: negativePrompt,
-      approved: approved ?? manifest.concept.approved,
     };
     await saveConcept(concept);
     setSaving(false);
@@ -109,14 +108,9 @@ export function ConceptActions() {
       />
 
       <div style={styles.actions}>
-        <button onClick={() => handleSave()} disabled={saving} style={styles.saveBtn}>
+        <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
           {saving ? 'Saving...' : 'Save'}
         </button>
-        {!manifest.concept.approved && (
-          <button onClick={() => handleSave(true)} disabled={saving} style={styles.approveBtn}>
-            Approve
-          </button>
-        )}
       </div>
 
       <div style={styles.divider} />

@@ -36,9 +36,8 @@ export interface AssembleResult {
   spritesheet: string; // output path
   animationsJson: string; // output path
   totalFrames: number;
-  approvedFrames: number;
+  generatedFrames: number;
   placeholderFrames: number;
-  rejectedFrames: number;
   errors: string[];
   warnings: string[];
 }
@@ -62,9 +61,8 @@ export async function assembleCharacterAtlas(
   const placeholder = options.placeholderColor ?? [...PLACEHOLDER_RGBA];
   const errors: string[] = [];
   const warnings: string[] = [];
-  let approvedFrames = 0;
+  let generatedFrames = 0;
   let placeholderFrames = 0;
-  let rejectedFrames = 0;
   let totalFrames = 0;
 
   // Build composite operations
@@ -78,16 +76,7 @@ export async function assembleCharacterAtlas(
       const x = col * frame_width;
       const y = row * frame_height;
 
-      if (frame.status === "rejected") {
-        rejectedFrames++;
-        // Use placeholder
-        const buf = createSolidFrame(frame_width, frame_height, placeholder);
-        composites.push({ input: buf, left: x, top: y, raw: { width: frame_width, height: frame_height, channels: 4 } });
-        warnings.push(`${anim.name}[${frame.index}]: rejected — using placeholder`);
-        continue;
-      }
-
-      if (frame.status === "approved" || frame.status === "generated") {
+      if (frame.status === "generated") {
         const framePath = path.join(dir, frame.file);
         try {
           await fs.access(framePath);
@@ -121,7 +110,7 @@ export async function assembleCharacterAtlas(
             composites.push({ input: resized, left: x, top: y, raw: { width: frame_width, height: frame_height, channels: 4 } });
           }
 
-          if (frame.status === "approved") approvedFrames++;
+          generatedFrames++;
         } catch {
           errors.push(`${anim.name}[${frame.index}]: file not found: ${frame.file}`);
           const buf = createSolidFrame(frame_width, frame_height, placeholder);
@@ -170,9 +159,8 @@ export async function assembleCharacterAtlas(
     spritesheet: spritesheetPath,
     animationsJson: animationsPath,
     totalFrames,
-    approvedFrames,
+    generatedFrames,
     placeholderFrames,
-    rejectedFrames,
     errors,
     warnings,
   };

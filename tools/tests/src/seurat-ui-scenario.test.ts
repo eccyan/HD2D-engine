@@ -75,8 +75,8 @@ function mockManifest() {
         frames: [
           { index: 0, file: 'idle_south_0.png', status: 'pending', duration_ms: 200 },
           { index: 1, file: 'idle_south_1.png', status: 'generated', duration_ms: 200 },
-          { index: 2, file: 'idle_south_2.png', status: 'approved', duration_ms: 200 },
-          { index: 3, file: 'idle_south_3.png', status: 'rejected', duration_ms: 200 },
+          { index: 2, file: 'idle_south_2.png', status: 'generated', duration_ms: 200 },
+          { index: 3, file: 'idle_south_3.png', status: 'pending', duration_ms: 200 },
         ],
       },
       {

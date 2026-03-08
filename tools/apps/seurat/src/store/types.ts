@@ -42,6 +42,8 @@ export interface AIConfig {
   chibiDenoise: number;
   openPoseModel: string;
   openPoseStrength: number;
+  pixelPassEnabled: boolean;
+  pixelPassDenoise: number;
   useAnimateDiff: boolean;
   motionModel: string;
   animFrameCount: number;
@@ -72,6 +74,8 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   chibiDenoise: 0.7,
   openPoseModel: 'control_v11p_sd15_openpose',
   openPoseStrength: 0.5,
+  pixelPassEnabled: true,
+  pixelPassDenoise: 0.35,
   useAnimateDiff: false,
   motionModel: 'mm_sd_v15_v2.ckpt',
   animFrameCount: 8,
@@ -93,7 +97,7 @@ export type ReviewFilter = FrameStatus | 'all';
 
 export interface AssembleResult {
   totalFrames: number;
-  approvedFrames: number;
+  generatedFrames: number;
   errors: string[];
   spritesheetUrl?: string;
 }

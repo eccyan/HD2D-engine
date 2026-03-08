@@ -5,7 +5,6 @@ import type {
   ChibiArt,
   PixelArt,
   FrameStatus,
-  StageGenerationSettings,
 } from '@vulkan-game-tools/asset-types';
 import { createDefaultManifest, getManifestStats } from '@vulkan-game-tools/asset-types';
 import { ComfyUIClient } from '@vulkan-game-tools/ai-providers';
@@ -84,9 +83,6 @@ export interface SeuratState {
   reviewFilter: ReviewFilter;
   setReviewFilter: (f: ReviewFilter) => void;
   updateFrameStatus: (anim: string, frame: number, status: FrameStatus, notes?: string) => Promise<void>;
-  approveAnimation: (animName: string) => Promise<void>;
-  rejectAnimation: (animName: string) => Promise<void>;
-  batchApproveGenerated: () => Promise<void>;
 
   // Animate
   selectedClipName: string | null;
@@ -394,7 +390,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           style_prompt: stylePrompt,
           negative_prompt: negPrompt,
           reference_image: 'chibi.png',
-          approved: manifest.chibi?.approved ?? false,
           generation_settings: { checkpoint, vae, steps, cfg, sampler, scheduler, seed: rawSeed, denoise, loras },
         },
       };
@@ -426,7 +421,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           style_prompt: manifest.chibi?.style_prompt || 'chibi, super deformed, 2-3 head body ratio, cute, simple features',
           negative_prompt: manifest.chibi?.negative_prompt || 'realistic, photograph, 3d render',
           reference_image: 'chibi.png',
-          approved: manifest.chibi?.approved ?? false,
         },
       };
       set({ manifest: updated });
@@ -512,7 +506,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           style_prompt: stylePrompt,
           negative_prompt: negPrompt,
           reference_image: 'pixel.png',
-          approved: manifest.pixel?.approved ?? false,
           generation_settings: { checkpoint, vae, steps, cfg, sampler, scheduler, seed: rawSeed, denoise, loras },
         },
       };
@@ -544,7 +537,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           style_prompt: manifest.pixel?.style_prompt || 'pixel art, 8-bit, clean edges, retro game sprite',
           negative_prompt: manifest.pixel?.negative_prompt || 'blurry, realistic, 3d render, smooth shading',
           reference_image: 'pixel.png',
-          approved: manifest.pixel?.approved ?? false,
         },
       };
       set({ manifest: updated });
@@ -607,17 +599,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       }
     }
 
-    // For single-pass modes: pick best available reference (pixel > chibi > concept)
-    let singlePassRef: Uint8Array | null = null;
-    if (manifest.pixel?.reference_image) {
-      try {
-        singlePassRef = await api.fetchPixelImageBytes(manifest.character_id);
-        console.log(`[Seurat] Loaded pixel image as single-pass reference: ${singlePassRef.length} bytes`);
-      } catch (err) {
-        console.warn('[Seurat] Failed to load pixel image:', err);
-      }
-    }
-    if (!singlePassRef) singlePassRef = chibiBytes ?? conceptBytes;
+    // For single-pass modes: pick best available reference (chibi > concept)
+    let singlePassRef: Uint8Array | null = chibiBytes ?? conceptBytes;
 
     if (!singlePassRef) {
       console.log('[Seurat] No reference image, using txt2img mode');
@@ -682,6 +665,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             openPoseStrength: aiConfig.openPoseStrength,
             chibiWeight: aiConfig.chibiWeight,
             chibiDenoise: aiConfig.chibiDenoise,
+            pixelPassEnabled: aiConfig.pixelPassEnabled,
+            pixelPassDenoise: aiConfig.pixelPassDenoise,
+            pixelPassLoras: aiConfig.loras.filter((l) => l.name.trim()),
             removeBackground: aiConfig.removeBackground,
             remBgNodeType: aiConfig.remBgNodeType,
             outputWidth: manifest.spritesheet.frame_width,
@@ -871,6 +857,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
                 openPoseStrength: aiConfig.openPoseStrength,
                 chibiWeight: aiConfig.chibiWeight,
                 chibiDenoise: aiConfig.chibiDenoise,
+                pixelPassEnabled: aiConfig.pixelPassEnabled,
+                pixelPassDenoise: aiConfig.pixelPassDenoise,
+                pixelPassLoras: aiConfig.loras.filter((l) => l.name.trim()),
                 removeBackground: aiConfig.removeBackground,
                 remBgNodeType: aiConfig.remBgNodeType,
                 outputWidth: fw,
@@ -1029,59 +1018,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set({ manifest: updated });
   },
 
-  approveAnimation: async (animName) => {
-    const { manifest } = get();
-    if (!manifest) return;
-    const updated = structuredClone(manifest);
-    const anim = updated.animations.find((a) => a.name === animName);
-    if (!anim) return;
-    for (const frame of anim.frames) {
-      if (frame.status === 'generated' || frame.status === 'rejected') {
-        frame.status = 'approved';
-        try {
-          await api.updateFrameStatus(manifest.character_id, animName, frame.index, 'approved');
-        } catch { /* continue */ }
-      }
-    }
-    set({ manifest: updated });
-    try { await api.saveManifest(updated); } catch { /* best effort */ }
-  },
-
-  rejectAnimation: async (animName) => {
-    const { manifest } = get();
-    if (!manifest) return;
-    const updated = structuredClone(manifest);
-    const anim = updated.animations.find((a) => a.name === animName);
-    if (!anim) return;
-    for (const frame of anim.frames) {
-      if (frame.status === 'generated' || frame.status === 'approved') {
-        frame.status = 'rejected';
-        try {
-          await api.updateFrameStatus(manifest.character_id, animName, frame.index, 'rejected');
-        } catch { /* continue */ }
-      }
-    }
-    set({ manifest: updated });
-    try { await api.saveManifest(updated); } catch { /* best effort */ }
-  },
-
-  batchApproveGenerated: async () => {
-    const { manifest } = get();
-    if (!manifest) return;
-    const updated = structuredClone(manifest);
-    for (const anim of updated.animations) {
-      for (const frame of anim.frames) {
-        if (frame.status === 'generated') {
-          frame.status = 'approved';
-          try {
-            await api.updateFrameStatus(manifest.character_id, anim.name, frame.index, 'approved');
-          } catch { /* continue */ }
-        }
-      }
-    }
-    set({ manifest: updated });
-  },
-
   // Animate
   selectedClipName: null,
   selectClip: (name) => set({ selectedClipName: name, currentTime: 0, playbackState: 'stopped' }),
@@ -1156,7 +1092,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       set({
         assemblyResult: {
           totalFrames: 0,
-          approvedFrames: 0,
+          generatedFrames: 0,
           errors: [err instanceof Error ? err.message : String(err)],
         },
       });

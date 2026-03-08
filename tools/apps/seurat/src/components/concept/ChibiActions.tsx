@@ -47,16 +47,12 @@ export function ChibiActions() {
 
   if (!manifest) return null;
 
-  const conceptApproved = manifest.concept.approved;
-  const disabled = !conceptApproved;
-
-  const handleSave = async (approved?: boolean) => {
+  const handleSave = async () => {
     setSaving(true);
     const chibi: ChibiArt = {
       style_prompt: stylePrompt,
       negative_prompt: negativePrompt,
       reference_image: manifest.chibi?.reference_image || '',
-      approved: approved ?? manifest.chibi?.approved ?? false,
     };
     await saveChibi(chibi);
     setSaving(false);
@@ -74,17 +70,12 @@ export function ChibiActions() {
 
   return (
     <div style={styles.container}>
-      {disabled && (
-        <div style={styles.disabledMsg}>Approve concept art first to enable chibi generation.</div>
-      )}
-
       <label style={styles.label}>Style Prompt</label>
       <textarea
         value={stylePrompt}
         onChange={(e) => setStylePrompt(e.target.value)}
         rows={2}
         style={styles.textarea}
-        disabled={disabled}
         placeholder="chibi, super deformed..."
       />
 
@@ -94,19 +85,13 @@ export function ChibiActions() {
         onChange={(e) => setNegativePrompt(e.target.value)}
         rows={2}
         style={styles.textarea}
-        disabled={disabled}
         placeholder="realistic, photograph..."
       />
 
       <div style={styles.actions}>
-        <button onClick={() => handleSave()} disabled={saving || disabled} style={styles.saveBtn}>
+        <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
           {saving ? 'Saving...' : 'Save'}
         </button>
-        {manifest.chibi?.reference_image && !manifest.chibi?.approved && (
-          <button onClick={() => handleSave(true)} disabled={saving || disabled} style={styles.approveBtn}>
-            Approve
-          </button>
-        )}
       </div>
 
       <div style={styles.divider} />
@@ -116,22 +101,21 @@ export function ChibiActions() {
         settings={comfySettings}
         onChange={setComfySettings}
         showDenoise
-        disabled={disabled}
         savedSettings={manifest.chibi?.generation_settings}
       />
 
       <div style={styles.buttonRow}>
         <button
           onClick={handleGenerate}
-          disabled={chibiGenerating || disabled}
-          style={{ ...styles.generateBtn, opacity: chibiGenerating || disabled ? 0.5 : 1 }}
+          disabled={chibiGenerating}
+          style={{ ...styles.generateBtn, opacity: chibiGenerating ? 0.5 : 1 }}
         >
           {chibiGenerating ? 'Generating...' : 'Generate Chibi'}
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={chibiGenerating || disabled}
-          style={{ ...styles.uploadBtn, opacity: disabled ? 0.5 : 1 }}
+          disabled={chibiGenerating}
+          style={styles.uploadBtn}
         >
           Upload Image
         </button>

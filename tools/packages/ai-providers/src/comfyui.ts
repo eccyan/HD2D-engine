@@ -706,6 +706,12 @@ interface TwoPassIPAdapterWorkflowOptions extends WorkflowOptions {
   outputWidth?: number;
   /** Final output height. */
   outputHeight?: number;
+  /** Enable pixel art pass 3 (LoRA-based pixelization). */
+  pixelPassEnabled?: boolean;
+  /** Denoise strength for pixel pass 3. Default 0.35. */
+  pixelPassDenoise?: number;
+  /** LoRA models to apply during pixel pass 3. */
+  pixelPassLoras?: LoraEntry[];
 }
 
 /**
@@ -900,7 +906,7 @@ function buildTwoPassIPAdapterWorkflow(
         vae: ["4", 2],
       },
     },
-    // Save final output
+    // Save final output (source will be rewired by pass 3 / downscale / RemBG if active)
     "9": {
       class_type: "SaveImage",
       inputs: {
@@ -909,6 +915,75 @@ function buildTwoPassIPAdapterWorkflow(
       },
     },
   };
+
+  // === Pass 3: Pixel art LoRA refinement (optional) ===
+  if (opts.pixelPassEnabled) {
+    const pixelLoras = opts.pixelPassLoras ?? [{ name: "PixelArtRedmond15V-PixelArt-PIXARFK", weight: 0.6 }];
+
+    // Chain pixel LoRA loaders onto checkpoint model/clip
+    let prevPixelModel: [string, number] = ["4", 0];
+    let prevPixelClip: [string, number] = ["4", 1];
+    pixelLoras.forEach((lora, i) => {
+      const nodeId = `90_lora_${i}`;
+      const weight = lora.weight ?? 1.0;
+      nodes[nodeId] = {
+        class_type: "LoraLoader",
+        inputs: {
+          lora_name: lora.name.includes(".") ? lora.name : `${lora.name}.safetensors`,
+          strength_model: weight,
+          strength_clip: weight,
+          model: prevPixelModel,
+          clip: prevPixelClip,
+        },
+      };
+      prevPixelModel = [nodeId, 0];
+      prevPixelClip = [nodeId, 1];
+    });
+
+    // VAEEncode pass 2 output to latent for pass 3
+    nodes["91"] = {
+      class_type: "VAEEncode",
+      inputs: {
+        pixels: ["86", 0],
+        vae: ["4", 2],
+      },
+    };
+    // Positive CLIP for pixel art style
+    nodes["92"] = {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: opts.prompt + ", pixel art, 8-bit, clean edges, retro game sprite",
+        clip: prevPixelClip,
+      },
+    };
+    // KSampler pass 3 — low denoise pixel art refinement
+    nodes["93"] = {
+      class_type: "KSampler",
+      inputs: {
+        seed: opts.seed,
+        steps: opts.steps,
+        cfg: opts.cfg,
+        sampler_name: opts.samplerName,
+        scheduler: opts.scheduler ?? "normal",
+        denoise: opts.pixelPassDenoise ?? 0.35,
+        model: prevPixelModel,
+        positive: ["92", 0],
+        negative: ["7", 0],
+        latent_image: ["91", 0],
+      },
+    };
+    // VAEDecode pass 3
+    nodes["94"] = {
+      class_type: "VAEDecode",
+      inputs: {
+        samples: ["93", 0],
+        vae: ["4", 2],
+      },
+    };
+
+    // Rewire SaveImage to take pass 3 output
+    (nodes["9"].inputs as Record<string, unknown>).images = ["94", 0];
+  }
 
   // Optional external VAE loader
   if (opts.vae) {
@@ -920,6 +995,9 @@ function buildTwoPassIPAdapterWorkflow(
     (nodes["8"].inputs as Record<string, unknown>).vae = ["60", 0];
     (nodes["81"].inputs as Record<string, unknown>).vae = ["60", 0];
     (nodes["86"].inputs as Record<string, unknown>).vae = ["60", 0];
+    // Pass 3 VAE nodes (if pixel pass enabled)
+    if (nodes["91"]) (nodes["91"].inputs as Record<string, unknown>).vae = ["60", 0];
+    if (nodes["94"]) (nodes["94"].inputs as Record<string, unknown>).vae = ["60", 0];
   }
 
   // Chain LoRA loaders (between checkpoint and both IP-Adapter loaders)
@@ -1740,6 +1818,9 @@ export class ComfyUIClient implements ImageProvider {
       remBgNodeType: opts.remBgNodeType,
       outputWidth: opts.outputWidth,
       outputHeight: opts.outputHeight,
+      pixelPassEnabled: opts.pixelPassEnabled,
+      pixelPassDenoise: opts.pixelPassDenoise,
+      pixelPassLoras: opts.pixelPassLoras,
     });
 
     const submitBody: PromptRequest = { prompt: workflow };

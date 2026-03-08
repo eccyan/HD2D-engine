@@ -108,6 +108,12 @@ export interface TwoPassIPAdapterOptions extends IPAdapterOptions {
   chibiWeight?: number;
   /** Denoise for pass 2 (how much to chibi-fy). Lower = closer to posed concept. Default 0.5. */
   chibiDenoise?: number;
+  /** Enable pixel art pass 3 (LoRA-based pixelization of chibi output). Default false. */
+  pixelPassEnabled?: boolean;
+  /** Denoise strength for pixel pass 3. Default 0.35. */
+  pixelPassDenoise?: number;
+  /** LoRA models to apply during pixel pass 3. */
+  pixelPassLoras?: Array<{ name: string; weight?: number }>;
 }
 
 /**

@@ -20,21 +20,13 @@ export function StatusBar() {
                 Frames: {stats.total}
               </span>
               <span style={styles.sep}>|</span>
-              <span style={{ ...styles.item, color: '#44aa44' }}>
-                {stats.approved} approved
+              <span style={{ ...styles.item, color: '#aa8800' }}>
+                {stats.generated} generated
               </span>
               <span style={styles.sep}>|</span>
-              <span style={{ ...styles.item, color: '#aa8800' }}>
-                {stats.pending + stats.generated} pending
+              <span style={{ ...styles.item, color: '#666' }}>
+                {stats.pending} pending
               </span>
-              {stats.rejected > 0 && (
-                <>
-                  <span style={styles.sep}>|</span>
-                  <span style={{ ...styles.item, color: '#aa4444' }}>
-                    {stats.rejected} rejected
-                  </span>
-                </>
-              )}
             </>
           )}
         </>

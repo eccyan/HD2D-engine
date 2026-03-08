@@ -27,9 +27,7 @@ export function ManifestStatsView() {
           <StatItem label="Animations" value={String(manifest.animations.length)} />
           <StatItem label="Total Frames" value={String(stats.total)} />
           <StatItem label="Pending" value={String(stats.pending)} color="#aa8800" />
-          <StatItem label="Generated" value={String(stats.generated)} color="#aa8800" />
-          <StatItem label="Approved" value={String(stats.approved)} color="#44aa44" />
-          <StatItem label="Rejected" value={String(stats.rejected)} color="#aa4444" />
+          <StatItem label="Generated" value={String(stats.generated)} color="#44aa44" />
         </div>
       </div>
 
