@@ -633,12 +633,13 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set({ chibiGenerating: true, chibiError: null });
 
     try {
-      // Load concept image for img2img
+      // Load concept image for img2img (IP-Adapter would fight chibi proportions)
       const conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
 
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-      const prompt = [stylePrompt, manifest.concept.description].filter(Boolean).join(', ');
-      const negative = `${negPrompt}, watermark, text, signature`;
+      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT } = await import('../lib/ai-generate.js');
+      const prompt = [stylePrompt, manifest.concept.description, CONCEPT_VIEW_PROMPTS.front].filter(Boolean).join(', ');
+      const negative = `${negPrompt}, ${DEFAULT_NEGATIVE_PROMPT}`;
 
       const steps = overrides?.steps ?? aiConfig.steps;
       const cfg = overrides?.cfg ?? aiConfig.cfg;
@@ -656,20 +657,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       console.log('[Seurat] Chibi prompt:', prompt);
 
       const pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
-        width: 512,
-        height: 512,
-        steps,
-        seed,
-        cfgScale: cfg,
-        samplerName: sampler,
-        scheduler,
-        checkpoint,
-        vae,
-        negativePrompt: negative,
-        denoise,
-        loras,
-        removeBackground: aiConfig.removeBackground,
-        remBgNodeType: aiConfig.remBgNodeType,
+        width: 512, height: 512, steps, seed, cfgScale: cfg, samplerName: sampler,
+        scheduler, checkpoint, vae, negativePrompt: negative, denoise, loras,
+        removeBackground: aiConfig.removeBackground, remBgNodeType: aiConfig.remBgNodeType,
       });
 
       await api.saveChibiImage(manifest.character_id, pngBytes);
@@ -757,8 +747,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
     try {
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-      const prompt = [stylePrompt, manifest.concept.description].filter(Boolean).join(', ');
-      const negative = `${negPrompt}, watermark, text, signature`;
+      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT } = await import('../lib/ai-generate.js');
+      const basePrompt = [stylePrompt, manifest.concept.description].filter(Boolean).join(', ');
+      const negative = `${negPrompt}, ${DEFAULT_NEGATIVE_PROMPT}`;
 
       const steps = overrides?.steps ?? aiConfig.steps;
       const cfg = overrides?.cfg ?? aiConfig.cfg;
@@ -779,16 +770,18 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       for (const view of viewsToGenerate) {
         set({ chibiViewsProgress: `Generating chibi ${view}...` });
 
-        // Try to load the corresponding concept view as img2img source
+        // Load the corresponding concept view as img2img source
         let conceptBytes: Uint8Array;
         try {
           conceptBytes = await api.fetchConceptImageBytes(manifest.character_id, view);
         } catch {
-          // Fall back to default concept image
           conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
         }
 
         const viewSeed = seed + (['front', 'right', 'back'].indexOf(view));
+        const prompt = `${basePrompt}, ${CONCEPT_VIEW_PROMPTS[view]}`;
+
+        // img2img: concept → chibi (IP-Adapter would fight chibi proportions)
         const pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
           width: 512, height: 512, steps, seed: viewSeed, cfgScale: cfg, samplerName: sampler,
           scheduler, checkpoint, vae, negativePrompt: negative, denoise, loras,
