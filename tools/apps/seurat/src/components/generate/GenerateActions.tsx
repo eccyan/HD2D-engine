@@ -19,8 +19,9 @@ export function GenerateActions({ animName }: Props) {
   const availableCheckpoints = useSeuratStore((s) => s.availableCheckpoints);
   const refreshComfyModels = useSeuratStore((s) => s.refreshComfyModels);
   const chibiViewUrls = useSeuratStore((s) => s.chibiViewUrls);
-  const animChibiOverride = useSeuratStore((s) => s.animChibiOverride);
-  const setAnimChibiOverride = useSeuratStore((s) => s.setAnimChibiOverride);
+  const animRefOverride = useSeuratStore((s) => s.animRefOverride);
+  const setAnimRefOverride = useSeuratStore((s) => s.setAnimRefOverride);
+  const conceptViewUrls = useSeuratStore((s) => s.conceptViewUrls);
   const [generating, setGenerating] = useState(false);
   const [ckptSearch, setCkptSearch] = useState('');
   const [ckptOpen, setCkptOpen] = useState(false);
@@ -239,32 +240,39 @@ export function GenerateActions({ animName }: Props) {
         </div>
       </div>
 
-      {/* Chibi Reference */}
-      {hasChibiImage && anim && (
+      {/* Reference Direction */}
+      {anim && (
         <div style={styles.section}>
-          <div style={styles.subTitle}>Chibi Reference</div>
-          <Row>
-            {(() => {
-              const autoView = DIRECTION_TO_VIEW[anim.direction];
-              const selected = animChibiOverride[animName] ?? autoView;
-              const url = chibiViewUrls[selected];
-              return (
-                <>
-                  {url && (
-                    <img src={url} alt="" style={{ width: 24, height: 24, objectFit: 'contain', imageRendering: 'pixelated' as const, borderRadius: 2, border: '1px solid #333' }} />
+          <div style={styles.subTitle}>Reference Direction</div>
+          {(() => {
+            const autoView = DIRECTION_TO_VIEW[anim.direction];
+            const selected = animRefOverride[animName] ?? autoView;
+            const conceptUrl = conceptViewUrls[selected];
+            const chibiUrl = chibiViewUrls[selected];
+            return (
+              <>
+                <Row>
+                  {conceptUrl && (
+                    <img src={conceptUrl} alt="concept" style={{ width: 24, height: 24, objectFit: 'contain', imageRendering: 'pixelated' as const, borderRadius: 2, border: '1px solid #333' }} />
+                  )}
+                  {chibiUrl && (
+                    <img src={chibiUrl} alt="chibi" style={{ width: 24, height: 24, objectFit: 'contain', imageRendering: 'pixelated' as const, borderRadius: 2, border: '1px solid #333' }} />
                   )}
                   <select
-                    value={animChibiOverride[animName] ?? 'auto'}
-                    onChange={(e) => setAnimChibiOverride(animName, e.target.value === 'auto' ? null : e.target.value as ViewDirection)}
+                    value={animRefOverride[animName] ?? 'auto'}
+                    onChange={(e) => setAnimRefOverride(animName, e.target.value === 'auto' ? null : e.target.value as ViewDirection)}
                     style={{ ...styles.select, flex: 1 }}
                   >
                     <option value="auto">Auto ({autoView})</option>
                     {VIEW_DIRECTIONS.map((v) => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
                   </select>
-                </>
-              );
-            })()}
-          </Row>
+                </Row>
+                <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
+                  Selects which concept + chibi direction to use as reference.
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

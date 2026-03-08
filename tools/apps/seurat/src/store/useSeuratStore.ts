@@ -80,9 +80,9 @@ export interface SeuratState {
   generateChibiViews: (overrides?: { steps?: number; cfg?: number; sampler?: string; scheduler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; vae?: string; denoise?: number }) => Promise<void>;
   loadChibiViewUrls: () => void;
 
-  // Per-animation chibi reference override (null = auto from DIRECTION_TO_VIEW based on anim direction)
-  animChibiOverride: Record<string, ViewDirection | null>;
-  setAnimChibiOverride: (animName: string, view: ViewDirection | null) => void;
+  // Per-animation reference override — selects which direction's concept + chibi to use (null = auto)
+  animRefOverride: Record<string, ViewDirection | null>;
+  setAnimRefOverride: (animName: string, view: ViewDirection | null) => void;
 
   // Pixel
   savePixel: (pixel: PixelArt) => Promise<void>;
@@ -225,7 +225,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           ? api.pixelImageUrl(id)
           : null,
         pixelError: null,
-        animChibiOverride: {},
+        animRefOverride: {},
       });
     } catch {
       console.warn(`[Seurat] Could not load manifest for "${id}" — is the bridge running?`);
@@ -909,10 +909,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     }
   },
 
-  // Per-animation chibi reference override
-  animChibiOverride: {},
-  setAnimChibiOverride: (animName, view) => set((s) => ({
-    animChibiOverride: { ...s.animChibiOverride, [animName]: view },
+  // Per-animation reference override (concept + chibi use same direction)
+  animRefOverride: {},
+  setAnimRefOverride: (animName, view) => set((s) => ({
+    animRefOverride: { ...s.animRefOverride, [animName]: view },
   })),
 
   // Pixel
@@ -1049,7 +1049,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     })),
 
   generateFrames: async (scope, animName, frameIndex) => {
-    const { manifest: _manifest, aiConfig, animChibiOverride } = get();
+    const { manifest: _manifest, aiConfig, animRefOverride } = get();
     if (!_manifest) return;
     const manifest = _manifest; // non-null assertion for closures
 
@@ -1060,10 +1060,11 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const conceptCache: Partial<Record<ViewDirection | '_default', Uint8Array>> = {};
     const chibiCache: Partial<Record<ViewDirection | '_default', Uint8Array>> = {};
 
-    // Helper: get concept bytes for a given direction code
-    async function getConceptBytesForDir(dir: DirectionCode): Promise<Uint8Array | null> {
+    // Helper: get concept bytes for an animation (respects per-animation override)
+    async function getConceptBytesForAnim(animNameKey: string, dir: DirectionCode): Promise<Uint8Array | null> {
       if (!hasConceptImage) return null;
-      const view = DIRECTION_TO_VIEW[dir];
+      const override = animRefOverride[animNameKey];
+      const view = override ?? DIRECTION_TO_VIEW[dir];
       // Try direction-specific first, then fall back to default
       if (conceptCache[view]) return conceptCache[view]!;
       try {
@@ -1088,7 +1089,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
     async function getChibiBytesForAnim(animNameKey: string, dir: DirectionCode): Promise<Uint8Array | null> {
       if (!manifest.chibi?.reference_image) return null;
-      const override = animChibiOverride[animNameKey];
+      const override = animRefOverride[animNameKey];
       const view = override ?? DIRECTION_TO_VIEW[dir];
       if (chibiCache[view]) return chibiCache[view]!;
       try {
@@ -1184,7 +1185,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         if (canTwoPass && pose) {
           // Two-pass mode: Concept→Pose→Chibi→Pixel (direction-aware refs)
           const genSize = 512;
-          const dirConceptBytes = await getConceptBytesForDir(anim.direction) ?? conceptBytes!;
+          const dirConceptBytes = await getConceptBytesForAnim(anim.name, anim.direction) ?? conceptBytes!;
           const dirChibiBytes = await getChibiBytesForAnim(anim.name, anim.direction) ?? chibiBytes!;
           console.log(`[Seurat] Generating single frame via two-pass (Concept→Pose→Chibi) (${genSize}x${genSize} → ${manifest.spritesheet.frame_width}x${manifest.spritesheet.frame_height})...`);
           const poseBytes = await renderPoseToPng(pose, genSize, genSize);
@@ -1212,7 +1213,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         } else if (aiConfig.useIPAdapter && singlePassRef && pose) {
           // Single-pass IP-Adapter + OpenPose mode (direction-aware ref)
           const genSize = 512;
-          const dirRef = await getConceptBytesForDir(anim.direction) ?? singlePassRef;
+          const dirRef = await getConceptBytesForAnim(anim.name, anim.direction) ?? singlePassRef;
           console.log(`[Seurat] Generating single frame via IP-Adapter + OpenPose (${genSize}x${genSize} → ${manifest.spritesheet.frame_width}x${manifest.spritesheet.frame_height})...`);
           const poseBytes = await renderPoseToPng(pose, genSize, genSize);
           pngBytes = await comfy.generateIPAdapterWithRetry(prompt, dirRef, poseBytes, {
@@ -1376,7 +1377,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             console.log(`[Seurat] Row "${an}": Two-pass mode (Concept→Pose→Chibi), ${frameCount} frames (${genSize}x${genSize} → ${fw}x${fh})...`);
 
             // Load direction-specific references
-            const dirConceptBytes = await getConceptBytesForDir(anim.direction) ?? conceptBytes!;
+            const dirConceptBytes = await getConceptBytesForAnim(anim.name, anim.direction) ?? conceptBytes!;
             const dirChibiBytes = await getChibiBytesForAnim(anim.name, anim.direction) ?? chibiBytes!;
 
             for (let i = 0; i < frameCount; i++) {
@@ -1423,7 +1424,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             console.log(`[Seurat] Row "${an}": IP-Adapter + OpenPose mode, ${frameCount} frames (${genSize}x${genSize} → ${fw}x${fh})...`);
 
             // Load direction-specific reference (concept or chibi for this direction)
-            const dirRef = await getConceptBytesForDir(anim.direction) ?? singlePassRef;
+            const dirRef = await getConceptBytesForAnim(anim.name, anim.direction) ?? singlePassRef;
 
             for (let i = 0; i < frameCount; i++) {
               const framePrompt = buildFramePrompt(manifest, anim, i);
