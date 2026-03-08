@@ -14,10 +14,10 @@ export const DEFAULT_NEGATIVE_PROMPT =
   'blurry, smooth, realistic, 3d render, photorealistic, watermark, text, signature, noise, static, artifacts';
 
 export const CONCEPT_VIEW_PROMPTS: Record<ViewDirection, string> = {
-  front: 'facing forward, front view, looking at viewer',
-  back:  'from behind, back view, facing away',
-  right: 'right side view, profile view, facing right',
-  left:  'left side view, profile view, facing left',
+  front: 'solo, single character, facing forward, front view, looking at viewer',
+  back:  'solo, single character, from behind, back view, facing away',
+  right: 'solo, single character, right side view, profile view, facing right',
+  left:  'solo, single character, left side view, profile view, facing left',
 };
 
 const DIR_DESCRIPTIONS: Record<string, string> = {
