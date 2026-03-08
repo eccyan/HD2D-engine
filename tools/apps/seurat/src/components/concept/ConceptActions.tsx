@@ -1,7 +1,15 @@
 import React, { useRef, useState, useEffect } from 'react';
-import type { ConceptArt } from '@vulkan-game-tools/asset-types';
+import type { ConceptArt, ViewDirection } from '@vulkan-game-tools/asset-types';
+import { VIEW_DIRECTIONS } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { ComfySettingsPanel, type ComfySettings } from './ComfySettingsPanel.js';
+
+const VIEW_LABELS: Record<ViewDirection, string> = {
+  front: 'Front',
+  back: 'Back',
+  right: 'Right',
+  left: 'Left',
+};
 
 export function ConceptActions() {
   const manifest = useSeuratStore((s) => s.manifest);
@@ -9,13 +17,12 @@ export function ConceptActions() {
   const aiConfig = useSeuratStore((s) => s.aiConfig);
   const conceptGenerating = useSeuratStore((s) => s.conceptGenerating);
   const conceptError = useSeuratStore((s) => s.conceptError);
-  const generateConceptArt = useSeuratStore((s) => s.generateConceptArt);
-  const uploadConceptImage = useSeuratStore((s) => s.uploadConceptImage);
+  const uploadConceptImageForView = useSeuratStore((s) => s.uploadConceptImageForView);
   const conceptViewsGenerating = useSeuratStore((s) => s.conceptViewsGenerating);
   const conceptViewsError = useSeuratStore((s) => s.conceptViewsError);
   const conceptViewsProgress = useSeuratStore((s) => s.conceptViewsProgress);
   const generateConceptViews = useSeuratStore((s) => s.generateConceptViews);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRefs = useRef<Record<ViewDirection, HTMLInputElement | null>>({ front: null, back: null, right: null, left: null });
 
   const [description, setDescription] = useState('');
   const [stylePrompt, setStylePrompt] = useState('');
@@ -64,22 +71,6 @@ export function ConceptActions() {
     };
     await saveConcept(concept);
     setSaving(false);
-  };
-
-  const handleGenerate = async () => {
-    const concept: ConceptArt = {
-      ...manifest.concept,
-      description,
-      style_prompt: stylePrompt,
-      negative_prompt: negativePrompt,
-    };
-    await saveConcept(concept);
-    await generateConceptArt({
-      steps: comfySettings.steps, cfg: comfySettings.cfg, sampler: comfySettings.sampler,
-      scheduler: comfySettings.scheduler || undefined, seed: comfySettings.seed,
-      loras: comfySettings.loras, checkpoint: comfySettings.checkpoint || undefined,
-      vae: comfySettings.vae || undefined,
-    });
   };
 
   const handleGenerateAllViews = async () => {
@@ -142,37 +133,35 @@ export function ConceptActions() {
         savedSettings={manifest.concept.generation_settings}
       />
 
-      <div style={styles.buttonRow}>
-        <button
-          onClick={handleGenerate}
-          disabled={conceptGenerating || conceptViewsGenerating || (!description && !stylePrompt)}
-          style={{
-            ...styles.generateBtn,
-            opacity: conceptGenerating || conceptViewsGenerating || (!description && !stylePrompt) ? 0.5 : 1,
-          }}
-        >
-          {conceptGenerating ? 'Generating...' : 'Generate Front View'}
-        </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={conceptGenerating || conceptViewsGenerating}
-          style={styles.uploadBtn}
-        >
-          Upload Image
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              uploadConceptImage(file);
-              e.target.value = '';
-            }
-          }}
-        />
+      <label style={styles.label}>Upload per Direction</label>
+      <div style={styles.uploadGrid}>
+        {VIEW_DIRECTIONS.map((view) => (
+          <React.Fragment key={view}>
+            <button
+              onClick={() => fileInputRefs.current[view]?.click()}
+              disabled={conceptGenerating || conceptViewsGenerating}
+              style={{
+                ...styles.uploadBtn,
+                opacity: conceptGenerating || conceptViewsGenerating ? 0.5 : 1,
+              }}
+            >
+              {VIEW_LABELS[view]}
+            </button>
+            <input
+              ref={(el) => { fileInputRefs.current[view] = el; }}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  uploadConceptImageForView(file, view);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </React.Fragment>
+        ))}
       </div>
 
       <button
@@ -216,8 +205,7 @@ const styles: Record<string, React.CSSProperties> = {
   saveBtn: { flex: 1, background: '#1e3a6e', border: '1px solid #4a8af8', borderRadius: 4, color: '#90b8f8', fontFamily: 'monospace', fontSize: 10, padding: '6px 12px', cursor: 'pointer', fontWeight: 600 },
   approveBtn: { flex: 1, background: '#1e3a2e', border: '1px solid #44aa44', borderRadius: 4, color: '#70d870', fontFamily: 'monospace', fontSize: 10, padding: '6px 12px', cursor: 'pointer', fontWeight: 600 },
   divider: { height: 1, background: '#2a2a3a', margin: '8px 0' },
-  buttonRow: { display: 'flex', gap: 6 },
-  generateBtn: { flex: 1, background: '#3a1e6e', border: '1px solid #8a4af8', borderRadius: 4, color: '#b890f8', fontFamily: 'monospace', fontSize: 10, padding: '8px 8px', cursor: 'pointer', fontWeight: 600, textAlign: 'center' },
+  uploadGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 },
   generateAllBtn: { width: '100%', background: '#1e3a2e', border: '1px solid #44aa44', borderRadius: 4, color: '#70d870', fontFamily: 'monospace', fontSize: 10, padding: '8px 8px', cursor: 'pointer', fontWeight: 600, textAlign: 'center' },
   uploadBtn: { flex: 1, background: '#1e3a3a', border: '1px solid #4ac8c8', borderRadius: 4, color: '#90d8d8', fontFamily: 'monospace', fontSize: 10, padding: '8px 8px', cursor: 'pointer', fontWeight: 600, textAlign: 'center' },
   progressText: { fontFamily: 'monospace', fontSize: 9, color: '#8a4af8', textAlign: 'center' },

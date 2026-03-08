@@ -49,6 +49,7 @@ export interface SeuratState {
   conceptError: string | null;
   generateConceptArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; scheduler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; vae?: string }) => Promise<void>;
   uploadConceptImage: (file: File) => Promise<void>;
+  uploadConceptImageForView: (file: File, view: ViewDirection) => Promise<void>;
   loadConceptImage: () => void;
 
   // Multi-view concept
@@ -351,6 +352,47 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       await api.saveManifest(updated);
 
       set({ conceptImageUrl: api.conceptImageUrl(manifest.character_id), conceptError: null });
+    } catch (err) {
+      set({ conceptError: err instanceof Error ? err.message : String(err) });
+    } finally {
+      set({ conceptGenerating: false });
+    }
+  },
+
+  uploadConceptImageForView: async (file, view) => {
+    const { manifest } = get();
+    if (!manifest) return;
+
+    set({ conceptGenerating: true, conceptError: null });
+
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const pngBytes = new Uint8Array(arrayBuf);
+
+      await api.saveConceptImage(manifest.character_id, pngBytes, view);
+
+      const viewFile = `concept_${view}.png`;
+      const existingRefs = manifest.concept.reference_images;
+      const refs = existingRefs.includes(viewFile) ? existingRefs : [...existingRefs, viewFile];
+
+      const updated = {
+        ...manifest,
+        concept: {
+          ...manifest.concept,
+          reference_images: refs,
+        },
+      };
+      set({ manifest: updated });
+      await api.saveManifest(updated);
+
+      const { conceptViewUrls } = get();
+      set({
+        conceptViewUrls: {
+          ...conceptViewUrls,
+          [view]: api.conceptImageUrl(manifest.character_id, view) + '&t=' + Date.now(),
+        },
+        conceptError: null,
+      });
     } catch (err) {
       set({ conceptError: err instanceof Error ? err.message : String(err) });
     } finally {
