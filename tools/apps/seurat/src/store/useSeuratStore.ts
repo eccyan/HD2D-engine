@@ -1032,8 +1032,18 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   },
 
   // Generation
-  aiConfig: DEFAULT_AI_CONFIG,
-  setAIConfig: (config) => set((s) => ({ aiConfig: { ...s.aiConfig, ...config } })),
+  aiConfig: (() => {
+    try {
+      const saved = localStorage.getItem('seurat-ai-config');
+      if (saved) return { ...DEFAULT_AI_CONFIG, ...JSON.parse(saved) };
+    } catch { /* ignore */ }
+    return DEFAULT_AI_CONFIG;
+  })(),
+  setAIConfig: (config) => set((s) => {
+    const aiConfig = { ...s.aiConfig, ...config };
+    try { localStorage.setItem('seurat-ai-config', JSON.stringify(aiConfig)); } catch { /* ignore */ }
+    return { aiConfig };
+  }),
   generationJobs: [],
   frameRevision: 0,
   addGenerationJob: (job) => set((s) => ({ generationJobs: [...s.generationJobs, job] })),

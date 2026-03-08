@@ -56,7 +56,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   checkpoint: 'v1-5-pruned-emaonly.safetensors',
   steps: 20,
   seed: 42,
-  cfg: 2,
+  cfg: 6,
   sampler: 'euler',
   denoise: 0.1,
   loras: [{ name: 'PixelArtRedmond15V-PixelArt-PIXARFK', weight: 0.4 }],
