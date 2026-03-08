@@ -137,8 +137,9 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   cell: {
-    width: 120,
-    height: 120,
+    flex: 1,
+    aspectRatio: '1',
+    minWidth: 0,
     background: '#0e0e1a',
     border: '1px solid #2a2a3a',
     borderRadius: 4,
@@ -146,7 +147,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
   cellImg: {
     width: '100%',
