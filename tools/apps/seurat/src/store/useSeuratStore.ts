@@ -281,10 +281,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     try {
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
 
-      const { DEFAULT_NEGATIVE_PROMPT, CONCEPT_VIEW_PROMPTS } = await import('../lib/ai-generate.js');
+      const { DEFAULT_NEGATIVE_PROMPT, CONCEPT_VIEW_PROMPTS, sanitizeStylePrompt } = await import('../lib/ai-generate.js');
 
       const prompt = [
-        concept.style_prompt,
+        sanitizeStylePrompt(concept.style_prompt),
         concept.description,
         CONCEPT_VIEW_PROMPTS.front,
       ].filter(Boolean).join(', ');
@@ -466,9 +466,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
     try {
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT } = await import('../lib/ai-generate.js');
+      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT, sanitizeStylePrompt } = await import('../lib/ai-generate.js');
 
-      const basePrompt = [concept.style_prompt, concept.description].filter(Boolean).join(', ');
+      const basePrompt = [sanitizeStylePrompt(concept.style_prompt), concept.description].filter(Boolean).join(', ');
       const negative = concept.negative_prompt
         ? `${concept.negative_prompt}, ${DEFAULT_NEGATIVE_PROMPT}, cropped, partial body`
         : `${DEFAULT_NEGATIVE_PROMPT}, cropped, partial body`;
@@ -660,8 +660,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       const conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
 
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT } = await import('../lib/ai-generate.js');
-      const prompt = [stylePrompt, manifest.concept.description, CONCEPT_VIEW_PROMPTS.front].filter(Boolean).join(', ');
+      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT, sanitizeStylePrompt } = await import('../lib/ai-generate.js');
+      const prompt = [sanitizeStylePrompt(stylePrompt), manifest.concept.description, CONCEPT_VIEW_PROMPTS.front].filter(Boolean).join(', ');
       const negative = `${negPrompt}, ${DEFAULT_NEGATIVE_PROMPT}`;
 
       const steps = overrides?.steps ?? aiConfig.steps;
@@ -811,8 +811,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
     try {
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT } = await import('../lib/ai-generate.js');
-      const basePrompt = [stylePrompt, manifest.concept.description].filter(Boolean).join(', ');
+      const { CONCEPT_VIEW_PROMPTS, DEFAULT_NEGATIVE_PROMPT, sanitizeStylePrompt } = await import('../lib/ai-generate.js');
+      const basePrompt = [sanitizeStylePrompt(stylePrompt), manifest.concept.description].filter(Boolean).join(', ');
       const negative = `${negPrompt}, ${DEFAULT_NEGATIVE_PROMPT}`;
 
       const steps = overrides?.steps ?? aiConfig.steps;
