@@ -736,7 +736,76 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             (p, i) => overrides[`${an}:${i}`] ?? p
           ) ?? null : null;
 
-          if (aiConfig.useIPAdapter && conceptBytes && animPoses) {
+          if (aiConfig.useAnimateDiff && conceptBytes) {
+            // AnimateDiff mode: generate animation frames via motion model, then slice
+            const genSize = 512;
+            console.log(`[Seurat] Row "${an}": AnimateDiff mode, ${frameCount} frames at ${genSize}x${genSize}...`);
+
+            const animResult = await comfy.generateAnimateDiffWithRetry(
+              buildSheetRowPrompt(manifest, anim),
+              conceptBytes,
+              {
+                width: genSize,
+                height: genSize,
+                steps: aiConfig.steps,
+                seed,
+                cfgScale: aiConfig.cfg,
+                samplerName: aiConfig.sampler,
+                checkpoint: aiConfig.checkpoint,
+                negativePrompt: negative,
+                denoise: aiConfig.denoise,
+                loras,
+                motionModel: aiConfig.motionModel,
+                frameCount,
+                frameRate: aiConfig.animFrameRate,
+                contextLength: aiConfig.animContextLength,
+                outputFormat: 'image/gif',
+                loopCount: 0,
+              },
+            );
+            console.log(`[Seurat] Row "${an}": AnimateDiff returned ${animResult.length} bytes (first frame PNG)`);
+
+            // AnimateDiff saves individual frames as vulkan_game_anim_frame_*.png in ComfyUI output.
+            // The API returns the first frame; fetch remaining frames from ComfyUI output via history.
+            // For now, save the returned frame as frame 0 and fetch the rest from SaveImage outputs.
+            await api.saveFrameImage(manifest.character_id, an, 0, animResult);
+            const current0 = get().manifest;
+            if (current0) {
+              const updated = structuredClone(current0);
+              const f = updated.animations.find((x) => x.name === an)?.frames.find((x) => x.index === 0);
+              if (f) { f.status = 'generated'; f.file = `${an}/${an}_0.png`; }
+              set({ manifest: updated });
+            }
+
+            // Fetch remaining frames from ComfyUI output (SaveImage node saves each batch frame)
+            for (let i = 1; i < frameCount; i++) {
+              try {
+                // The SaveImage node uses filename_prefix "vulkan_game_anim_frame_" and
+                // each batch image is numbered sequentially. We fetch via /view endpoint.
+                const paddedIdx = String(i + 1).padStart(5, '0');
+                const filename = `vulkan_game_anim_frame__${paddedIdx}_.png`;
+                const viewUrl = `${aiConfig.comfyUrl}/view?filename=${encodeURIComponent(filename)}&type=output`;
+                const res = await fetch(viewUrl);
+                if (!res.ok) {
+                  console.warn(`[Seurat] Row "${an}" frame ${i}: failed to fetch ${filename}`);
+                  continue;
+                }
+                const buf = await res.arrayBuffer();
+                const frameBytes = new Uint8Array(buf);
+
+                await api.saveFrameImage(manifest.character_id, an, i, frameBytes);
+                const curr = get().manifest;
+                if (curr) {
+                  const upd = structuredClone(curr);
+                  const f = upd.animations.find((x) => x.name === an)?.frames.find((x) => x.index === i);
+                  if (f) { f.status = 'generated'; f.file = `${an}/${an}_${i}.png`; }
+                  set({ manifest: upd });
+                }
+              } catch (err) {
+                console.warn(`[Seurat] Row "${an}" frame ${i}: fetch error:`, err);
+              }
+            }
+          } else if (aiConfig.useIPAdapter && conceptBytes && animPoses) {
             // IP-Adapter + OpenPose: generate at 512x512 per-frame, downscale to sprite size
             const genSize = 512;
             console.log(`[Seurat] Row "${an}": IP-Adapter + OpenPose mode, ${frameCount} frames (${genSize}x${genSize} → ${fw}x${fh})...`);

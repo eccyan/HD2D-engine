@@ -186,6 +186,46 @@ export function GenerateActions({ animName }: Props) {
         )}
       </div>
 
+      {/* AnimateDiff */}
+      <div style={styles.section}>
+        <Row>
+          <label style={{ ...styles.label, minWidth: 'auto' }}>
+            <input
+              type="checkbox"
+              checked={aiConfig.useAnimateDiff}
+              onChange={(e) => setAIConfig({ useAnimateDiff: e.target.checked, useIPAdapter: e.target.checked ? false : aiConfig.useIPAdapter })}
+            />
+            {' '}AnimateDiff
+          </label>
+        </Row>
+        {aiConfig.useAnimateDiff && (
+          <>
+            <Row>
+              <label style={styles.label}>Motion</label>
+              <input
+                value={aiConfig.motionModel}
+                onChange={(e) => setAIConfig({ motionModel: e.target.value })}
+                style={styles.input}
+                placeholder="mm_sd_v15_v2.ckpt"
+              />
+            </Row>
+            <Row>
+              <label style={styles.label}>Frames</label>
+              <input type="number" value={aiConfig.animFrameCount} onChange={(e) => setAIConfig({ animFrameCount: parseInt(e.target.value) || 8 })} style={{ ...styles.input, width: 50 }} min={2} max={32} />
+              <label style={styles.label}>FPS</label>
+              <input type="number" value={aiConfig.animFrameRate} onChange={(e) => setAIConfig({ animFrameRate: parseInt(e.target.value) || 8 })} style={{ ...styles.input, width: 50 }} min={1} max={30} />
+            </Row>
+            <Row>
+              <label style={styles.label}>Context</label>
+              <input type="number" value={aiConfig.animContextLength} onChange={(e) => setAIConfig({ animContextLength: parseInt(e.target.value) || 16 })} style={{ ...styles.input, width: 50 }} min={4} max={32} />
+            </Row>
+            <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
+              Generates all frames at once via temporal motion model. Requires AnimateDiff-Evolved + VHS custom nodes and --force-fp32 on Apple Silicon.
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Background Removal */}
       <div style={styles.section}>
         <Row>
@@ -215,8 +255,8 @@ export function GenerateActions({ animName }: Props) {
       </div>
 
       {/* Mode */}
-      <div style={{ fontSize: 9, fontFamily: 'monospace', marginBottom: 4, color: !hasConceptImage ? '#666' : aiConfig.useIPAdapter ? '#f890c8' : aiConfig.controlNetModel ? '#c890f8' : '#4ac8c8' }}>
-        {!hasConceptImage ? 'txt2img mode' : aiConfig.useIPAdapter ? 'IP-Adapter + OpenPose mode (per-frame)' : aiConfig.controlNetModel ? 'ControlNet + img2img mode' : 'img2img mode'}
+      <div style={{ fontSize: 9, fontFamily: 'monospace', marginBottom: 4, color: !hasConceptImage ? '#666' : aiConfig.useAnimateDiff ? '#f8c860' : aiConfig.useIPAdapter ? '#f890c8' : aiConfig.controlNetModel ? '#c890f8' : '#4ac8c8' }}>
+        {!hasConceptImage ? 'txt2img mode' : aiConfig.useAnimateDiff ? 'AnimateDiff mode (all frames)' : aiConfig.useIPAdapter ? 'IP-Adapter + OpenPose mode (per-frame)' : aiConfig.controlNetModel ? 'ControlNet + img2img mode' : 'img2img mode'}
       </div>
 
       {/* Generate Animation */}

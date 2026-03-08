@@ -37,6 +37,11 @@ export interface AIConfig {
   ipAdapterPreset: string;
   openPoseModel: string;
   openPoseStrength: number;
+  useAnimateDiff: boolean;
+  motionModel: string;
+  animFrameCount: number;
+  animFrameRate: number;
+  animContextLength: number;
 }
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
@@ -57,6 +62,11 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   ipAdapterPreset: 'PLUS (high strength)',
   openPoseModel: 'control_v11p_sd15_openpose',
   openPoseStrength: 0.6,
+  useAnimateDiff: false,
+  motionModel: 'mm_sd_v15_v2.ckpt',
+  animFrameCount: 8,
+  animFrameRate: 8,
+  animContextLength: 16,
 };
 
 export interface GenerationJob {

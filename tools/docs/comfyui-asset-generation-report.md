@@ -120,6 +120,104 @@ Retry: up to 10 attempts with seed offset +7919*attempt
 
 Each character has: idle/walk/run x S/N/E/W x 4 animation frames
 
+## AnimateDiff Integration
+
+### Overview
+
+AnimateDiff generates multi-frame animations from a reference image and a text prompt. It works by injecting temporal motion modules into Stable Diffusion, producing coherent frame sequences rather than individual images.
+
+### Installed Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **ComfyUI-AnimateDiff-Evolved** | `tools/ComfyUI/custom_nodes/ComfyUI-AnimateDiff-Evolved/` | Motion module loader, evolved sampling, context options |
+| **ComfyUI-VideoHelperSuite** | `tools/ComfyUI/custom_nodes/ComfyUI-VideoHelperSuite/` | Frame-to-video combiner (GIF/WebP/MP4 output) |
+| **mm_sd_v15_v2.ckpt** | `tools/ComfyUI/models/animatediff_models/` | Motion model for SD 1.5 (~1.7GB) |
+
+VHS Python dependencies (`opencv-python`, `imageio-ffmpeg`) are installed in the ComfyUI venv.
+
+### Workflow Architecture
+
+The AnimateDiff workflow (`buildAnimateDiffWorkflow` in `comfyui.ts`) chains:
+
+```
+CheckpointLoaderSimple ──→ ADE_UseEvolvedSampling ──→ KSampler ──→ VAEDecode ──→ VHS_VideoCombine
+                               ↑           ↑                                        ↓
+ADE_LoadAnimateDiffModel       │           │                                   (GIF/WebP)
+  → ADE_ApplyAnimateDiffModelSimple        │
+      (M_MODELS) ──────────────┘           │
+                                           │
+ADE_StandardUniformContextOptions          │
+  (CONTEXT_OPTIONS) ───────────────────────┘
+                                           │
+ADE_EmptyLatentImageLarge (batch) ─────────┘
+                                           │
+CLIPTextEncode (positive/negative) ────────┘
+```
+
+Key node connections:
+- `ADE_ApplyAnimateDiffModelSimple` takes only the motion model, outputs `M_MODELS`
+- `ADE_UseEvolvedSampling` takes `MODEL` (from checkpoint) + `m_models` (optional, from AnimateDiff) + `context_options`
+- `ADE_EmptyLatentImageLarge` generates a batch of latents (one per frame)
+- `VHS_VideoCombine` combines decoded frames into a looping animation
+- Individual frames are also saved via `SaveImage`
+
+### API Usage
+
+```typescript
+import { ComfyUIClient } from "@vulkan-game-tools/ai-providers";
+
+const client = new ComfyUIClient("http://localhost:8188", 1000, 300_000);
+
+const animation = await client.generateAnimateDiff(
+  "pixel art character walking animation, side view, game sprite",
+  referenceImageBytes,  // Uint8Array of PNG
+  {
+    motionModel: "mm_sd_v15_v2.ckpt",  // default
+    frameCount: 8,       // number of animation frames (default 16)
+    frameRate: 8,        // output GIF/WebP frame rate (default 8)
+    steps: 20,           // diffusion steps (default 20)
+    width: 512,          // generation resolution
+    height: 512,
+    denoise: 0.6,        // 0.0 = no change, 1.0 = full regen (default 0.6)
+    cfgScale: 7,         // classifier-free guidance (default 7)
+    samplerName: "euler", // recommended for MPS
+    outputFormat: "image/gif",  // or "image/webp" (default)
+    loopCount: 0,        // 0 = infinite loop
+  }
+);
+
+// With automatic retry on blank images:
+const result = await client.generateAnimateDiffWithRetry(
+  prompt, referenceImage, opts, 3  // maxRetries
+);
+
+// List available motion models:
+const models = await client.listMotionModels();
+```
+
+### MPS / Apple Silicon Notes
+
+- **`--force-fp32` is required** for AnimateDiff on MPS. Unlike single-image generation where `--cpu-vae` suffices, AnimateDiff produces all-black frames without full fp32 precision.
+- **`--cpu-vae` alone is NOT enough** — the motion module's temporal attention layers also need fp32.
+- Expect higher memory usage and slower generation (~2-4min for 8 frames at 512x512, 15 steps).
+- Later frames in longer sequences (16+) may show quality degradation/noise. For sprite animations, 4-8 frames is the sweet spot.
+
+### Recommended Launch Command
+
+```bash
+cd tools/ComfyUI
+./venv/bin/python main.py --listen --enable-cors-header '*' --force-fp32
+```
+
+### Quality Tips
+
+- Use **8 frames** for walk/run cycles (matches the game's 4-frame animation structure with interpolation)
+- Pair with **PixelArtRedmond15V LoRA** (weight 0.85) for consistent pixel art style
+- Keep **denoise at 0.5-0.7** for motion that preserves the reference character's appearance
+- Use `euler` sampler — other samplers produce worse results on MPS
+- For production sprite sheets, generate frames individually via the existing IP-Adapter+OpenPose pipeline for more control; use AnimateDiff for motion reference/prototyping
+
 ## Recommendations for Future Work
 
 1. **Use SDXL or a dedicated pixel art model** for better tile generation. SD 1.5 lacks understanding of top-down game tiles.

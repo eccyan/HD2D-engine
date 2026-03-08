@@ -95,6 +95,26 @@ export interface IPAdapterOptions extends ImageGenerateOptions {
 }
 
 /**
+ * Options for AnimateDiff animation generation from an input image.
+ */
+export interface AnimateDiffOptions extends ImageGenerateOptions {
+  /** Denoise strength (0.0 = no change, 1.0 = full regeneration). Default 0.6. */
+  denoise?: number;
+  /** Motion model filename (e.g. "mm_sd_v15_v2.ckpt"). */
+  motionModel?: string;
+  /** Number of frames to generate. Default 16. */
+  frameCount?: number;
+  /** Output frame rate for the combined video. Default 8. */
+  frameRate?: number;
+  /** Context length for AnimateDiff uniform context. Default 16. */
+  contextLength?: number;
+  /** Output format: "image/gif", "image/webp", or an ffmpeg format. Default "image/webp". */
+  outputFormat?: string;
+  /** Loop count for the output animation (0 = infinite). Default 0. */
+  loopCount?: number;
+}
+
+/**
  * A provider that generates images from text prompts.
  */
 export interface ImageProvider {

@@ -1,4 +1,4 @@
-import type { ImageProvider, ImageGenerateOptions, Img2ImgOptions, ControlNetOptions, IPAdapterOptions, AvailabilityResult } from "./types.js";
+import type { ImageProvider, ImageGenerateOptions, Img2ImgOptions, ControlNetOptions, IPAdapterOptions, AnimateDiffOptions, AvailabilityResult } from "./types.js";
 
 /** A single node entry in a ComfyUI workflow graph. */
 interface WorkflowNode {
@@ -674,6 +674,204 @@ function buildIPAdapterPoseWorkflow(
   return nodes;
 }
 
+/** Options for building the AnimateDiff workflow. */
+interface AnimateDiffWorkflowOptions extends WorkflowOptions {
+  /** Uploaded reference image filename. */
+  imageName: string;
+  /** Denoise strength. */
+  denoise: number;
+  /** Motion model filename (e.g. "mm_sd_v15_v2.ckpt"). */
+  motionModel: string;
+  /** Number of frames to generate. */
+  frameCount: number;
+  /** Output frame rate. */
+  frameRate: number;
+  /** Context length for uniform context options. */
+  contextLength: number;
+  /** Output format (e.g. "image/gif", "image/webp"). */
+  outputFormat: string;
+  /** Loop count (0 = infinite). */
+  loopCount: number;
+}
+
+function buildAnimateDiffWorkflow(
+  opts: AnimateDiffWorkflowOptions
+): Record<string, WorkflowNode> {
+  const nodes: Record<string, WorkflowNode> = {
+    // Checkpoint
+    "4": {
+      class_type: "CheckpointLoaderSimple",
+      inputs: {
+        ckpt_name: opts.checkpoint ?? "v1-5-pruned-emaonly.safetensors",
+      },
+    },
+    // Load the reference image
+    "10": {
+      class_type: "LoadImage",
+      inputs: {
+        image: opts.imageName,
+      },
+    },
+    // Encode reference image to latent
+    "11": {
+      class_type: "VAEEncode",
+      inputs: {
+        pixels: ["10", 0],
+        vae: ["4", 2],
+      },
+    },
+    // Positive CLIP
+    "6": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: opts.prompt,
+        clip: ["4", 1],
+      },
+    },
+    // Negative CLIP
+    "7": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        text: opts.negativePrompt,
+        clip: ["4", 1],
+      },
+    },
+    // Load AnimateDiff motion model
+    "70": {
+      class_type: "ADE_LoadAnimateDiffModel",
+      inputs: {
+        model_name: opts.motionModel,
+      },
+    },
+    // Apply AnimateDiff motion model (outputs M_MODELS)
+    "71": {
+      class_type: "ADE_ApplyAnimateDiffModelSimple",
+      inputs: {
+        motion_model: ["70", 0],
+      },
+    },
+    // Use Evolved Sampling — takes MODEL from checkpoint + M_MODELS from AnimateDiff
+    "72": {
+      class_type: "ADE_UseEvolvedSampling",
+      inputs: {
+        model: ["4", 0],
+        m_models: ["71", 0],
+        beta_schedule: "autoselect",
+      },
+    },
+    // Context options for temporal consistency
+    "73": {
+      class_type: "ADE_StandardUniformContextOptions",
+      inputs: {
+        context_length: opts.contextLength,
+        context_stride: 1,
+        context_overlap: 4,
+        fuse_method: "flat",
+        use_on_equal_length: false,
+        start_percent: 0.0,
+        guarantee_steps: 1,
+      },
+    },
+    // Empty latent batch for the animation frames
+    "74": {
+      class_type: "ADE_EmptyLatentImageLarge",
+      inputs: {
+        width: opts.width,
+        height: opts.height,
+        batch_size: opts.frameCount,
+      },
+    },
+    // KSampler — uses AnimateDiff-conditioned model
+    "3": {
+      class_type: "KSampler",
+      inputs: {
+        seed: opts.seed,
+        steps: opts.steps,
+        cfg: opts.cfg,
+        sampler_name: opts.samplerName,
+        scheduler: opts.scheduler ?? "normal",
+        denoise: opts.denoise,
+        model: ["72", 0],
+        positive: ["6", 0],
+        negative: ["7", 0],
+        latent_image: ["74", 0],
+      },
+    },
+    // VAE decode all frames
+    "8": {
+      class_type: "VAEDecode",
+      inputs: {
+        samples: ["3", 0],
+        vae: ["4", 2],
+      },
+    },
+    // Combine frames into animation using VHS
+    "75": {
+      class_type: "VHS_VideoCombine",
+      inputs: {
+        images: ["8", 0],
+        frame_rate: opts.frameRate,
+        loop_count: opts.loopCount,
+        filename_prefix: "vulkan_game_anim_",
+        format: opts.outputFormat,
+        pingpong: false,
+        save_output: true,
+      },
+    },
+    // Also save individual frames as images
+    "9": {
+      class_type: "SaveImage",
+      inputs: {
+        filename_prefix: "vulkan_game_anim_frame_",
+        images: ["8", 0],
+      },
+    },
+  };
+
+  // Wire context options into evolved sampling
+  (nodes["72"].inputs as Record<string, unknown>).context_options = ["73", 0];
+
+  // Optional external VAE loader
+  if (opts.vae) {
+    nodes["80"] = {
+      class_type: "VAELoader",
+      inputs: { vae_name: opts.vae },
+    };
+    (nodes["11"].inputs as Record<string, unknown>).vae = ["80", 0];
+    (nodes["8"].inputs as Record<string, unknown>).vae = ["80", 0];
+  }
+
+  // Chain LoRA loaders
+  if (opts.loras.length > 0) {
+    let prevModelRef: [string, number] = ["4", 0];
+    let prevClipRef: [string, number] = ["4", 1];
+
+    opts.loras.forEach((lora, i) => {
+      const nodeId = `lora_${i}`;
+      const weight = lora.weight ?? 1.0;
+      nodes[nodeId] = {
+        class_type: "LoraLoader",
+        inputs: {
+          lora_name: lora.name.includes(".") ? lora.name : `${lora.name}.safetensors`,
+          strength_model: weight,
+          strength_clip: weight,
+          model: prevModelRef,
+          clip: prevClipRef,
+        },
+      };
+      prevModelRef = [nodeId, 0];
+      prevClipRef = [nodeId, 1];
+    });
+
+    // Rewire Evolved Sampling and CLIP encoders to use LoRA output
+    (nodes["72"].inputs as Record<string, unknown>).model = prevModelRef;
+    (nodes["6"].inputs as Record<string, unknown>).clip = prevClipRef;
+    (nodes["7"].inputs as Record<string, unknown>).clip = prevClipRef;
+  }
+
+  return nodes;
+}
+
 /**
  * HTTP client for ComfyUI local image generation server.
  *
@@ -1189,6 +1387,136 @@ export class ComfyUIClient implements ImageProvider {
       `ComfyUI returned a blank/black image after ${maxRetries} IP-Adapter attempts. ` +
       `Try different prompts, check the model is loaded, or increase steps.`
     );
+  }
+
+  /**
+   * Generate an animation from a reference image using AnimateDiff.
+   * Uploads the reference image, applies a motion model, and produces
+   * a multi-frame animation guided by the text prompt.
+   *
+   * @param prompt         - Text description guiding the animation
+   * @param referenceImage - PNG bytes of the reference/source image
+   * @param opts           - AnimateDiff options (motion model, frame count, etc.)
+   * @returns Raw bytes of the first output frame (individual frames also saved)
+   */
+  async generateAnimateDiff(
+    prompt: string,
+    referenceImage: Uint8Array,
+    opts?: AnimateDiffOptions,
+  ): Promise<Uint8Array> {
+    const imageName = await this.uploadImage(referenceImage);
+
+    const motionModel = opts?.motionModel ?? "mm_sd_v15_v2.ckpt";
+
+    const workflow = buildAnimateDiffWorkflow({
+      prompt,
+      negativePrompt: opts?.negativePrompt ?? "bad quality, blurry, deformed, static, still image",
+      width: opts?.width ?? 512,
+      height: opts?.height ?? 512,
+      steps: opts?.steps ?? 20,
+      seed: opts?.seed ?? Math.floor(Math.random() * 2 ** 32),
+      cfg: opts?.cfgScale ?? 7,
+      samplerName: opts?.samplerName ?? "euler",
+      scheduler: opts?.scheduler,
+      loras: opts?.loras ?? [],
+      checkpoint: opts?.checkpoint,
+      vae: opts?.vae,
+      imageName,
+      denoise: opts?.denoise ?? 0.6,
+      motionModel,
+      frameCount: opts?.frameCount ?? 16,
+      frameRate: opts?.frameRate ?? 8,
+      contextLength: opts?.contextLength ?? 16,
+      outputFormat: opts?.outputFormat ?? "image/webp",
+      loopCount: opts?.loopCount ?? 0,
+    });
+
+    const submitBody: PromptRequest = { prompt: workflow };
+    const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitBody),
+    });
+
+    if (!submitResponse.ok) {
+      const text = await submitResponse.text().catch(() => "(no body)");
+      throw new Error(
+        `ComfyUI AnimateDiff prompt failed: HTTP ${submitResponse.status} ${submitResponse.statusText} — ${text}`
+      );
+    }
+
+    const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+    const imageFile = await this.pollForCompletion(prompt_id);
+
+    const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
+      imageFile.filename
+    )}&subfolder=${encodeURIComponent(imageFile.subfolder)}&type=${encodeURIComponent(
+      imageFile.type
+    )}`;
+
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(
+        `ComfyUI image fetch failed: HTTP ${imageResponse.status} ${imageResponse.statusText}`
+      );
+    }
+
+    const buffer = await imageResponse.arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+
+  /**
+   * Generate an AnimateDiff animation with retry on blank/black results.
+   */
+  async generateAnimateDiffWithRetry(
+    prompt: string,
+    referenceImage: Uint8Array,
+    opts?: AnimateDiffOptions,
+    maxRetries = 3,
+    onRetry?: (attempt: number, max: number) => void,
+  ): Promise<Uint8Array> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const seed = attempt === 1
+        ? (opts?.seed ?? Math.floor(Math.random() * 2 ** 32))
+        : Math.floor(Math.random() * 2 ** 32);
+
+      const pngBytes = await this.generateAnimateDiff(prompt, referenceImage, { ...opts, seed });
+
+      if (!isBlankImage(pngBytes)) {
+        return pngBytes;
+      }
+
+      if (attempt < maxRetries) {
+        onRetry?.(attempt + 1, maxRetries);
+        await sleep(1000);
+      }
+    }
+
+    throw new Error(
+      `ComfyUI returned a blank/black image after ${maxRetries} AnimateDiff attempts. ` +
+      `Try different prompts, check the motion model is loaded, or increase steps.`
+    );
+  }
+
+  /**
+   * List available AnimateDiff motion model filenames from ComfyUI.
+   * Queries GET /object_info/ADE_LoadAnimateDiffModel.
+   */
+  async listMotionModels(): Promise<string[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/object_info/ADE_LoadAnimateDiffModel`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return [];
+      const data = await res.json() as Record<string, unknown>;
+      const info = data['ADE_LoadAnimateDiffModel'] as Record<string, unknown> | undefined;
+      const input = info?.['input'] as Record<string, unknown> | undefined;
+      const required = input?.['required'] as Record<string, unknown> | undefined;
+      const modelName = required?.['model_name'] as [string[]] | undefined;
+      return modelName?.[0] ?? [];
+    } catch {
+      return [];
+    }
   }
 
   /**
