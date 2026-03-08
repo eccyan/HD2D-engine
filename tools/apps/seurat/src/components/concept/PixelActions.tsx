@@ -18,7 +18,7 @@ export function PixelActions() {
   const [saving, setSaving] = useState(false);
 
   const [comfySettings, setComfySettings] = useState<ComfySettings>({
-    checkpoint: '', steps: 20, cfg: 10, sampler: 'euler', seed: -1, denoise: 0.55, loras: [],
+    checkpoint: '', vae: '', steps: 20, cfg: 10, sampler: 'euler', scheduler: 'normal', seed: -1, denoise: 0.55, loras: [],
   });
 
   useEffect(() => {
@@ -33,9 +33,11 @@ export function PixelActions() {
     if (gs) {
       setComfySettings({
         checkpoint: gs.checkpoint ?? '',
+        vae: gs.vae ?? '',
         steps: gs.steps ?? 20,
         cfg: gs.cfg ?? 10,
         sampler: gs.sampler ?? 'euler',
+        scheduler: gs.scheduler ?? 'normal',
         seed: gs.seed ?? -1,
         denoise: gs.denoise ?? 0.55,
         loras: gs.loras ?? [],
@@ -64,8 +66,9 @@ export function PixelActions() {
     await handleSave();
     await generatePixelArt({
       steps: comfySettings.steps, cfg: comfySettings.cfg, sampler: comfySettings.sampler,
-      seed: comfySettings.seed, loras: comfySettings.loras,
-      checkpoint: comfySettings.checkpoint || undefined, denoise: comfySettings.denoise,
+      scheduler: comfySettings.scheduler || undefined, seed: comfySettings.seed,
+      loras: comfySettings.loras, checkpoint: comfySettings.checkpoint || undefined,
+      vae: comfySettings.vae || undefined, denoise: comfySettings.denoise,
     });
   };
 

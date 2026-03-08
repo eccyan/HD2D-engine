@@ -43,9 +43,11 @@ export interface CharacterAnimation {
 
 export interface StageGenerationSettings {
   checkpoint?: string;
+  vae?: string;
   steps?: number;
   cfg?: number;
   sampler?: string;
+  scheduler?: string;
   seed?: number;
   denoise?: number;
   loras?: { name: string; weight: number }[];

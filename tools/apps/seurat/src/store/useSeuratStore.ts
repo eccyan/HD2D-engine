@@ -46,7 +46,7 @@ export interface SeuratState {
   conceptImageUrl: string | null;
   conceptGenerating: boolean;
   conceptError: string | null;
-  generateConceptArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string }) => Promise<void>;
+  generateConceptArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; scheduler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; vae?: string }) => Promise<void>;
   uploadConceptImage: (file: File) => Promise<void>;
   loadConceptImage: () => void;
 
@@ -55,7 +55,7 @@ export interface SeuratState {
   chibiImageUrl: string | null;
   chibiGenerating: boolean;
   chibiError: string | null;
-  generateChibiArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; denoise?: number }) => Promise<void>;
+  generateChibiArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; scheduler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; vae?: string; denoise?: number }) => Promise<void>;
   uploadChibiImage: (file: File) => Promise<void>;
 
   // Pixel
@@ -63,7 +63,7 @@ export interface SeuratState {
   pixelImageUrl: string | null;
   pixelGenerating: boolean;
   pixelError: string | null;
-  generatePixelArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; denoise?: number }) => Promise<void>;
+  generatePixelArt: (overrides?: { steps?: number; cfg?: number; sampler?: string; scheduler?: string; seed?: number; loras?: { name: string; weight: number }[]; checkpoint?: string; vae?: string; denoise?: number }) => Promise<void>;
   uploadPixelImage: (file: File) => Promise<void>;
 
   // Generation
@@ -106,6 +106,8 @@ export interface SeuratState {
   // ComfyUI model lists
   availableCheckpoints: string[];
   availableLoras: string[];
+  availableVaes: string[];
+  availableSchedulers: string[];
   refreshComfyModels: () => Promise<void>;
 
   // Atlas
@@ -232,11 +234,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         ? overrides.loras.filter((l) => l.name.trim())
         : aiConfig.loras.filter((l) => l.name.trim());
 
+      const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
+      const scheduler = overrides?.scheduler;
+      const vae = overrides?.vae;
       console.log('[Seurat] Concept prompt:', prompt);
       console.log('[Seurat] Concept negative:', negative);
-      console.log('[Seurat] Concept settings:', { steps, cfg, sampler, seed, loras: loras.map(l => `${l.name}:${l.weight}`) });
-      const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
-      console.log('[Seurat] Concept checkpoint:', checkpoint);
+      console.log('[Seurat] Concept settings:', { steps, cfg, sampler, scheduler, seed, checkpoint, vae, loras: loras.map(l => `${l.name}:${l.weight}`) });
       const pngBytes = await comfy.generateImageWithRetry(
         prompt,
         {
@@ -246,7 +249,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           seed,
           cfgScale: cfg,
           samplerName: sampler,
+          scheduler,
           checkpoint,
+          vae,
           negativePrompt: negative,
           loras,
           removeBackground: aiConfig.removeBackground,
@@ -267,7 +272,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         concept: {
           ...manifest.concept,
           reference_images: ['concept.png'],
-          generation_settings: { checkpoint, steps, cfg, sampler, seed: rawSeed, loras },
+          generation_settings: { checkpoint, vae, steps, cfg, sampler, scheduler, seed: rawSeed, loras },
         },
       };
       set({ manifest: updated });
@@ -359,6 +364,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         ? overrides.loras.filter((l) => l.name.trim())
         : aiConfig.loras.filter((l) => l.name.trim());
       const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
+      const scheduler = overrides?.scheduler;
+      const vae = overrides?.vae;
 
       console.log('[Seurat] Chibi prompt:', prompt);
 
@@ -369,7 +376,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         seed,
         cfgScale: cfg,
         samplerName: sampler,
+        scheduler,
         checkpoint,
+        vae,
         negativePrompt: negative,
         denoise,
         loras,
@@ -386,7 +395,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           negative_prompt: negPrompt,
           reference_image: 'chibi.png',
           approved: manifest.chibi?.approved ?? false,
-          generation_settings: { checkpoint, steps, cfg, sampler, seed: rawSeed, denoise, loras },
+          generation_settings: { checkpoint, vae, steps, cfg, sampler, scheduler, seed: rawSeed, denoise, loras },
         },
       };
       set({ manifest: updated });
@@ -472,6 +481,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         ? overrides.loras.filter((l) => l.name.trim())
         : aiConfig.loras.filter((l) => l.name.trim());
       const checkpoint = overrides?.checkpoint ?? aiConfig.checkpoint;
+      const scheduler = overrides?.scheduler;
+      const vae = overrides?.vae;
 
       console.log('[Seurat] Pixel prompt:', prompt);
 
@@ -483,7 +494,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         seed,
         cfgScale: cfg,
         samplerName: sampler,
+        scheduler,
         checkpoint,
+        vae,
         negativePrompt: negative,
         denoise,
         loras,
@@ -500,7 +513,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           negative_prompt: negPrompt,
           reference_image: 'pixel.png',
           approved: manifest.pixel?.approved ?? false,
-          generation_settings: { checkpoint, steps, cfg, sampler, seed: rawSeed, denoise, loras },
+          generation_settings: { checkpoint, vae, steps, cfg, sampler, scheduler, seed: rawSeed, denoise, loras },
         },
       };
       set({ manifest: updated });
@@ -957,15 +970,19 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   // ComfyUI model lists
   availableCheckpoints: [],
   availableLoras: [],
+  availableVaes: [],
+  availableSchedulers: [],
   refreshComfyModels: async () => {
     const { aiConfig } = get();
     try {
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-      const [checkpoints, loras] = await Promise.all([
+      const [checkpoints, loras, vaes, schedulers] = await Promise.all([
         comfy.listCheckpoints(),
         comfy.listLoras(),
+        comfy.listVaes(),
+        comfy.listSchedulers(),
       ]);
-      set({ availableCheckpoints: checkpoints, availableLoras: loras });
+      set({ availableCheckpoints: checkpoints, availableLoras: loras, availableVaes: vaes, availableSchedulers: schedulers });
     } catch {
       // ComfyUI not reachable — keep empty lists
     }

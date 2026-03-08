@@ -5,9 +5,11 @@ import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
 
 export interface ComfySettings {
   checkpoint: string;
+  vae: string;
   steps: number;
   cfg: number;
   sampler: string;
+  scheduler: string;
   seed: number;
   denoise: number;
   loras: { name: string; weight: number }[];
@@ -26,10 +28,14 @@ export function ComfySettingsPanel({ label, settings, onChange, showDenoise = fa
   const aiConfig = useSeuratStore((s) => s.aiConfig);
   const availableCheckpoints = useSeuratStore((s) => s.availableCheckpoints);
   const availableLoras = useSeuratStore((s) => s.availableLoras);
+  const availableVaes = useSeuratStore((s) => s.availableVaes);
+  const availableSchedulers = useSeuratStore((s) => s.availableSchedulers);
   const refreshComfyModels = useSeuratStore((s) => s.refreshComfyModels);
 
   const [ckptSearch, setCkptSearch] = useState('');
   const [ckptOpen, setCkptOpen] = useState(false);
+  const [vaeSearch, setVaeSearch] = useState('');
+  const [vaeOpen, setVaeOpen] = useState(false);
   const [loraSearches, setLoraSearches] = useState<Record<number, string>>({});
   const [loraOpen, setLoraOpen] = useState<Record<number, boolean>>({});
 
@@ -45,13 +51,19 @@ export function ComfySettingsPanel({ label, settings, onChange, showDenoise = fa
     ? availableCheckpoints.filter((c) => c.toLowerCase().includes(ckptSearch.toLowerCase()))
     : availableCheckpoints;
 
+  const filteredVaes = vaeSearch
+    ? availableVaes.filter((v) => v.toLowerCase().includes(vaeSearch.toLowerCase()))
+    : availableVaes;
+
   const handleLoadSaved = () => {
     if (!savedSettings) return;
     onChange({
       checkpoint: savedSettings.checkpoint ?? settings.checkpoint,
+      vae: savedSettings.vae ?? settings.vae,
       steps: savedSettings.steps ?? settings.steps,
       cfg: savedSettings.cfg ?? settings.cfg,
       sampler: savedSettings.sampler ?? settings.sampler,
+      scheduler: savedSettings.scheduler ?? settings.scheduler,
       seed: savedSettings.seed ?? settings.seed,
       denoise: savedSettings.denoise ?? settings.denoise,
       loras: savedSettings.loras ?? settings.loras,
@@ -106,6 +118,44 @@ export function ComfySettingsPanel({ label, settings, onChange, showDenoise = fa
         </div>
       </Row>
 
+      {/* VAE */}
+      <Row>
+        <label style={styles.settingLabel}>VAE</label>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <input
+            value={settings.vae}
+            onChange={(e) => { set({ vae: e.target.value }); setVaeSearch(e.target.value); }}
+            onFocus={() => { setVaeOpen(true); setVaeSearch(''); }}
+            onBlur={() => setTimeout(() => setVaeOpen(false), 200)}
+            style={{ ...styles.settingInput, width: '100%' }}
+            placeholder="(use checkpoint VAE)"
+            disabled={disabled}
+          />
+          {vaeOpen && filteredVaes.length > 0 && (
+            <div style={styles.dropdown}>
+              <div
+                style={{ ...styles.dropdownItem, color: '#888', fontStyle: 'italic' }}
+                onMouseDown={(e) => { e.preventDefault(); set({ vae: '' }); setVaeOpen(false); }}
+              >
+                (none — use checkpoint VAE)
+              </div>
+              {filteredVaes.slice(0, 15).map((v) => (
+                <div
+                  key={v}
+                  style={styles.dropdownItem}
+                  onMouseDown={(e) => { e.preventDefault(); set({ vae: v }); setVaeOpen(false); }}
+                >
+                  {v}
+                </div>
+              ))}
+              {filteredVaes.length > 15 && (
+                <div style={{ ...styles.dropdownItem, color: '#555' }}>...{filteredVaes.length - 15} more</div>
+              )}
+            </div>
+          )}
+        </div>
+      </Row>
+
       <Row>
         <label style={styles.settingLabel}>Steps</label>
         <input type="number" value={settings.steps} onChange={(e) => set({ steps: parseInt(e.target.value) || 20 })} style={{ ...styles.settingInput, width: 50 }} disabled={disabled} />
@@ -121,6 +171,14 @@ export function ComfySettingsPanel({ label, settings, onChange, showDenoise = fa
         <label style={styles.settingLabel}>Sampler</label>
         <select value={settings.sampler} onChange={(e) => set({ sampler: e.target.value })} style={styles.settingSelect} disabled={disabled}>
           {SAMPLER_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </Row>
+      <Row>
+        <label style={styles.settingLabel}>Scheduler</label>
+        <select value={settings.scheduler} onChange={(e) => set({ scheduler: e.target.value })} style={styles.settingSelect} disabled={disabled}>
+          {(availableSchedulers.length > 0 ? availableSchedulers : ['normal', 'karras', 'exponential', 'sgm_uniform']).map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
         </select>
       </Row>
 

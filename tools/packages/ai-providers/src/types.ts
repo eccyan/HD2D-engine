@@ -35,8 +35,12 @@ export interface ImageGenerateOptions {
   negativePrompt?: string;
   /** Classifier-free guidance scale (default varies by provider). */
   cfgScale?: number;
-  /** Sampler/scheduler name (e.g. "Euler a", "DPM++ 2M Karras"). */
+  /** Sampler name (e.g. "euler", "dpmpp_2m", "dpmpp_sde"). */
   samplerName?: string;
+  /** Scheduler name (e.g. "normal", "karras", "exponential", "sgm_uniform"). */
+  scheduler?: string;
+  /** External VAE model filename. If set, uses a separate VAELoader instead of the checkpoint's built-in VAE. */
+  vae?: string;
   /** LoRA models to apply. Each entry has a name and optional weight (default 1.0). */
   loras?: Array<{ name: string; weight?: number }>;
   /** Run background removal on the output image (requires ComfyUI RemBG node). */

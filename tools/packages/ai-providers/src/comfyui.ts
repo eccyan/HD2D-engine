@@ -61,8 +61,10 @@ interface WorkflowOptions {
   seed: number;
   cfg: number;
   samplerName: string;
+  scheduler?: string;
   loras: LoraEntry[];
   checkpoint?: string;
+  vae?: string;
   removeBackground?: boolean;
   remBgNodeType?: string;
 }
@@ -140,7 +142,7 @@ function buildTxt2ImgWorkflow(
         steps: opts.steps,
         cfg: opts.cfg,
         sampler_name: opts.samplerName,
-        scheduler: "normal",
+        scheduler: opts.scheduler ?? "normal",
         denoise: 1,
         model: ["4", 0],
         positive: ["6", 0],
@@ -156,6 +158,15 @@ function buildTxt2ImgWorkflow(
       },
     },
   };
+
+  // Optional external VAE loader
+  if (opts.vae) {
+    nodes["20"] = {
+      class_type: "VAELoader",
+      inputs: { vae_name: opts.vae },
+    };
+    (nodes["8"].inputs as Record<string, unknown>).vae = ["20", 0];
+  }
 
   // Chain LoRA loaders between checkpoint and KSampler/CLIP
   // Each LoraLoader takes model+clip in, outputs model+clip out
@@ -242,7 +253,7 @@ function buildImg2ImgWorkflow(
         steps: opts.steps,
         cfg: opts.cfg,
         sampler_name: opts.samplerName,
-        scheduler: "normal",
+        scheduler: opts.scheduler ?? "normal",
         denoise: opts.denoise,
         model: ["4", 0],
         positive: ["6", 0],
@@ -265,6 +276,16 @@ function buildImg2ImgWorkflow(
       },
     },
   };
+
+  // Optional external VAE loader
+  if (opts.vae) {
+    nodes["20"] = {
+      class_type: "VAELoader",
+      inputs: { vae_name: opts.vae },
+    };
+    (nodes["11"].inputs as Record<string, unknown>).vae = ["20", 0];
+    (nodes["8"].inputs as Record<string, unknown>).vae = ["20", 0];
+  }
 
   // Chain LoRA loaders
   if (opts.loras.length > 0) {
@@ -381,7 +402,7 @@ function buildControlNetWorkflow(
         steps: opts.steps,
         cfg: opts.cfg,
         sampler_name: opts.samplerName,
-        scheduler: "normal",
+        scheduler: opts.scheduler ?? "normal",
         denoise: opts.denoise,
         model: ["4", 0],
         positive: ["21", 0],  // ControlNet-conditioned positive
@@ -404,6 +425,16 @@ function buildControlNetWorkflow(
       },
     },
   };
+
+  // Optional external VAE loader (use node "25" to avoid conflict with ControlNet "20")
+  if (opts.vae) {
+    nodes["25"] = {
+      class_type: "VAELoader",
+      inputs: { vae_name: opts.vae },
+    };
+    (nodes["11"].inputs as Record<string, unknown>).vae = ["25", 0];
+    (nodes["8"].inputs as Record<string, unknown>).vae = ["25", 0];
+  }
 
   // Chain LoRA loaders
   if (opts.loras.length > 0) {
@@ -559,7 +590,7 @@ function buildIPAdapterPoseWorkflow(
         steps: opts.steps,
         cfg: opts.cfg,
         sampler_name: opts.samplerName,
-        scheduler: "normal",
+        scheduler: opts.scheduler ?? "normal",
         denoise: opts.denoise,
         model: ["42", 0],     // IP-Adapter conditioned model
         positive: ["47", 0],  // OpenPose conditioned positive
@@ -582,6 +613,15 @@ function buildIPAdapterPoseWorkflow(
       },
     },
   };
+
+  // Optional external VAE loader
+  if (opts.vae) {
+    nodes["60"] = {
+      class_type: "VAELoader",
+      inputs: { vae_name: opts.vae },
+    };
+    (nodes["8"].inputs as Record<string, unknown>).vae = ["60", 0];
+  }
 
   // Chain LoRA loaders (between checkpoint and IP-Adapter loader)
   if (opts.loras.length > 0) {
@@ -679,8 +719,10 @@ export class ComfyUIClient implements ImageProvider {
       seed: opts?.seed ?? Math.floor(Math.random() * 2 ** 32),
       cfg: opts?.cfgScale ?? 7,
       samplerName: opts?.samplerName ?? "euler",
+      scheduler: opts?.scheduler,
       loras: opts?.loras ?? [],
       checkpoint: opts?.checkpoint,
+      vae: opts?.vae,
       removeBackground: opts?.removeBackground,
       remBgNodeType: opts?.remBgNodeType,
     });
@@ -749,8 +791,10 @@ export class ComfyUIClient implements ImageProvider {
       seed: opts?.seed ?? Math.floor(Math.random() * 2 ** 32),
       cfg: opts?.cfgScale ?? 7,
       samplerName: opts?.samplerName ?? "euler",
+      scheduler: opts?.scheduler,
       loras: opts?.loras ?? [],
       checkpoint: opts?.checkpoint,
+      vae: opts?.vae,
       imageName,
       denoise: opts?.denoise ?? 0.4,
       removeBackground: opts?.removeBackground,
@@ -955,8 +999,10 @@ export class ComfyUIClient implements ImageProvider {
       seed: opts.seed ?? Math.floor(Math.random() * 2 ** 32),
       cfg: opts.cfgScale ?? 7,
       samplerName: opts.samplerName ?? "euler",
+      scheduler: opts.scheduler,
       loras: opts.loras ?? [],
       checkpoint: opts.checkpoint,
+      vae: opts.vae,
       imageName,
       denoise: opts.denoise ?? 0.75,
       controlNetModel,
@@ -1060,8 +1106,10 @@ export class ComfyUIClient implements ImageProvider {
       seed: opts.seed ?? Math.floor(Math.random() * 2 ** 32),
       cfg: opts.cfgScale ?? 7,
       samplerName: opts.samplerName ?? "euler",
+      scheduler: opts.scheduler,
       loras: opts.loras ?? [],
       checkpoint: opts.checkpoint,
+      vae: opts.vae,
       conceptImageName,
       poseImageName,
       denoise: opts.denoise ?? 0.75,
@@ -1180,6 +1228,48 @@ export class ComfyUIClient implements ImageProvider {
       const required = input?.['required'] as Record<string, unknown> | undefined;
       const loraName = required?.['lora_name'] as [string[]] | undefined;
       return loraName?.[0] ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * List available VAE model filenames from ComfyUI.
+   * Queries GET /object_info/VAELoader.
+   */
+  async listVaes(): Promise<string[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/object_info/VAELoader`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return [];
+      const data = await res.json() as Record<string, unknown>;
+      const info = data['VAELoader'] as Record<string, unknown> | undefined;
+      const input = info?.['input'] as Record<string, unknown> | undefined;
+      const required = input?.['required'] as Record<string, unknown> | undefined;
+      const vaeName = required?.['vae_name'] as [string[]] | undefined;
+      return vaeName?.[0] ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * List available scheduler names from ComfyUI's KSampler node.
+   * Queries GET /object_info/KSampler.
+   */
+  async listSchedulers(): Promise<string[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/object_info/KSampler`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return [];
+      const data = await res.json() as Record<string, unknown>;
+      const info = data['KSampler'] as Record<string, unknown> | undefined;
+      const input = info?.['input'] as Record<string, unknown> | undefined;
+      const required = input?.['required'] as Record<string, unknown> | undefined;
+      const scheduler = required?.['scheduler'] as [string[]] | undefined;
+      return scheduler?.[0] ?? [];
     } catch {
       return [];
     }
