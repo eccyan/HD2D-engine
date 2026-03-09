@@ -100,18 +100,29 @@ ControlNet tiles the concept art horizontally and uses it as conditioning to mai
 
 Uses IP-Adapter for character appearance consistency from concept art, combined with OpenPose ControlNet for per-frame pose control. Requires the optional models and `ComfyUI_IPAdapter_plus` custom node.
 
-- **IP Weight**: IP-Adapter influence strength (0.1–1.0, default 0.60)
+- **IP Weight**: IP-Adapter influence strength (0.1–1.0, default 0.70)
 - **Preset**: IP-Adapter model variant (default "PLUS (high strength)")
+- **End At**: When IP-Adapter stops influencing generation (0.0–1.0, default 0.60). Lower values give the text prompt and ControlNet more control in later denoising steps, reducing background leakage and improving pose adherence.
 - **Pose Model**: OpenPose ControlNet model filename (default `control_v11p_sd15_openpose`)
 - **Pose Strength**: OpenPose conditioning strength (0.1–1.5, default 0.80)
 
 When enabled, Seurat generates each frame individually with a programmatically rendered OpenPose skeleton matching the expected pose (idle breathing, walk cycle, run cycle) for each direction and frame index.
+
+**IP-Adapter embeds_scaling**: Pass-1 nodes use `"K+mean(V) w/ C penalty"` to preserve character identity while reducing spatial/compositional influence (backgrounds). Pass-2 chibi nodes use `"V only"` for strong style transfer.
 
 ### Background Removal
 
 Removes opaque backgrounds from generated sprites (SD 1.5 does not natively support alpha output). Requires the `ComfyUI-BRIA_AI-RMBG` custom node with its `RMBG-1.4/model.pth` weights.
 
 - **Node**: ComfyUI class_type for the RemBG node (default `BRIA_RMBG_Zho`)
+
+Background removal operates at multiple stages:
+
+1. **Reference pre-processing**: When IP-Adapter + RemBG are both enabled, concept art and chibi reference images are run through RemBG *before* being fed to IP-Adapter. This prevents IP-Adapter from reproducing backgrounds present in the references. Results are cached per-view direction.
+2. **Inter-pass cleanup** (two-pass mode): RemBG runs between Pass 1 (concept+pose) and Pass 2 (chibi-fy) so that the chibi pass starts from a clean character on transparent background.
+3. **Final output**: Standard RemBG on the final generated image.
+
+Frame prompts use `plain white background, solid color background` (SD 1.5 handles solid white reliably) and negative prompts include environment-related terms (`detailed background, room, interior, exterior, furniture, floor, wall, ceiling, sky, ground, environment`).
 
 ## Generation Modes
 

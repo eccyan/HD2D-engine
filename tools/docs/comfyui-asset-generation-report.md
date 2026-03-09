@@ -245,25 +245,40 @@ This replaced the previous img2img approach, which forced an impossible tradeoff
 The recommended **sprite frame** generation pipeline uses a **two-pass ComfyUI workflow** that separates posing from style transfer:
 
 1. **Pass 1 (Pose)**: IP-Adapter (concept art reference) + OpenPose ControlNet → posed character at 512x512
-2. **Pass 2 (Chibi-fy)**: IP-Adapter (chibi reference) + img2img on Pass 1 output → chibi-fied character
-3. **Downscale**: Nearest-neighbor to final sprite size (e.g. 128x128)
+2. **Inter-pass RemBG**: Background removal on Pass 1 output to prevent Pass 2 from reinforcing generated backgrounds
+3. **Pass 2 (Chibi-fy)**: IP-Adapter (chibi reference) + img2img on cleaned Pass 1 output → chibi-fied character
+4. **Downscale**: Nearest-neighbor to final sprite size (e.g. 128x128)
 
 This approach gives better control than single-pass because the concept art drives the character identity/pose while the chibi reference drives the final art style.
+
+### Background Mitigation
+
+Backgrounds in generated frames were a persistent issue. The pipeline uses multiple layers of defense:
+
+1. **Prompt engineering**: Frames use `plain white background, solid color background` instead of `transparent background` (SD 1.5 handles solid colors much better than transparency). Negative prompts include `detailed background, room, interior, exterior, furniture, floor, wall, ceiling, sky, ground, environment`.
+2. **Reference image pre-processing**: When IP-Adapter + RemBG are both enabled, all reference images (concept art and chibi, per-direction) are run through RemBG *before* being fed to IP-Adapter. This prevents IP-Adapter from reproducing backgrounds present in the reference images. Results are cached per-view so RemBG runs once per direction.
+3. **IP-Adapter embeds_scaling**: Pass-1 IP-Adapter nodes use `"K+mean(V) w/ C penalty"` instead of `"V only"`. This preserves character identity but reduces spatial/compositional influence (i.e., backgrounds). Pass-2 chibi nodes remain `"V only"` for strong style transfer.
+4. **IP-Adapter end_at**: Default lowered to `0.6` (from `0.8`) so IP-Adapter stops influencing earlier, giving the text prompt and ControlNet more control over the final output.
+5. **Inter-pass RemBG**: Background removal runs between Pass 1 and Pass 2 so that the chibi pass starts from a clean character on transparent background.
+6. **Final RemBG**: Standard background removal on the final output.
 
 ### Workflow Architecture
 
 ```
 Pass 1:
-CheckpointLoader → IPAdapterUnifiedLoader → IPAdapterAdvanced (concept art)
+CheckpointLoader → IPAdapterUnifiedLoader → IPAdapterAdvanced (concept art, K+mean(V) w/ C penalty)
                                                ↓
-ControlNetLoader (OpenPose) → ControlNetApplyAdvanced (pose skeleton)
+ControlNetLoader (OpenPose) → ControlNetApplyAdvanced (pose skeleton, strength=0.8)
                                                ↓
 EmptyLatentImage → KSampler (denoise=1.0) → VAEDecode → Pass 1 output
 
+Inter-pass:
+Pass 1 output → BRIA_RMBG (background removal) → cleaned character
+
 Pass 2:
-Pass 1 output → VAEEncode → KSampler (denoise=0.7) → VAEDecode → ImageScale → SaveImage
-                               ↑
-IPAdapterUnifiedLoader → IPAdapterAdvanced (chibi reference)
+Cleaned output → VAEEncode → KSampler (denoise=0.7) → VAEDecode → ImageScale → RemBG → SaveImage
+                                ↑
+IPAdapterUnifiedLoader → IPAdapterAdvanced (chibi reference, V only)
 ```
 
 ### API Usage
@@ -283,14 +298,19 @@ const frame = await client.generateTwoPassIPAdapterWithRetry(
     ipAdapterWeight: 0.7,
     ipAdapterPreset: "PLUS (high strength)",
     ipAdapterStartAt: 0.0,
-    ipAdapterEndAt: 0.8,
+    ipAdapterEndAt: 0.6,
     openPoseModel: "control_v11p_sd15_openpose.pth",
-    openPoseStrength: 0.5,
+    openPoseStrength: 0.8,
     chibiWeight: 0.7,
     chibiDenoise: 0.7,
+    removeBackground: true,
+    remBgNodeType: "BRIA_RMBG_Zho",
     outputWidth: 128, outputHeight: 128,
   },
 );
+
+// Standalone background removal (e.g. pre-process references):
+const cleaned = await client.removeBackground(imageBytes, "BRIA_RMBG_Zho");
 ```
 
 ### MPS / Apple Silicon Notes
@@ -305,11 +325,12 @@ A parameter sweep of 14 experiments (56 frames total) was conducted. See `tools/
 | Parameter | Best Value | Notes |
 |-----------|-----------|-------|
 | **chibiDenoise** | **0.7** | Lower values (0.3-0.5) barely change the concept art style. 0.7 produces visible chibi proportions. |
-| **openPoseStrength** | **0.5** | Lower strength gives more natural, fluid poses. 1.0 is too rigid. |
+| **openPoseStrength** | **0.8** | Stronger pose guidance ensures the OpenPose skeleton is followed. Previous default of 0.5 was too weak when IP-Adapter dominated. |
 | **consistentSeed** | **true** | Same seed across all frames ensures character appearance stays consistent; the pose skeleton drives variation. |
 | chibiWeight | 0.7 | Weight has minimal effect compared to denoise. 0.5-0.9 all look similar. |
-| ipAdapterEndAt | 0.8 | Stopping IP-Adapter at 80% lets the model refine details in the final denoising steps. |
+| ipAdapterEndAt | 0.6 | Stopping IP-Adapter at 60% lets the text prompt and ControlNet dominate the final denoising steps, reducing background leakage and improving pose adherence. |
 | ipAdapterWeight | 0.7 | Standard value; balances identity preservation with prompt adherence. |
+| embeds_scaling (pass 1) | K+mean(V) w/ C penalty | Reduces IP-Adapter's spatial/compositional influence while preserving character identity. |
 
 **Two-pass vs single-pass comparison:**
 - Two-pass produces more detailed, higher-quality sprites with better concept art fidelity
@@ -326,7 +347,7 @@ A parameter sweep of 14 experiments (56 frames total) was conducted. See `tools/
 
 4. **Manual curation pass**: Not all non-black images are usable. Estimate ~70% of character sprites and ~40% of tiles are good quality. A human review step is essential.
 
-5. **Consider IP-Adapter for style transfer**: For chibi generation, txt2img + IP-Adapter gives better results than img2img — the prompt controls proportions while IP-Adapter preserves character identity. For sprite frames, the two-pass IP-Adapter + OpenPose pipeline provides explicit pose control.
+5. **Consider IP-Adapter for style transfer**: For chibi generation, txt2img + IP-Adapter gives better results than img2img — the prompt controls proportions while IP-Adapter preserves character identity. For sprite frames, the two-pass IP-Adapter + OpenPose pipeline provides explicit pose control. Use `embeds_scaling: "K+mean(V) w/ C penalty"` on pass-1 nodes to reduce background leakage, and pre-process reference images through RemBG before feeding to IP-Adapter.
 
 6. **GPU recommendation**: For production use, an NVIDIA GPU avoids all MPS precision issues. The black image problem is entirely an Apple Silicon limitation.
 
