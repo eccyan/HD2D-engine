@@ -1002,8 +1002,10 @@ function buildTwoPassIPAdapterWorkflow(
       },
     },
 
-    // === Inter-pass: Remove background from pass 1 output ===
-    // This prevents pass 2 from reinforcing any background generated in pass 1.
+    // === Inter-pass: Remove background from pass 1 output and composite on white ===
+    // RemBG strips background to black/transparent. If fed directly to VAEEncode,
+    // the black regions become noise in latent space that pass 2 turns into swirling
+    // artifacts. So we composite the character onto solid white first.
     "70": {
       class_type: "BRIA_RMBG_ModelLoader_Zho",
       inputs: {},
@@ -1015,6 +1017,33 @@ function buildTwoPassIPAdapterWorkflow(
         image: ["8", 0],  // pass 1 VAEDecode output
       },
     },
+    // Create solid white background image
+    "72": {
+      class_type: "SolidMask",
+      inputs: {
+        value: 1.0,
+        width: opts.width,
+        height: opts.height,
+      },
+    },
+    "73": {
+      class_type: "MaskToImage",
+      inputs: {
+        mask: ["72", 0],
+      },
+    },
+    // Composite character (from RemBG) onto white using the RemBG mask
+    "74": {
+      class_type: "ImageCompositeMasked",
+      inputs: {
+        destination: ["73", 0],   // white background
+        source: ["8", 0],         // original pass 1 output (full RGB)
+        x: 0,
+        y: 0,
+        resize_source: false,
+        mask: ["71", 1],          // RemBG foreground mask (slot 1)
+      },
+    },
 
     // === Pass 2: Chibi-fy the posed character ===
 
@@ -1023,11 +1052,11 @@ function buildTwoPassIPAdapterWorkflow(
       class_type: "LoadImage",
       inputs: { image: opts.chibiImageName },
     },
-    // VAEEncode the cleaned pass 1 output as starting latent for pass 2
+    // VAEEncode the character-on-white as starting latent for pass 2
     "81": {
       class_type: "VAEEncode",
       inputs: {
-        pixels: ["71", 0],  // RemBG-cleaned pass 1 output
+        pixels: ["74", 0],  // character on white background
         vae: ["4", 2],
       },
     },
@@ -1047,8 +1076,8 @@ function buildTwoPassIPAdapterWorkflow(
         weight_type: "linear",
         combine_embeds: "concat",
         start_at: 0.0,
-        end_at: 1.0,
-        embeds_scaling: "V only",
+        end_at: 0.8,
+        embeds_scaling: embedsScaling,
         model: ["82", 0],
         ipadapter: ["82", 1],
         image: ["80", 0],
@@ -1058,7 +1087,7 @@ function buildTwoPassIPAdapterWorkflow(
     "84": {
       class_type: "CLIPTextEncode",
       inputs: {
-        text: opts.prompt + ", chibi style, cute, big head, small body, deformed proportions",
+        text: opts.prompt + ", chibi style, cute, big head, small body, deformed proportions, plain white background, solid color background",
         clip: ["4", 1],
       },
     },
@@ -1132,7 +1161,7 @@ function buildTwoPassIPAdapterWorkflow(
     nodes["92"] = {
       class_type: "CLIPTextEncode",
       inputs: {
-        text: opts.prompt + ", pixel art, 8-bit, clean edges, retro game sprite",
+        text: opts.prompt + ", pixel art, 8-bit, clean edges, retro game sprite, plain white background, solid color background",
         clip: prevPixelClip,
       },
     };
