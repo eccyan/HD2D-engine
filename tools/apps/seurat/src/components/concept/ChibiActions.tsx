@@ -89,6 +89,7 @@ export function ChibiActions() {
   const handleSave = async () => {
     setSaving(true);
     const chibi: ChibiArt = {
+      ...manifest.chibi,
       style_prompt: stylePrompt,
       negative_prompt: negativePrompt,
       reference_image: manifest.chibi?.reference_image || '',
