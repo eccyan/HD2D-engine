@@ -1110,6 +1110,21 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const comfy = new ComfyUIClient(aiConfig.comfyUrl);
     const hasConceptImage = manifest.concept.reference_images.length > 0;
 
+    // Pre-process reference images through RemBG to strip backgrounds before IP-Adapter
+    const shouldPreRemBg = aiConfig.useIPAdapter && aiConfig.removeBackground;
+    async function preRemoveBackground(bytes: Uint8Array): Promise<Uint8Array> {
+      if (!shouldPreRemBg) return bytes;
+      try {
+        console.log('[Seurat] Pre-processing reference image through RemBG...');
+        const cleaned = await comfy.removeBackground(bytes, aiConfig.remBgNodeType);
+        console.log(`[Seurat] RemBG done: ${bytes.length} → ${cleaned.length} bytes`);
+        return cleaned;
+      } catch (err) {
+        console.warn('[Seurat] RemBG pre-processing failed, using original:', err);
+        return bytes;
+      }
+    }
+
     // Per-direction reference loading with cache
     const conceptCache: Partial<Record<ViewDirection | '_default', Uint8Array>> = {};
     const chibiCache: Partial<Record<ViewDirection | '_default', Uint8Array>> = {};
@@ -1122,7 +1137,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       // Try direction-specific first, then fall back to default
       if (conceptCache[view]) return conceptCache[view]!;
       try {
-        const bytes = await api.fetchConceptImageBytes(manifest.character_id, view);
+        let bytes = await api.fetchConceptImageBytes(manifest.character_id, view);
+        bytes = await preRemoveBackground(bytes);
         conceptCache[view] = bytes;
         console.log(`[Seurat] Loaded concept image (${view}): ${bytes.length} bytes`);
         return bytes;
@@ -1130,7 +1146,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         // Fall back to default concept image
         if (conceptCache['_default']) return conceptCache['_default']!;
         try {
-          const bytes = await api.fetchConceptImageBytes(manifest.character_id);
+          let bytes = await api.fetchConceptImageBytes(manifest.character_id);
+          bytes = await preRemoveBackground(bytes);
           conceptCache['_default'] = bytes;
           console.log(`[Seurat] Loaded default concept image: ${bytes.length} bytes`);
           return bytes;
@@ -1147,14 +1164,16 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       const view = override ?? DIRECTION_TO_VIEW[dir];
       if (chibiCache[view]) return chibiCache[view]!;
       try {
-        const bytes = await api.fetchChibiImageBytes(manifest.character_id, view);
+        let bytes = await api.fetchChibiImageBytes(manifest.character_id, view);
+        bytes = await preRemoveBackground(bytes);
         chibiCache[view] = bytes;
         console.log(`[Seurat] Loaded chibi image (${view}): ${bytes.length} bytes`);
         return bytes;
       } catch {
         if (chibiCache['_default']) return chibiCache['_default']!;
         try {
-          const bytes = await api.fetchChibiImageBytes(manifest.character_id);
+          let bytes = await api.fetchChibiImageBytes(manifest.character_id);
+          bytes = await preRemoveBackground(bytes);
           chibiCache['_default'] = bytes;
           console.log(`[Seurat] Loaded default chibi image: ${bytes.length} bytes`);
           return bytes;
@@ -1171,7 +1190,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
     if (hasConceptImage) {
       try {
-        conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
+        let bytes = await api.fetchConceptImageBytes(manifest.character_id);
+        bytes = await preRemoveBackground(bytes);
+        conceptBytes = bytes;
         conceptCache['_default'] = conceptBytes;
         console.log(`[Seurat] Loaded concept image: ${conceptBytes.length} bytes`);
       } catch (err) {
@@ -1180,7 +1201,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     }
     if (manifest.chibi?.reference_image) {
       try {
-        chibiBytes = await api.fetchChibiImageBytes(manifest.character_id);
+        let bytes = await api.fetchChibiImageBytes(manifest.character_id);
+        bytes = await preRemoveBackground(bytes);
+        chibiBytes = bytes;
         chibiCache['_default'] = chibiBytes;
         console.log(`[Seurat] Loaded chibi image: ${chibiBytes.length} bytes`);
       } catch (err) {
@@ -1213,7 +1236,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const ipaDenoise = 1.0;
     const ipaLoras = loras;
     if (ipaActive) {
-      negative += ', oversaturated, neon, vibrant colors, high contrast';
+      negative += ', oversaturated, neon, vibrant colors, high contrast, detailed background, room, interior, exterior, furniture, floor, wall, ceiling, sky, ground, environment';
     }
 
     if (scope === 'single' && animName !== undefined && frameIndex !== undefined) {

@@ -11,7 +11,7 @@ export const SAMPLER_NAMES = [
 ] as const;
 
 export const DEFAULT_NEGATIVE_PROMPT =
-  'blurry, smooth, realistic, 3d render, photorealistic, watermark, text, signature, noise, static, artifacts, multiple people, crowd, group, duplicate, background, scenery, landscape, buildings, objects, frame, border, ornate frame, decorative border, circular frame, art nouveau, corner ornaments, vignette, picture frame, character sheet, turnaround, turnaround sheet, multiple views, reference sheet, model sheet, expression sheet, multiple poses, multiple angles';
+  'blurry, smooth, realistic, 3d render, photorealistic, watermark, text, signature, noise, static, artifacts, multiple people, crowd, group, duplicate, background, scenery, landscape, buildings, objects, detailed background, room, interior, furniture, outdoor, frame, border, ornate frame, decorative border, circular frame, art nouveau, corner ornaments, vignette, picture frame, character sheet, turnaround, turnaround sheet, multiple views, reference sheet, model sheet, expression sheet, multiple poses, multiple angles';
 
 /** Terms in the style prompt that trigger turnaround-sheet generation in anime models */
 const SHEET_TRIGGER_TERMS = [
@@ -75,7 +75,7 @@ export function buildFramePrompt(
     `${anim.state} pose`,
     phase,
     `${spritesheet.frame_width}x${spritesheet.frame_height}`,
-    'pixel art, 8-bit, retro game graphics, clean edges, game asset, single character, centered, transparent background, no background, same character',
+    'pixel art, 8-bit, retro game graphics, clean edges, game asset, single character, centered, plain white background, solid color background, same character',
   ].join(', ');
 }
 
@@ -111,7 +111,7 @@ export function buildSheetRowPrompt(
     `each frame ${spritesheet.frame_width}x${spritesheet.frame_height} pixels`,
     `total image size ${spritesheet.frame_width * frameCount}x${spritesheet.frame_height}`,
     'evenly spaced frames, consistent character across all frames',
-    'pixel art, 8-bit, retro game graphics, clean edges, game asset, spritesheet row, transparent background',
+    'pixel art, 8-bit, retro game graphics, clean edges, game asset, spritesheet row, plain white background, solid color background',
   ].join(', ');
 }
 

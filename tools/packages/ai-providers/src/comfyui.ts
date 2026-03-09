@@ -493,6 +493,7 @@ interface IPAdapterOnlyWorkflowOptions extends WorkflowOptions {
 function buildIPAdapterOnlyWorkflow(
   opts: IPAdapterOnlyWorkflowOptions
 ): Record<string, WorkflowNode> {
+  const embedsScaling = "K+mean(V)";
   const nodes: Record<string, WorkflowNode> = {
     // Checkpoint
     "4": {
@@ -532,7 +533,7 @@ function buildIPAdapterOnlyWorkflow(
         combine_embeds: "concat",
         start_at: opts.ipAdapterStartAt,
         end_at: opts.ipAdapterEndAt,
-        embeds_scaling: "V only",
+        embeds_scaling: embedsScaling,
         model: ["41", 0],
         ipadapter: ["41", 1],
         image: ["40", 0],
@@ -659,6 +660,7 @@ interface IPAdapterWorkflowOptions extends WorkflowOptions {
 function buildIPAdapterPoseWorkflow(
   opts: IPAdapterWorkflowOptions
 ): Record<string, WorkflowNode> {
+  const embedsScaling = "K+mean(V)";
   const nodes: Record<string, WorkflowNode> = {
     // Checkpoint
     "4": {
@@ -698,7 +700,7 @@ function buildIPAdapterPoseWorkflow(
         combine_embeds: "concat",
         start_at: opts.ipAdapterStartAt,
         end_at: opts.ipAdapterEndAt,
-        embeds_scaling: "V only",
+        embeds_scaling: embedsScaling,
         model: ["41", 0],
         ipadapter: ["41", 1],
         image: ["40", 0],
@@ -887,6 +889,7 @@ interface TwoPassIPAdapterWorkflowOptions extends WorkflowOptions {
 function buildTwoPassIPAdapterWorkflow(
   opts: TwoPassIPAdapterWorkflowOptions
 ): Record<string, WorkflowNode> {
+  const embedsScaling = "K+mean(V)";
   const nodes: Record<string, WorkflowNode> = {
     // === Shared: Checkpoint ===
     "4": {
@@ -925,7 +928,7 @@ function buildTwoPassIPAdapterWorkflow(
         combine_embeds: "concat",
         start_at: opts.ipAdapterStartAt,
         end_at: opts.ipAdapterEndAt,
-        embeds_scaling: "V only",
+        embeds_scaling: embedsScaling,
         model: ["41", 0],
         ipadapter: ["41", 1],
         image: ["40", 0],
@@ -1605,6 +1608,76 @@ export class ComfyUIClient implements ImageProvider {
 
     const result = (await response.json()) as { name: string; subfolder?: string; type?: string };
     return result.name;
+  }
+
+  /**
+   * Remove the background from an image using a BRIA RMBG workflow on ComfyUI.
+   * Uploads the image, runs LoadImage → RemBG → SaveImage, and returns cleaned PNG bytes.
+   *
+   * @param imageBytes   - Raw PNG bytes of the image to clean
+   * @param remBgNodeType - ComfyUI node class for background removal (default: BRIA_RMBG_Zho)
+   * @returns PNG bytes with background removed
+   */
+  async removeBackground(imageBytes: Uint8Array, remBgNodeType = "BRIA_RMBG_Zho"): Promise<Uint8Array> {
+    const imageName = await this.uploadImage(imageBytes);
+
+    const workflow: Record<string, WorkflowNode> = {
+      "1": {
+        class_type: "LoadImage",
+        inputs: { image: imageName },
+      },
+      "2": {
+        class_type: "BRIA_RMBG_ModelLoader_Zho",
+        inputs: {},
+      },
+      "3": {
+        class_type: remBgNodeType,
+        inputs: {
+          rmbgmodel: ["2", 0],
+          image: ["1", 0],
+        },
+      },
+      "9": {
+        class_type: "SaveImage",
+        inputs: {
+          filename_prefix: "rmbg",
+          images: ["3", 0],
+        },
+      },
+    };
+
+    const submitBody: PromptRequest = { prompt: workflow };
+    const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitBody),
+    });
+
+    if (!submitResponse.ok) {
+      const text = await submitResponse.text().catch(() => "(no body)");
+      throw new Error(
+        `ComfyUI removeBackground failed: HTTP ${submitResponse.status} ${submitResponse.statusText} — ${text}`
+      );
+    }
+
+    const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+    const imageFile = await this.pollForCompletion(prompt_id);
+
+    const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
+      imageFile.filename
+    )}&subfolder=${encodeURIComponent(imageFile.subfolder)}&type=${encodeURIComponent(
+      imageFile.type
+    )}`;
+
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(
+        `ComfyUI removeBackground image fetch failed: HTTP ${imageResponse.status} ${imageResponse.statusText}`
+      );
+    }
+
+    const buffer = await imageResponse.arrayBuffer();
+    return new Uint8Array(buffer);
   }
 
   /**
