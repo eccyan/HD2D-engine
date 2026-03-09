@@ -206,6 +206,21 @@ function PaintEditor({
   );
 }
 
+/** Flip an image horizontally via OffscreenCanvas, returns PNG bytes. */
+async function mirrorImage(sourceUrl: string): Promise<Uint8Array> {
+  const resp = await fetch(sourceUrl);
+  const blob = await resp.blob();
+  const bmp = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close();
+  const outBlob = await canvas.convertToBlob({ type: 'image/png' });
+  return new Uint8Array(await outBlob.arrayBuffer());
+}
+
 /* ── Main preview ── */
 export function ConceptPreview() {
   const manifest = useSeuratStore((s) => s.manifest);
@@ -215,7 +230,10 @@ export function ConceptPreview() {
   const chibiViewUrls = useSeuratStore((s) => s.chibiViewUrls);
   const loadConceptViewUrls = useSeuratStore((s) => s.loadConceptViewUrls);
   const loadChibiViewUrls = useSeuratStore((s) => s.loadChibiViewUrls);
+  const uploadConceptImageForView = useSeuratStore((s) => s.uploadConceptImageForView);
+  const uploadChibiImageForView = useSeuratStore((s) => s.uploadChibiImageForView);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
+  const [mirroring, setMirroring] = useState<string | null>(null);
 
   // Editor state: which image is being edited
   const [editing, setEditing] = useState<{
@@ -234,6 +252,32 @@ export function ConceptPreview() {
     }
     prevUrls.current = { conceptImageUrl, chibiImageUrl };
   }, [conceptImageUrl, chibiImageUrl]);
+
+  const handleMirror = useCallback(async (
+    type: 'concept' | 'chibi',
+    fromView: ViewDirection,
+    toView: ViewDirection,
+  ) => {
+    if (!manifest) return;
+    const key = `${type}_${fromView}_to_${toView}`;
+    setMirroring(key);
+    try {
+      const fromUrl = type === 'concept'
+        ? (conceptViewUrls[fromView] ?? (fromView === 'front' ? conceptImageUrl : null))
+        : (chibiViewUrls[fromView] ?? (fromView === 'front' ? chibiImageUrl : null));
+      if (!fromUrl) return;
+      const flipped = await mirrorImage(fromUrl);
+      // Create a File object to reuse the existing upload-for-view store actions
+      const file = new File([flipped as BlobPart], `${type}_${toView}.png`, { type: 'image/png' });
+      if (type === 'concept') {
+        await uploadConceptImageForView(file, toView);
+      } else {
+        await uploadChibiImageForView(file, toView);
+      }
+    } finally {
+      setMirroring(null);
+    }
+  }, [manifest, conceptViewUrls, chibiViewUrls, conceptImageUrl, chibiImageUrl, uploadConceptImageForView, uploadChibiImageForView]);
 
   const handleSaveEdited = useCallback(async (pngBytes: Uint8Array) => {
     if (!manifest || !editing) return;
@@ -276,6 +320,11 @@ export function ConceptPreview() {
     );
   }
 
+  const rightConceptUrl = conceptViewUrls.right ?? null;
+  const rightChibiUrl = chibiViewUrls.right ?? null;
+  const leftConceptUrl = conceptViewUrls.left ?? null;
+  const leftChibiUrl = chibiViewUrls.left ?? null;
+
   return (
     <div style={styles.container}>
       {VIEW_ORDER.map(({ view, label }) => {
@@ -284,28 +333,72 @@ export function ConceptPreview() {
         const hasAny = !!conceptUrl || !!chibiUrl;
 
         return (
-          <div key={view} style={styles.row}>
-            <div style={styles.dirLabel}>{label}</div>
-            <ImageCell
-              url={conceptUrl}
-              alt={`${label} concept`}
-              errorKey={`concept_${view}`}
-              imgError={imgError}
-              setImgError={setImgError}
-              onClick={() => conceptUrl && setEditing({ url: conceptUrl, title: `${label} Concept`, type: 'concept', view })}
-            />
-            <ImageCell
-              url={chibiUrl}
-              alt={`${label} chibi`}
-              errorKey={`chibi_${view}`}
-              imgError={imgError}
-              setImgError={setImgError}
-              onClick={() => chibiUrl && setEditing({ url: chibiUrl, title: `${label} Chibi`, type: 'chibi', view })}
-            />
-            {!hasAny && (
-              <div style={styles.rowHint}>—</div>
+          <React.Fragment key={view}>
+            <div style={styles.row}>
+              <div style={styles.dirLabel}>{label}</div>
+              <ImageCell
+                url={conceptUrl}
+                alt={`${label} concept`}
+                errorKey={`concept_${view}`}
+                imgError={imgError}
+                setImgError={setImgError}
+                onClick={() => conceptUrl && setEditing({ url: conceptUrl, title: `${label} Concept`, type: 'concept', view })}
+              />
+              <ImageCell
+                url={chibiUrl}
+                alt={`${label} chibi`}
+                errorKey={`chibi_${view}`}
+                imgError={imgError}
+                setImgError={setImgError}
+                onClick={() => chibiUrl && setEditing({ url: chibiUrl, title: `${label} Chibi`, type: 'chibi', view })}
+              />
+              {!hasAny && (
+                <div style={styles.rowHint}>—</div>
+              )}
+            </div>
+            {/* Mirror buttons between Right and Left rows */}
+            {view === 'right' && (
+              <div style={styles.mirrorRow}>
+                <div style={styles.dirLabel} />
+                <div style={styles.mirrorBtnGroup}>
+                  <button
+                    style={{ ...styles.mirrorBtn, opacity: rightConceptUrl ? 1 : 0.3 }}
+                    disabled={!rightConceptUrl || !!mirroring}
+                    onClick={() => handleMirror('concept', 'right', 'left')}
+                    title="Mirror Right concept → Left"
+                  >
+                    {mirroring === 'concept_right_to_left' ? '...' : 'R → L'}
+                  </button>
+                  <button
+                    style={{ ...styles.mirrorBtn, opacity: leftConceptUrl ? 1 : 0.3 }}
+                    disabled={!leftConceptUrl || !!mirroring}
+                    onClick={() => handleMirror('concept', 'left', 'right')}
+                    title="Mirror Left concept → Right"
+                  >
+                    {mirroring === 'concept_left_to_right' ? '...' : 'L → R'}
+                  </button>
+                </div>
+                <div style={styles.mirrorBtnGroup}>
+                  <button
+                    style={{ ...styles.mirrorBtn, opacity: rightChibiUrl ? 1 : 0.3 }}
+                    disabled={!rightChibiUrl || !!mirroring}
+                    onClick={() => handleMirror('chibi', 'right', 'left')}
+                    title="Mirror Right chibi → Left"
+                  >
+                    {mirroring === 'chibi_right_to_left' ? '...' : 'R → L'}
+                  </button>
+                  <button
+                    style={{ ...styles.mirrorBtn, opacity: leftChibiUrl ? 1 : 0.3 }}
+                    disabled={!leftChibiUrl || !!mirroring}
+                    onClick={() => handleMirror('chibi', 'left', 'right')}
+                    title="Mirror Left chibi → Right"
+                  >
+                    {mirroring === 'chibi_left_to_right' ? '...' : 'L → R'}
+                  </button>
+                </div>
+              </div>
             )}
-          </div>
+          </React.Fragment>
         );
       })}
     </div>
@@ -370,6 +463,28 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'monospace',
     fontSize: 8,
     color: '#444',
+  },
+  mirrorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mirrorBtnGroup: {
+    flex: 1,
+    display: 'flex',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  mirrorBtn: {
+    background: '#1a1a2e',
+    border: '1px solid #3a3a5a',
+    borderRadius: 3,
+    color: '#8a8aaa',
+    fontFamily: 'monospace',
+    fontSize: 8,
+    padding: '2px 8px',
+    cursor: 'pointer',
+    fontWeight: 600,
   },
   /* ── Paint Editor ── */
   editorOverlay: {
