@@ -668,7 +668,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set({ chibiGenerating: true, chibiError: null });
 
     try {
-      // Load view-specific concept image for img2img (IP-Adapter would fight chibi proportions)
+      // Load view-specific concept image as IP-Adapter reference (preserves identity)
       let conceptBytes: Uint8Array;
       try {
         conceptBytes = await api.fetchConceptImageBytes(manifest.character_id, view);
@@ -696,9 +696,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
       console.log('[Seurat] Chibi prompt:', prompt);
 
-      const pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
+      // Use txt2img + IP-Adapter: prompt controls chibi proportions,
+      // IP-Adapter preserves character identity from concept image
+      const pngBytes = await comfy.generateIPAdapterOnlyWithRetry(prompt, conceptBytes, {
         width: 512, height: 512, steps, seed, cfgScale: cfg, samplerName: sampler,
-        scheduler, checkpoint, vae, negativePrompt: negative, denoise, loras,
+        scheduler, checkpoint, vae, negativePrompt: negative, loras,
+        ipAdapterWeight: 0.6, ipAdapterEndAt: 0.7,
         removeBackground: aiConfig.removeBackground, remBgNodeType: aiConfig.remBgNodeType,
       });
 
@@ -864,7 +867,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       for (const view of viewsToGenerate) {
         set({ chibiViewsProgress: `Generating chibi ${view}...` });
 
-        // Load the corresponding concept view as img2img source
+        // Load the corresponding concept view as IP-Adapter reference
         let conceptBytes: Uint8Array;
         try {
           conceptBytes = await api.fetchConceptImageBytes(manifest.character_id, view);
@@ -875,10 +878,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         const viewSeed = seed + (['front', 'right', 'back'].indexOf(view));
         const prompt = `${basePrompt}, ${CONCEPT_VIEW_PROMPTS[view]}`;
 
-        // img2img: concept → chibi (IP-Adapter would fight chibi proportions)
-        const pngBytes = await comfy.generateImg2ImgWithRetry(prompt, conceptBytes, {
+        // txt2img + IP-Adapter: prompt controls chibi proportions,
+        // IP-Adapter preserves character identity from concept image
+        const pngBytes = await comfy.generateIPAdapterOnlyWithRetry(prompt, conceptBytes, {
           width: 512, height: 512, steps, seed: viewSeed, cfgScale: cfg, samplerName: sampler,
-          scheduler, checkpoint, vae, negativePrompt: negative, denoise, loras,
+          scheduler, checkpoint, vae, negativePrompt: negative, loras,
+          ipAdapterWeight: 0.6, ipAdapterEndAt: 0.7,
           removeBackground: aiConfig.removeBackground, remBgNodeType: aiConfig.remBgNodeType,
         });
 
