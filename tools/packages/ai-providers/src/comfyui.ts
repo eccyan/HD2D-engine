@@ -34,6 +34,7 @@ interface HistoryEntry {
   status: {
     completed: boolean;
     status_str: string;
+    messages?: Array<[string, Record<string, unknown>]>;
   };
 }
 
@@ -1740,11 +1741,25 @@ export class ComfyUIClient implements ImageProvider {
       const entry = history[promptId];
 
       if (!entry) continue;
-      if (!entry.status.completed) continue;
 
+      // Check for errors before checking completion — ComfyUI sets
+      // status_str="error" with completed=false on execution errors,
+      // so we must detect errors first to avoid polling until timeout.
       if (entry.status.status_str === "error") {
-        throw new Error(`ComfyUI generation error for prompt ${promptId}`);
+        const errorMsg = entry.status.messages
+          ?.filter(([type]) => type === "execution_error")
+          .map(([, data]) => {
+            const nodeType = data.node_type ?? "unknown";
+            const msg = data.exception_message ?? "unknown error";
+            return `${nodeType}: ${msg}`;
+          })
+          .join("; ");
+        throw new Error(
+          `ComfyUI generation error for prompt ${promptId}${errorMsg ? `: ${errorMsg}` : ""}`
+        );
       }
+
+      if (!entry.status.completed) continue;
 
       // Find the first image output across all nodes
       for (const nodeOutput of Object.values(entry.outputs)) {
