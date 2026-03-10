@@ -7,7 +7,7 @@ Seurat is a browser-based tool for generating, reviewing, and assembling pixel-a
 ```bash
 # 1. Start ComfyUI (must be running for generation)
 cd /path/to/ComfyUI
-python main.py --listen
+python main.py --listen --enable-cors-header "*"
 
 # 2. Start the bridge server
 cd tools/apps/bridge
@@ -37,7 +37,7 @@ Seurat uses a 3-pane layout:
 
 ## ComfyUI Setup
 
-Seurat requires a running ComfyUI instance with Stable Diffusion 1.5.
+Seurat requires a running ComfyUI instance with Stable Diffusion 1.5. ComfyUI **must** be started with `--enable-cors-header "*"` since Seurat makes cross-origin requests directly from the browser to the ComfyUI API.
 
 ### Required Models
 
