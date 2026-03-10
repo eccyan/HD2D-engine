@@ -3,6 +3,7 @@ import type { ViewDirection } from '@vulkan-game-tools/asset-types';
 import { VIEW_DIRECTIONS, DIRECTION_TO_VIEW } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
+import { NumericInput } from '../NumericInput.js';
 
 interface Props {
   animName: string;
@@ -92,13 +93,13 @@ export function GenerateActions({ animName }: Props) {
         </Row>
         <Row>
           <label style={styles.label}>Steps</label>
-          <input type="number" value={aiConfig.steps} onChange={(e) => setAIConfig({ steps: parseInt(e.target.value) || 20 })} style={{ ...styles.input, width: 50 }} />
+          <NumericInput value={aiConfig.steps} onChange={(v) => setAIConfig({ steps: v })} integer min={1} max={100} fallback={20} style={{ ...styles.input, width: 50 }} />
           <label style={styles.label}>CFG</label>
-          <input type="number" value={aiConfig.cfg} onChange={(e) => setAIConfig({ cfg: parseFloat(e.target.value) || 7 })} style={{ ...styles.input, width: 50 }} step={0.5} />
+          <NumericInput value={aiConfig.cfg} onChange={(v) => setAIConfig({ cfg: v })} min={1} max={30} step={0.5} fallback={7} style={{ ...styles.input, width: 50 }} />
         </Row>
         <Row>
           <label style={styles.label}>Seed</label>
-          <input type="number" value={aiConfig.seed} onChange={(e) => setAIConfig({ seed: parseInt(e.target.value) })} style={{ ...styles.input, width: 80 }} />
+          <NumericInput value={aiConfig.seed} onChange={(v) => setAIConfig({ seed: v })} integer min={-1} fallback={-1} style={{ ...styles.input, width: 80 }} />
           <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>-1=rng</span>
         </Row>
         <Row>
@@ -140,18 +141,18 @@ export function GenerateActions({ animName }: Props) {
               style={{ ...styles.input, flex: 1 }}
               placeholder="lora_name"
             />
-            <input
-              type="number"
+            <NumericInput
               value={lora.weight}
-              onChange={(e) => {
+              onChange={(v) => {
                 const loras = [...aiConfig.loras];
-                loras[i] = { ...loras[i], weight: parseFloat(e.target.value) || 0 };
+                loras[i] = { ...loras[i], weight: v };
                 setAIConfig({ loras });
               }}
               style={{ ...styles.input, width: 40 }}
               step={0.1}
               min={0}
               max={2}
+              fallback={0}
             />
             <button
               onClick={() => {
@@ -377,13 +378,13 @@ export function GenerateActions({ animName }: Props) {
             </Row>
             <Row>
               <label style={styles.label}>Frames</label>
-              <input type="number" value={aiConfig.animFrameCount} onChange={(e) => setAIConfig({ animFrameCount: parseInt(e.target.value) || 8 })} style={{ ...styles.input, width: 50 }} min={2} max={32} />
+              <NumericInput value={aiConfig.animFrameCount} onChange={(v) => setAIConfig({ animFrameCount: v })} style={{ ...styles.input, width: 50 }} min={2} max={32} integer fallback={8} />
               <label style={styles.label}>FPS</label>
-              <input type="number" value={aiConfig.animFrameRate} onChange={(e) => setAIConfig({ animFrameRate: parseInt(e.target.value) || 8 })} style={{ ...styles.input, width: 50 }} min={1} max={30} />
+              <NumericInput value={aiConfig.animFrameRate} onChange={(v) => setAIConfig({ animFrameRate: v })} style={{ ...styles.input, width: 50 }} min={1} max={30} integer fallback={8} />
             </Row>
             <Row>
               <label style={styles.label}>Context</label>
-              <input type="number" value={aiConfig.animContextLength} onChange={(e) => setAIConfig({ animContextLength: parseInt(e.target.value) || 16 })} style={{ ...styles.input, width: 50 }} min={4} max={32} />
+              <NumericInput value={aiConfig.animContextLength} onChange={(v) => setAIConfig({ animContextLength: v })} style={{ ...styles.input, width: 50 }} min={4} max={32} integer fallback={16} />
             </Row>
             <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
               Generates all frames at once via temporal motion model. Requires AnimateDiff-Evolved + VHS custom nodes and --force-fp32 on Apple Silicon.

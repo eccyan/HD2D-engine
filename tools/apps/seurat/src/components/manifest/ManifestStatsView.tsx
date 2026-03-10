@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { useSeuratStore, getManifestStats } from '../../store/useSeuratStore.js';
 import type { CharacterManifest } from '@vulkan-game-tools/asset-types';
+import { NumericInput } from '../NumericInput.js';
 
 export function ManifestStatsView() {
   const manifest = useSeuratStore((s) => s.manifest);
@@ -77,8 +78,7 @@ function EditableRow({ label, value, onChange, min, max, step }: {
   return (
     <div style={{ display: 'flex', gap: 8, padding: '1px 0', alignItems: 'center' }}>
       <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#666', minWidth: 100 }}>{label}:</span>
-      <input type="number" min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(parseInt(e.target.value) || value)}
+      <NumericInput value={value} onChange={onChange} min={min} max={max} step={step} integer fallback={value}
         style={{ width: 60, fontFamily: 'monospace', fontSize: 11, color: '#bbb', background: '#1a1a2e', border: '1px solid #2a2a3a', borderRadius: 3, padding: '1px 4px', textAlign: 'right' }} />
     </div>
   );

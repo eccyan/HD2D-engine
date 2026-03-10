@@ -2,6 +2,7 @@ import React from 'react';
 import type { CharacterAnimation } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { getClipDuration } from '../../lib/frame-utils.js';
+import { NumericInput } from '../NumericInput.js';
 
 interface Props {
   clip: CharacterAnimation;
@@ -83,17 +84,13 @@ export function ClipTimeline({ clip }: Props) {
               }}
             >
               <span style={styles.frameLabel}>f{frame.index}</span>
-              <input
-                type="number"
+              <NumericInput
                 value={frame.duration}
                 step={0.01}
                 min={0.01}
-                onChange={(e) => {
-                  const d = parseFloat(e.target.value);
-                  if (d > 0) updateFrameDuration(clip.name, frame.index, d);
-                }}
+                onChange={(d) => updateFrameDuration(clip.name, frame.index, d)}
                 style={styles.durationInput}
-                title={`Duration: ${frame.duration}s`}
+                fallback={0.1}
               />
             </div>
           );

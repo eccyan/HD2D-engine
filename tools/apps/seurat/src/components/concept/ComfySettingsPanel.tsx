@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { StageGenerationSettings } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
+import { NumericInput } from '../NumericInput.js';
 
 export interface ComfySettings {
   checkpoint: string;
@@ -158,13 +159,13 @@ export function ComfySettingsPanel({ label, settings, onChange, showDenoise = fa
 
       <Row>
         <label style={styles.settingLabel}>Steps</label>
-        <input type="number" value={settings.steps} onChange={(e) => set({ steps: parseInt(e.target.value) || 20 })} style={{ ...styles.settingInput, width: 50 }} disabled={disabled} />
+        <NumericInput value={settings.steps} onChange={(v) => set({ steps: v })} style={{ ...styles.settingInput, width: 50 }} min={1} max={150} integer fallback={20} disabled={disabled} />
         <label style={styles.settingLabel}>CFG</label>
-        <input type="number" value={settings.cfg} onChange={(e) => set({ cfg: parseFloat(e.target.value) || 7 })} style={{ ...styles.settingInput, width: 50 }} step={0.5} disabled={disabled} />
+        <NumericInput value={settings.cfg} onChange={(v) => set({ cfg: v })} style={{ ...styles.settingInput, width: 50 }} min={1} max={30} step={0.5} fallback={7} disabled={disabled} />
       </Row>
       <Row>
         <label style={styles.settingLabel}>Seed</label>
-        <input type="number" value={settings.seed} onChange={(e) => set({ seed: parseInt(e.target.value) })} style={{ ...styles.settingInput, width: 80 }} disabled={disabled} />
+        <NumericInput value={settings.seed} onChange={(v) => set({ seed: v })} style={{ ...styles.settingInput, width: 80 }} integer fallback={-1} disabled={disabled} />
         <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>-1=rng</span>
       </Row>
       <Row>
@@ -256,14 +257,15 @@ export function ComfySettingsPanel({ label, settings, onChange, showDenoise = fa
                 </div>
               )}
             </div>
-            <input
-              type="number" value={lora.weight}
-              onChange={(e) => {
+            <NumericInput
+              value={lora.weight}
+              onChange={(v) => {
                 const u = [...settings.loras];
-                u[i] = { ...u[i], weight: parseFloat(e.target.value) || 0 };
+                u[i] = { ...u[i], weight: v };
                 set({ loras: u });
               }}
               style={{ ...styles.settingInput, width: 55 }} step={0.1} min={0} max={2}
+              fallback={0}
               disabled={disabled}
             />
             <button onClick={() => set({ loras: settings.loras.filter((_, j) => j !== i) })} style={styles.miniBtn} disabled={disabled}>x</button>
