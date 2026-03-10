@@ -1,8 +1,20 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useSeuratStore, getManifestStats } from '../../store/useSeuratStore.js';
+import type { CharacterManifest } from '@vulkan-game-tools/asset-types';
 
 export function ManifestStatsView() {
   const manifest = useSeuratStore((s) => s.manifest);
+  const saveManifest = useSeuratStore((s) => s.saveManifest);
+
+  const updateSpritesheet = useCallback((field: 'frame_width' | 'frame_height' | 'columns', value: number) => {
+    if (!manifest || isNaN(value) || value < 1) return;
+    const updated: CharacterManifest = {
+      ...manifest,
+      spritesheet: { ...manifest.spritesheet, [field]: value },
+    };
+    useSeuratStore.setState({ manifest: updated });
+    saveManifest();
+  }, [manifest, saveManifest]);
 
   if (!manifest) {
     return (
@@ -33,9 +45,12 @@ export function ManifestStatsView() {
 
       <div style={styles.section}>
         <div style={styles.sectionTitle}>Spritesheet Config</div>
-        <ConfigRow label="frame_width" value={String(manifest.spritesheet.frame_width)} />
-        <ConfigRow label="frame_height" value={String(manifest.spritesheet.frame_height)} />
-        <ConfigRow label="columns" value={String(manifest.spritesheet.columns)} />
+        <EditableRow label="frame_width" value={manifest.spritesheet.frame_width}
+          onChange={(v) => updateSpritesheet('frame_width', v)} min={16} max={512} step={16} />
+        <EditableRow label="frame_height" value={manifest.spritesheet.frame_height}
+          onChange={(v) => updateSpritesheet('frame_height', v)} min={16} max={512} step={16} />
+        <EditableRow label="columns" value={manifest.spritesheet.columns}
+          onChange={(v) => updateSpritesheet('columns', v)} min={1} max={32} step={1} />
         {manifest.atlas && (
           <>
             <ConfigRow label="atlas file" value={manifest.atlas.file} />
@@ -52,6 +67,19 @@ function StatItem({ label, value, color }: { label: string; value: string; color
     <div style={{ display: 'flex', gap: 8, padding: '1px 0' }}>
       <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#666', minWidth: 90 }}>{label}:</span>
       <span style={{ fontFamily: 'monospace', fontSize: 11, color: color ?? '#bbb' }}>{value}</span>
+    </div>
+  );
+}
+
+function EditableRow({ label, value, onChange, min, max, step }: {
+  label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 8, padding: '1px 0', alignItems: 'center' }}>
+      <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#666', minWidth: 100 }}>{label}:</span>
+      <input type="number" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(parseInt(e.target.value) || value)}
+        style={{ width: 60, fontFamily: 'monospace', fontSize: 11, color: '#bbb', background: '#1a1a2e', border: '1px solid #2a2a3a', borderRadius: 3, padding: '1px 4px', textAlign: 'right' }} />
     </div>
   );
 }
