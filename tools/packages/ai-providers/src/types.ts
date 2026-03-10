@@ -96,6 +96,8 @@ export interface IPAdapterOptions extends ImageGenerateOptions {
   outputWidth?: number;
   /** Final output height — downscale from generation resolution. */
   outputHeight?: number;
+  /** Downscale interpolation method. Default "nearest-exact". */
+  downscaleMethod?: string;
 }
 
 /**

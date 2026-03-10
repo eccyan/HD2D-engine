@@ -335,9 +335,21 @@ export function GenerateActions({ animName }: Props) {
             {manifest.spritesheet.frame_width} x {manifest.spritesheet.frame_height}
           </span>
         </Row>
-        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
-          Generated at 512x512 then downscaled to sprite frame size via nearest-exact.
-        </div>
+        <Row>
+          <label style={styles.label}>Method</label>
+          <select
+            value={aiConfig.downscaleMethod}
+            onChange={(e) => setAIConfig({ downscaleMethod: e.target.value })}
+            style={{ flex: 1, fontSize: 10, fontFamily: 'monospace' }}
+          >
+            <option value="nearest-exact">nearest-exact</option>
+            <option value="bilinear">bilinear</option>
+            <option value="area">area</option>
+            <option value="bicubic">bicubic</option>
+            <option value="bislerp">bislerp</option>
+            <option value="lanczos">lanczos</option>
+          </select>
+        </Row>
       </div>
 
       {/* AnimateDiff */}
@@ -449,6 +461,7 @@ export function GenerateActions({ animName }: Props) {
                 [{job.status}]
               </span>
               <span>{job.frameIndex >= 0 ? `f${job.frameIndex}` : 'all'}</span>
+              {job.seed != null && <span style={{ color: '#888', fontSize: 8, fontFamily: 'monospace' }}>seed:{job.seed}</span>}
               {job.error && <span style={{ color: '#d88', fontSize: 8 }}>{job.error}</span>}
             </div>
           ))}

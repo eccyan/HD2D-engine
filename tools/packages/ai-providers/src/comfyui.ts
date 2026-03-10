@@ -656,6 +656,8 @@ interface IPAdapterWorkflowOptions extends WorkflowOptions {
   outputWidth?: number;
   /** Final output height (downscale from generation resolution). */
   outputHeight?: number;
+  /** Downscale interpolation method. Default "nearest-exact". */
+  downscaleMethod?: string;
 }
 
 function buildIPAdapterPoseWorkflow(
@@ -831,7 +833,7 @@ function buildIPAdapterPoseWorkflow(
     nodes["50"] = {
       class_type: "ImageScale",
       inputs: {
-        upscale_method: "nearest-exact",
+        upscale_method: opts.downscaleMethod ?? "nearest-exact",
         width: opts.outputWidth,
         height: opts.outputHeight,
         crop: "disabled",
@@ -878,6 +880,8 @@ interface TwoPassIPAdapterWorkflowOptions extends WorkflowOptions {
   pixelPassDenoise?: number;
   /** LoRA models to apply during pixel pass 3. */
   pixelPassLoras?: LoraEntry[];
+  /** Downscale interpolation method. Default "nearest-exact". */
+  downscaleMethod?: string;
 }
 
 /**
@@ -1077,7 +1081,7 @@ function buildTwoPassIPAdapterWorkflow(
         weight_type: "linear",
         combine_embeds: "concat",
         start_at: 0.0,
-        end_at: 0.8,
+        end_at: 0.6,
         embeds_scaling: embedsScaling,
         model: ["82", 0],
         ipadapter: ["82", 1],
@@ -1150,11 +1154,38 @@ function buildTwoPassIPAdapterWorkflow(
       prevPixelClip = [nodeId, 1];
     });
 
-    // VAEEncode pass 2 output to latent for pass 3
+    // Inter-pass RemBG between pass 2→3: strip background and composite on white
+    // (same approach as pass 1→2 to prevent background leakage into pixel pass)
+    nodes["75"] = {
+      class_type: opts.remBgNodeType ?? "BRIA_RMBG_Zho",
+      inputs: {
+        rmbgmodel: ["70", 0],  // reuse RemBG model loader from pass 1→2
+        image: ["86", 0],      // pass 2 VAEDecode output
+      },
+    };
+    nodes["76"] = {
+      class_type: "SolidMask",
+      inputs: { value: 1.0, width: opts.width, height: opts.height },
+    };
+    nodes["77"] = {
+      class_type: "MaskToImage",
+      inputs: { mask: ["76", 0] },
+    };
+    nodes["78"] = {
+      class_type: "ImageCompositeMasked",
+      inputs: {
+        destination: ["77", 0],   // white background
+        source: ["86", 0],        // pass 2 output (full RGB)
+        x: 0, y: 0, resize_source: false,
+        mask: ["75", 1],          // RemBG foreground mask
+      },
+    };
+
+    // VAEEncode the cleaned pass 2 output (character on white) for pass 3
     nodes["91"] = {
       class_type: "VAEEncode",
       inputs: {
-        pixels: ["86", 0],
+        pixels: ["78", 0],  // character on white (after inter-pass RemBG)
         vae: ["4", 2],
       },
     };
@@ -1250,7 +1281,7 @@ function buildTwoPassIPAdapterWorkflow(
     nodes["50"] = {
       class_type: "ImageScale",
       inputs: {
-        upscale_method: "nearest-exact",
+        upscale_method: opts.downscaleMethod ?? "nearest-exact",
         width: opts.outputWidth,
         height: opts.outputHeight,
         crop: "disabled",

@@ -44,6 +44,7 @@ export interface AIConfig {
   openPoseStrength: number;
   pixelPassEnabled: boolean;
   pixelPassDenoise: number;
+  downscaleMethod: string;
   useAnimateDiff: boolean;
   motionModel: string;
   animFrameCount: number;
@@ -56,7 +57,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   checkpoint: 'v1-5-pruned-emaonly.safetensors',
   steps: 20,
   seed: 42,
-  cfg: 6,
+  cfg: 7,
   sampler: 'euler',
   denoise: 0.1,
   loras: [{ name: 'PixelArtRedmond15V-PixelArt-PIXARFK', weight: 0.4 }],
@@ -70,12 +71,13 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   ipAdapterStartAt: 0.0,
   ipAdapterEndAt: 0.6,
   consistentSeed: true,
-  chibiWeight: 0.7,
+  chibiWeight: 0.5,
   chibiDenoise: 0.7,
   openPoseModel: 'control_v11p_sd15_openpose',
   openPoseStrength: 0.8,
   pixelPassEnabled: true,
   pixelPassDenoise: 0.35,
+  downscaleMethod: 'nearest-exact',
   useAnimateDiff: false,
   motionModel: 'mm_sd_v15_v2.ckpt',
   animFrameCount: 8,
@@ -89,6 +91,7 @@ export interface GenerationJob {
   frameIndex: number;
   status: 'queued' | 'running' | 'done' | 'error';
   error?: string;
+  seed?: number;
 }
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused';

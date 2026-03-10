@@ -1232,7 +1232,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     // When IP-Adapter is active: skip LoRAs (conflict with IP-Adapter style),
     // cap CFG, force denoise=1.0 (EmptyLatentImage), add anti-saturation terms
     const ipaActive = aiConfig.useIPAdapter;
-    const ipaCfg = ipaActive ? Math.min(aiConfig.cfg, 5) : aiConfig.cfg;
+    const ipaCfg = ipaActive ? Math.min(aiConfig.cfg, 7) : aiConfig.cfg;
     const ipaDenoise = 1.0;
     const ipaLoras = loras;
     if (ipaActive) {
@@ -1245,14 +1245,14 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       if (!anim) return;
 
       const jobId = `${animName}_${frameIndex}_${Date.now()}`;
-      get().addGenerationJob({ id: jobId, animName, frameIndex, status: 'running' });
+      const seed = aiConfig.seed === -1
+        ? Math.floor(Math.random() * 2147483647)
+        : aiConfig.seed + frameIndex;
+      get().addGenerationJob({ id: jobId, animName, frameIndex, status: 'running', seed });
 
       try {
         const prompt = buildFramePrompt(manifest, anim, frameIndex);
         console.log('[Seurat] Single frame prompt:', prompt);
-        const seed = aiConfig.seed === -1
-          ? Math.floor(Math.random() * 2147483647)
-          : aiConfig.seed + frameIndex;
 
         let pngBytes: Uint8Array;
         const pose = aiConfig.useIPAdapter
@@ -1286,6 +1286,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             remBgNodeType: aiConfig.remBgNodeType,
             outputWidth: manifest.spritesheet.frame_width,
             outputHeight: manifest.spritesheet.frame_height,
+            downscaleMethod: aiConfig.downscaleMethod,
           });
         } else if (aiConfig.useIPAdapter && singlePassRef && pose) {
           // Single-pass IP-Adapter + OpenPose mode (direction-aware ref)
@@ -1308,6 +1309,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             remBgNodeType: aiConfig.remBgNodeType,
             outputWidth: manifest.spritesheet.frame_width,
             outputHeight: manifest.spritesheet.frame_height,
+            downscaleMethod: aiConfig.downscaleMethod,
           });
         } else if (singlePassRef) {
           console.log('[Seurat] Generating single frame via img2img...');
@@ -1363,15 +1365,15 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         if (!anim) continue;
 
         const jobId = `row_${an}_${Date.now()}`;
-        get().addGenerationJob({ id: jobId, animName: an, frameIndex: -1, status: 'running' });
+        const seed = aiConfig.seed === -1
+          ? Math.floor(Math.random() * 2147483647)
+          : aiConfig.seed;
+        get().addGenerationJob({ id: jobId, animName: an, frameIndex: -1, status: 'running', seed });
 
         try {
           const frameCount = anim.frames.length;
           const fw = manifest.spritesheet.frame_width;
           const fh = manifest.spritesheet.frame_height;
-          const seed = aiConfig.seed === -1
-            ? Math.floor(Math.random() * 2147483647)
-            : aiConfig.seed;
 
           // Check if IP-Adapter per-frame mode applies (with pose overrides)
           const overrides = get().poseOverrides;
@@ -1483,6 +1485,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
                 remBgNodeType: aiConfig.remBgNodeType,
                 outputWidth: fw,
                 outputHeight: fh,
+                downscaleMethod: aiConfig.downscaleMethod,
               });
 
               await api.saveFrameImage(manifest.character_id, an, i, frameBytes);
@@ -1524,6 +1527,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
                 remBgNodeType: aiConfig.remBgNodeType,
                 outputWidth: fw,
                 outputHeight: fh,
+                downscaleMethod: aiConfig.downscaleMethod,
               });
 
               await api.saveFrameImage(manifest.character_id, an, i, frameBytes);
