@@ -286,17 +286,29 @@ export function FramePipelineGrid({ animName }: Props) {
                 const hasImage = stageIdx >= passIdx;
 
                 const isEditCol = col.key === 'pass1_edited' || col.key === 'pass2_edited';
-                const showImage = isEditCol
-                  ? (stage === col.key || (col.key === 'pass1_edited' && stageIdx > passIdx) || (col.key === 'pass2_edited' && stageIdx > passIdx))
-                  : hasImage;
+
+                // Interpolated frames: show pass2 image in the pass2 column when filled,
+                // and show pass3 when pixelized. Skip pass1/edit columns (not generated for interp).
+                let showImage: boolean;
+                if (isInterpolated) {
+                  if (col.key === 'pass2') {
+                    showImage = stage === 'pass2' || stage === 'pass2_edited' || stage === 'pass3';
+                  } else if (col.key === 'pass3') {
+                    showImage = stage === 'pass3';
+                  } else {
+                    showImage = false;
+                  }
+                } else {
+                  showImage = isEditCol
+                    ? (stage === col.key || (col.key === 'pass1_edited' && stageIdx > passIdx) || (col.key === 'pass2_edited' && stageIdx > passIdx))
+                    : hasImage;
+                }
 
                 let imageUrl: string | null = null;
                 if (showImage) {
                   if (col.key === 'pass3' && frame.status === 'generated') {
                     imageUrl = api.frameThumbnailUrl(characterId, animName, frame.index);
                   } else if (isEditCol) {
-                    // Always show the edited image in edit columns (the file persists on disk
-                    // even after the pipeline advances past this stage)
                     imageUrl = api.passImageUrl(characterId, animName, frame.index, col.key);
                   } else {
                     imageUrl = api.passImageUrl(characterId, animName, frame.index, col.key);
@@ -308,7 +320,7 @@ export function FramePipelineGrid({ animName }: Props) {
                     key={col.key}
                     style={{
                       ...styles.passCell,
-                      opacity: showImage ? 1 : 0.3,
+                      opacity: showImage ? 1 : (isInterpolated ? 0.15 : 0.3),
                       cursor: showImage ? 'pointer' : 'default',
                     }}
                     onClick={() => showImage && handleCellClick(frame.index, col.key)}
@@ -322,7 +334,7 @@ export function FramePipelineGrid({ animName }: Props) {
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     ) : (
-                      <span style={styles.cellEmpty}>--</span>
+                      <span style={styles.cellEmpty}>{isInterpolated ? '~' : '--'}</span>
                     )}
                   </div>
                 );
