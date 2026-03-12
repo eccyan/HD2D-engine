@@ -1283,12 +1283,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
         } else if (pass === 'pass2') {
           // Pass 2: img2img + IPAdapter(chibi) on pass1 output
-          const cur = get().manifest;
-          const frame = cur?.animations.find((a) => a.name === animName)?.frames.find((f) => f.index === fi);
-          const inputStage = (frame?.pipeline_stage === 'pass1_edited') ? 'pass1_edited' : 'pass1';
-
+          // Prefer edited version if it exists on disk, regardless of current pipeline_stage
           let pass1Bytes: Uint8Array;
-          try { pass1Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, inputStage); }
+          try { pass1Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, 'pass1_edited'); }
           catch { pass1Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, 'pass1'); }
 
           let chibiBytes: Uint8Array;
@@ -1319,12 +1316,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
         } else if (pass === 'pass3') {
           // Pass 3: Client-side downscale → upscale (pixelization)
-          const cur = get().manifest;
-          const frame = cur?.animations.find((a) => a.name === animName)?.frames.find((f) => f.index === fi);
-          const inputStage = (frame?.pipeline_stage === 'pass2_edited') ? 'pass2_edited' : 'pass2';
-
+          // Prefer edited version if it exists on disk, regardless of current pipeline_stage
           let pass2Bytes: Uint8Array;
-          try { pass2Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, inputStage); }
+          try { pass2Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, 'pass2_edited'); }
           catch { pass2Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, 'pass2'); }
 
           const { frame_width, frame_height } = manifest.spritesheet;
