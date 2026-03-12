@@ -45,10 +45,10 @@ export const CONCEPT_VIEW_PROMPTS: Record<ViewDirection, string> = {
 };
 
 const DIR_DESCRIPTIONS: Record<string, string> = {
-  S: 'facing forward, front view',
-  N: 'facing away, back view',
-  E: 'facing right, side view',
-  W: 'facing left, side view',
+  S: 'facing forward, front view, looking at viewer',
+  N: 'facing away, back view, from behind',
+  E: 'facing right, right side profile, looking right',
+  W: 'facing left, left side profile, looking left',
 };
 
 const STATE_PHASES: Record<string, string[]> = {
@@ -67,10 +67,11 @@ export function buildFramePrompt(
   const phases = STATE_PHASES[anim.state] ?? Array(anim.frames.length).fill(anim.state);
   const phase = phases[frameIndex % phases.length];
 
+  // Do not include style_prompt — IP-Adapter transfers style from reference image.
+  // Put direction first for strongest influence on pose orientation.
   return [
-    sanitizeStylePrompt(concept.style_prompt),
-    concept.description,
     dirDesc,
+    concept.description,
     `${anim.state} pose`,
     phase,
     'solo, single character, full body, centered, plain white background, solid color background',
