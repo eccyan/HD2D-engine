@@ -341,7 +341,7 @@ const cleaned = await client.removeBackground(imageBytes, "BRIA_RMBG_Zho");
 ### MPS / Apple Silicon Notes
 
 - **`--force-fp32` is required** for all IP-Adapter + OpenPose workflows on MPS. Without full fp32, OpenPose ControlNet fails to control pose (produces head closeups instead of full-body). The intermediate VAEEncode/VAEDecode between passes also produces all-black images without fp32 precision.
-- **OpenPose skeleton format**: Must use **14 keypoints** (no mid_hip). Neck connects directly to r_hip and l_hip. The 15-keypoint format with mid_hip creates a visual topology that ControlNet v1.1 OpenPose does not recognize.
+- **OpenPose skeleton format**: Must use **14 keypoints** (no mid_hip). Neck connects directly to r_hip and l_hip. The 15-keypoint format with mid_hip creates a visual topology that ControlNet v1.1 OpenPose does not recognize. Additionally, **shoulders must be at the same Y-coordinate as the neck** (horizontal T-bar shape). If shoulders are placed below the neck (Y-shape), the ControlNet ignores the pose entirely. Standard proportions: head ~12%, neck ~22%, hips ~45% from top of frame.
 - Expect ~40s per frame at 512x512 with 30 steps on Apple Silicon.
 
 ### Experiment Results

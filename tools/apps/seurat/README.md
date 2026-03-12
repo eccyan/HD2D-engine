@@ -106,7 +106,7 @@ Uses IP-Adapter for character appearance consistency from concept art, combined 
 - **Pose Model**: OpenPose ControlNet model filename (default `control_v11p_sd15_openpose`)
 - **Pose Strength**: OpenPose conditioning strength (0.1–1.5, default 0.80)
 
-When enabled, Seurat generates each frame individually with a programmatically rendered OpenPose skeleton matching the expected pose (idle breathing, walk cycle, run cycle) for each direction and frame index. Pose skeletons use a **14-keypoint format** (no mid_hip) where neck connects directly to r_hip and l_hip — this is the format OpenPose ControlNet v1.1 expects.
+When enabled, Seurat generates each frame individually with a programmatically rendered OpenPose skeleton matching the expected pose (idle breathing, walk cycle, run cycle) for each direction and frame index. Pose skeletons use a **14-keypoint format** (no mid_hip) where neck connects directly to r_hip and l_hip — this is the format OpenPose ControlNet v1.1 expects. Skeleton proportions must follow the standard OpenPose layout: **shoulders at the same Y as neck** (horizontal T-bar), head at ~12% from top, neck at ~22%, hips at ~45%. If shoulders are placed below the neck (Y-shape), the ControlNet fails to recognize the body.
 
 **IP-Adapter embeds_scaling**: Pass-1 identity nodes use `"V only"` — this provides the best character consistency while letting the text prompt control composition, direction, and pose. Pass-2 chibi nodes use `"K+mean(V) w/ C penalty"` to reduce background leakage during style transfer. The `weight_type` is `"linear"` for all passes.
 
