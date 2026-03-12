@@ -166,21 +166,21 @@ const RUN_RIGHT: Pose[] = [
    [0.56, 0.22], [0.62, 0.30], [0.58, 0.38],
    [0.45, 0.45], [0.38, 0.60], [0.42, 0.78],
    [0.55, 0.45], [0.65, 0.58], [0.62, 0.78]],
-  // Frame 1 — contact, body lower
-  [[0.52, 0.14], [0.50, 0.24], [0.44, 0.24], [0.42, 0.34], [0.44, 0.42],
-   [0.56, 0.24], [0.56, 0.34], [0.56, 0.42],
-   [0.45, 0.47], [0.52, 0.62], [0.50, 0.78],
-   [0.55, 0.47], [0.48, 0.62], [0.50, 0.78]],
+  // Frame 1 — contact, body lower (legs parallel, not crossing)
+  [[0.52, 0.14], [0.50, 0.24], [0.44, 0.24], [0.50, 0.32], [0.55, 0.28],
+   [0.56, 0.24], [0.48, 0.32], [0.44, 0.28],
+   [0.45, 0.47], [0.44, 0.62], [0.44, 0.78],
+   [0.55, 0.47], [0.56, 0.62], [0.56, 0.78]],
   // Frame 2 — left leg forward, right arm forward
   [[0.52, 0.12], [0.50, 0.22], [0.44, 0.22], [0.62, 0.30], [0.58, 0.38],
    [0.56, 0.22], [0.38, 0.30], [0.40, 0.38],
    [0.45, 0.45], [0.65, 0.58], [0.62, 0.78],
    [0.55, 0.45], [0.38, 0.60], [0.42, 0.78]],
-  // Frame 3 — contact other side
-  [[0.52, 0.14], [0.50, 0.24], [0.44, 0.24], [0.56, 0.34], [0.56, 0.42],
-   [0.56, 0.24], [0.42, 0.34], [0.44, 0.42],
-   [0.45, 0.47], [0.48, 0.62], [0.50, 0.78],
-   [0.55, 0.47], [0.52, 0.62], [0.50, 0.78]],
+  // Frame 3 — contact other side (legs parallel, not crossing)
+  [[0.52, 0.14], [0.50, 0.24], [0.44, 0.24], [0.48, 0.32], [0.44, 0.28],
+   [0.56, 0.24], [0.50, 0.32], [0.55, 0.28],
+   [0.45, 0.47], [0.44, 0.62], [0.44, 0.78],
+   [0.55, 0.47], [0.56, 0.62], [0.56, 0.78]],
 ];
 
 // ---------------------------------------------------------------------------
@@ -269,8 +269,10 @@ export async function renderPoseToPng(
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, width, height);
 
-  const lineWidth = Math.max(2, Math.round(Math.min(width, height) / 30));
-  const dotRadius = lineWidth * 0.8;
+  // Thin lines (3-4px at 512) match OpenPose ControlNet expectations.
+  // Thicker lines merge adjacent limbs into blobs the ControlNet can't parse.
+  const lineWidth = Math.max(2, Math.round(Math.min(width, height) / 128));
+  const dotRadius = Math.max(3, Math.round(Math.min(width, height) / 85));
 
   // Draw limbs
   for (const [i, j, color] of LIMBS) {
@@ -317,8 +319,8 @@ export async function renderPoseStripToPng(
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, totalWidth, frameHeight);
 
-  const lineWidth = Math.max(2, Math.round(Math.min(frameWidth, frameHeight) / 30));
-  const dotRadius = lineWidth * 0.8;
+  const lineWidth = Math.max(2, Math.round(Math.min(frameWidth, frameHeight) / 128));
+  const dotRadius = Math.max(3, Math.round(Math.min(frameWidth, frameHeight) / 85));
 
   for (let f = 0; f < poses.length; f++) {
     const pose = poses[f];
