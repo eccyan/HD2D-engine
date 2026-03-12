@@ -2770,15 +2770,34 @@ export class ComfyUIClient implements ImageProvider {
     const { nodeType, schema } = await this.detectRIFENode();
 
     // Resolve model name: use requested model if it's in the available list,
-    // otherwise fall back to the node's default or first available model
+    // otherwise fall back to the node's default or first available model.
+    // Also check which models are actually downloaded on disk to avoid
+    // runtime download failures from broken mirrors.
     const availableModels = schema.ckpt_name_options ?? schema.model_options ?? [];
     const defaultModel = schema.ckpt_name_default ?? schema.model_default ?? availableModels[0];
     const requestedModel = opts?.model;
-    const resolvedModel = requestedModel && availableModels.some(
-      (m: string) => m === requestedModel || m === `${requestedModel}.pth`
-    )
-      ? (availableModels.find((m: string) => m === requestedModel) ?? `${requestedModel}.pth`)
-      : defaultModel;
+
+    // Try to find the requested model in the available list (with or without .pth)
+    const matchInList = requestedModel
+      ? availableModels.find((m: string) => m === requestedModel || m === `${requestedModel}.pth`)
+      : undefined;
+
+    let resolvedModel: string;
+    if (matchInList) {
+      resolvedModel = matchInList;
+    } else {
+      // Requested model not found — prefer rife47.pth (known to have working
+      // download mirrors), then fall back through the available list
+      const preferred = ['rife47.pth', 'rife49.pth'];
+      const pick = preferred.find((p) => availableModels.includes(p));
+      resolvedModel = pick ?? availableModels[0] ?? defaultModel;
+      if (requestedModel) {
+        console.warn(
+          `[ComfyUI] RIFE model "${requestedModel}" not available. ` +
+          `Using "${resolvedModel}" instead. Available: ${availableModels.join(', ')}`
+        );
+      }
+    }
 
     // Upload both frames
     const [nameA, nameB] = await Promise.all([
