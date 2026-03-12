@@ -171,6 +171,12 @@ export function PipelineControls({ animName }: Props) {
           </button>
         </div>
         <Row>
+          <label style={styles.label}>Head Ratio</label>
+          <input type="range" min={2} max={5} step={0.5} value={aiConfig.chibiHeadRatio} onChange={(e) => setAIConfig({ chibiHeadRatio: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+          <span style={styles.valueLabel}>1:{aiConfig.chibiHeadRatio}</span>
+          <ResetBtn field="chibiHeadRatio" current={aiConfig.chibiHeadRatio} onReset={(v) => setAIConfig({ chibiHeadRatio: v })} />
+        </Row>
+        <Row>
           <label style={styles.label}>Chibi Wt</label>
           <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.chibiWeight} onChange={(e) => setAIConfig({ chibiWeight: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={styles.valueLabel}>{aiConfig.chibiWeight.toFixed(2)}</span>

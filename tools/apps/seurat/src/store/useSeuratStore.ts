@@ -1216,7 +1216,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const comfy = new ComfyUIClient(aiConfig.comfyUrl);
     const indices = frameIndices ?? anim.frames.map((f) => f.index);
 
-    const { buildFramePrompt, buildNegativePrompt } = await import('../lib/ai-generate.js');
+    const { buildFramePrompt, buildNegativePrompt, buildPass2Prompt, buildPass2NegativePrompt } = await import('../lib/ai-generate.js');
     const { getPose, renderPoseToPng } = await import('../lib/pose-templates.js');
     const loras = aiConfig.loras.filter((l) => l.name.trim());
     const negative = buildNegativePrompt(manifest);
@@ -1296,10 +1296,14 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           catch { chibiBytes = await api.fetchChibiImageBytes(manifest.character_id); }
           chibiBytes = await preRemBg(chibiBytes);
 
-          const pngBytes = await comfy.generateImg2ImgWithIPAdapterWithRetry(prompt, pass1Bytes, chibiBytes, {
+          // Use ratio-aware prompt and negative for pass 2
+          const pass2Prompt = promptOverride.trim() || buildPass2Prompt(manifest, anim, fi, aiConfig.chibiHeadRatio);
+          const pass2Negative = buildPass2NegativePrompt(manifest);
+
+          const pngBytes = await comfy.generateImg2ImgWithIPAdapterWithRetry(pass2Prompt, pass1Bytes, chibiBytes, {
             width: 512, height: 512, steps: aiConfig.steps, seed: rawSeed, cfgScale: aiConfig.cfg,
             samplerName: aiConfig.sampler, checkpoint: aiConfig.checkpoint, vae: aiConfig.vae || undefined,
-            negativePrompt: negative, denoise: aiConfig.chibiDenoise, loras: [],
+            negativePrompt: pass2Negative, denoise: aiConfig.chibiDenoise, loras: [],
             ipAdapterWeight: aiConfig.chibiWeight, ipAdapterEndAt: 0.7,
             removeBackground: aiConfig.removeBackground, remBgNodeType: aiConfig.remBgNodeType,
           });

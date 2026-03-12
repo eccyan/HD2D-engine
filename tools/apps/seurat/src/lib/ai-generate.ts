@@ -78,6 +78,29 @@ export function buildFramePrompt(
   ].join(', ');
 }
 
+/**
+ * Build a pass-2 prompt that adds head-body ratio guidance on top of the base frame prompt.
+ * headRatio: target body-to-head proportion (e.g. 3 = 1:3, body is 3x the head).
+ */
+export function buildPass2Prompt(
+  manifest: CharacterManifest,
+  anim: CharacterAnimation,
+  frameIndex: number,
+  headRatio: number,
+): string {
+  const base = buildFramePrompt(manifest, anim, frameIndex);
+  const ratioDesc = `1:${headRatio} head to body ratio, small head, long torso, long legs, mature proportions`;
+  return `${ratioDesc}, ${base}`;
+}
+
+/**
+ * Build a pass-2 negative prompt that rejects oversized-head / chibi proportions.
+ */
+export function buildPass2NegativePrompt(manifest: CharacterManifest): string {
+  const base = buildNegativePrompt(manifest);
+  return `large head, big head, oversized head, chibi proportions, super deformed, ${base}`;
+}
+
 export function buildNegativePrompt(manifest: CharacterManifest): string {
   const custom = manifest.concept.negative_prompt;
   if (custom) return `${custom}, ${DEFAULT_NEGATIVE_PROMPT}`;
