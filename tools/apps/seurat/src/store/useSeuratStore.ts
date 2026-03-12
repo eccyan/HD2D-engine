@@ -263,7 +263,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   },
 
   createCharacter: async (id, name) => {
-    const manifest = createDefaultManifest(id, name);
+    const { aiConfig } = get();
+    const manifest = createDefaultManifest(id, name, 128, 128, 4, 4, aiConfig.interpMultiplier);
     await api.createCharacter(id, name, manifest);
     await get().refreshCharacters();
     await get().selectCharacter(id);
@@ -1219,7 +1220,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     if (!anim) return;
 
     const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-    const indices = frameIndices ?? anim.frames.map((f) => f.index);
+    // Filter out interpolation placeholders — only generate for keyframes
+    const allIndices = frameIndices ?? anim.frames.map((f) => f.index);
+    const indices = allIndices.filter((idx) => {
+      const frame = anim.frames.find((f) => f.index === idx);
+      return !frame || frame.keyframe !== false;
+    });
 
     const { buildFramePrompt, buildNegativePrompt, buildPass2Prompt, buildPass2NegativePrompt } = await import('../lib/ai-generate.js');
     const { getPose, renderPoseToPng } = await import('../lib/pose-templates.js');
@@ -1385,123 +1391,154 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const multiplier = aiConfig.interpMultiplier;
     const characterId = manifest.character_id;
 
-    set({ interpProgress: `Interpolating ${anim.frames.length} frames (${method} ${multiplier}x)...` });
+    // Separate keyframes from interpolation placeholders
+    const keyframes = anim.frames.filter((f) => f.keyframe !== false);
+    const keyframeCount = keyframes.length;
+
+    set({ interpProgress: `Interpolating ${keyframeCount} keyframes (${method} ${multiplier}x)...` });
 
     try {
-      // Load pass2/pass2_edited images for all frames
-      const frameBytes: Uint8Array[] = [];
-      for (const frame of anim.frames) {
+      // Load pass2/pass2_edited images for keyframes only
+      const keyframeBytes: Uint8Array[] = [];
+      for (const frame of keyframes) {
         let bytes: Uint8Array;
         try {
           bytes = await api.fetchPassImageBytes(characterId, animName, frame.index, 'pass2_edited');
         } catch {
           bytes = await api.fetchPassImageBytes(characterId, animName, frame.index, 'pass2');
         }
-        frameBytes.push(bytes);
+        keyframeBytes.push(bytes);
       }
 
-      // Generate interpolated frames between each adjacent pair
+      // Generate interpolated frames between each adjacent keyframe pair
       // For looping anims, also interpolate last→first
       const pairs: [number, number][] = [];
-      for (let i = 0; i < anim.frames.length - 1; i++) {
+      for (let i = 0; i < keyframeCount - 1; i++) {
         pairs.push([i, i + 1]);
       }
-      if (anim.loop && anim.frames.length > 1) {
-        pairs.push([anim.frames.length - 1, 0]);
+      if (anim.loop && keyframeCount > 1) {
+        pairs.push([keyframeCount - 1, 0]);
       }
 
-      // Map: insertAfterIndex -> interpolated frame bytes
+      // Map: keyframeArrayIndex -> interpolated frame bytes
       const interpResults: Map<number, Uint8Array[]> = new Map();
 
       for (const [idxA, idxB] of pairs) {
-        set({ interpProgress: `Interpolating f${anim.frames[idxA].index}→f${anim.frames[idxB].index} (${method})...` });
+        set({ interpProgress: `Interpolating f${keyframes[idxA].index}→f${keyframes[idxB].index} (${method})...` });
 
         let intermediates: Uint8Array[];
         if (method === 'rife') {
           const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-          intermediates = await comfy.interpolateFramesRIFE(frameBytes[idxA], frameBytes[idxB], {
+          intermediates = await comfy.interpolateFramesRIFE(keyframeBytes[idxA], keyframeBytes[idxB], {
             model: aiConfig.rifeModel,
             multiplier: multiplier + 1, // RIFE multiplier includes endpoints
           });
-          // RIFE with multiplier N produces N-1 total output frames including endpoints
-          // Our wrapper returns only intermediates, but multiplier semantics may differ
-          // Trim to desired count
           intermediates = intermediates.slice(0, multiplier - 1);
         } else {
           const { blendInterpolate } = await import('../lib/frame-interpolate.js');
-          intermediates = await blendInterpolate(frameBytes[idxA], frameBytes[idxB], multiplier - 1);
+          intermediates = await blendInterpolate(keyframeBytes[idxA], keyframeBytes[idxB], multiplier - 1);
         }
         interpResults.set(idxA, intermediates);
       }
 
-      // Build new frames array: original frames with interpolated frames inserted
-      const origDuration = anim.frames[0]?.duration ?? 0.12;
-      const newDuration = origDuration / multiplier;
-      const newFrames: typeof anim.frames = [];
-      let newIndex = 0;
+      // Fill in placeholder frames in the existing manifest structure.
+      // If placeholders already exist (from createDefaultManifest), update them in place.
+      // If not (legacy manifest), build a new frames array with interpolated frames inserted.
+      const hasPlaceholders = anim.frames.some((f) => f.keyframe === false);
 
-      for (let i = 0; i < anim.frames.length; i++) {
-        const orig = anim.frames[i];
-        const oldIndex = orig.index;
-        // Mark original as keyframe
-        newFrames.push({
-          ...orig,
-          index: newIndex,
-          tile_id: anim.row * manifest.spritesheet.columns + newIndex, // recalc later
-          duration: newDuration,
-          keyframe: true,
-        });
-
-        // Copy pass2 images to the new index if it changed
-        if (newIndex !== oldIndex) {
-          // Copy all pass images that exist for this frame
-          for (const pass of ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'] as PipelineStage[]) {
-            try {
-              const bytes = await api.fetchPassImageBytes(characterId, animName, oldIndex, pass);
-              await api.savePassImage(characterId, animName, newIndex, pass, bytes);
-            } catch { /* pass image doesn't exist at this stage, skip */ }
-          }
-        }
-        newIndex++;
-
-        // Insert interpolated frames
-        const interps = interpResults.get(i);
-        if (interps) {
-          for (let j = 0; j < interps.length; j++) {
-            const interpFile = `${animName}/${animName}_interp_${i}_${j}.png`;
-            newFrames.push({
-              index: newIndex,
-              tile_id: 0, // recalc below
-              duration: newDuration,
-              status: 'generated' as const,
-              source: 'ai' as const,
-              file: interpFile,
-              pipeline_stage: 'pass2' as PipelineStage,
-              keyframe: false,
-            });
-
-            // Save the interpolated frame image as pass2
-            await api.savePassImage(characterId, animName, newIndex, 'pass2', interps[j]);
-            newIndex++;
-          }
-        }
-      }
-
-      // Recalculate tile_ids and update columns
-      const newColumns = Math.max(manifest.spritesheet.columns, newFrames.length);
-      for (const f of newFrames) {
-        f.tile_id = anim.row * newColumns + f.index;
-      }
-
-      // Update manifest
       const updated = structuredClone(manifest);
       const updatedAnim = updated.animations.find((a) => a.name === animName)!;
-      updatedAnim.frames = newFrames;
-      updated.spritesheet.columns = newColumns;
+
+      if (hasPlaceholders) {
+        // Placeholders exist — fill them in. Walk through frames, each keyframe
+        // is followed by (multiplier-1) interpolation slots.
+        let keyIdx = 0;
+        for (let i = 0; i < updatedAnim.frames.length; i++) {
+          const frame = updatedAnim.frames[i];
+          if (frame.keyframe !== false) {
+            // This is a keyframe — the interp slots follow it
+            const interps = interpResults.get(keyIdx);
+            if (interps) {
+              for (let j = 0; j < interps.length && i + 1 + j < updatedAnim.frames.length; j++) {
+                const slot = updatedAnim.frames[i + 1 + j];
+                if (slot.keyframe === false) {
+                  slot.status = 'generated';
+                  slot.source = 'ai';
+                  slot.pipeline_stage = 'pass2';
+                  // Save the interpolated image
+                  await api.savePassImage(characterId, animName, slot.index, 'pass2', interps[j]);
+                }
+              }
+            }
+            keyIdx++;
+          }
+        }
+      } else {
+        // No placeholders — build new frames array (legacy path)
+        const newFrames: typeof anim.frames = [];
+        let newIndex = 0;
+
+        for (let i = 0; i < keyframes.length; i++) {
+          const orig = keyframes[i];
+          const oldIndex = orig.index;
+          newFrames.push({
+            ...orig,
+            index: newIndex,
+            tile_id: anim.row * updated.spritesheet.columns + newIndex,
+            duration: (orig.duration ?? 0.12) / multiplier,
+            keyframe: true,
+          });
+
+          // Copy pass images to new index if changed
+          if (newIndex !== oldIndex) {
+            for (const pass of ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'] as PipelineStage[]) {
+              try {
+                const bytes = await api.fetchPassImageBytes(characterId, animName, oldIndex, pass);
+                await api.savePassImage(characterId, animName, newIndex, pass, bytes);
+              } catch { /* skip */ }
+            }
+          }
+          newIndex++;
+
+          // Insert interpolated frames
+          const interps = interpResults.get(i);
+          if (interps) {
+            for (let j = 0; j < interps.length; j++) {
+              newFrames.push({
+                index: newIndex,
+                tile_id: anim.row * updated.spritesheet.columns + newIndex,
+                duration: (orig.duration ?? 0.12) / multiplier,
+                status: 'generated' as const,
+                source: 'ai' as const,
+                file: `${animName}/${animName}_interp_${i}_${j}.png`,
+                pipeline_stage: 'pass2' as PipelineStage,
+                keyframe: false,
+              });
+              await api.savePassImage(characterId, animName, newIndex, 'pass2', interps[j]);
+              newIndex++;
+            }
+          }
+        }
+
+        updatedAnim.frames = newFrames;
+        // Update columns to fit
+        const maxFrames = Math.max(...updated.animations.map((a) => a.frames.length));
+        updated.spritesheet.columns = Math.max(updated.spritesheet.columns, maxFrames);
+        // Recalculate tile_ids
+        for (const a of updated.animations) {
+          for (const f of a.frames) {
+            f.tile_id = a.row * updated.spritesheet.columns + f.index;
+          }
+        }
+      }
+
+      updated.spritesheet.interp_multiplier = multiplier;
       set({ manifest: updated, frameRevision: get().frameRevision + 1 });
       await api.saveManifest(updated);
 
-      set({ interpProgress: `Done: ${anim.frames.length} → ${newFrames.length} frames` });
+      const totalFrames = updatedAnim.frames.length;
+      const filledCount = updatedAnim.frames.filter((f) => f.keyframe === false && f.status === 'generated').length;
+      set({ interpProgress: `Done: ${keyframeCount} keyframes + ${filledCount} interpolated = ${totalFrames} total` });
     } catch (err) {
       console.error('[Seurat] Interpolation error:', err);
       set({ interpProgress: `Error: ${err instanceof Error ? err.message : String(err)}` });

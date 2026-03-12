@@ -90,6 +90,7 @@ export interface SpritesheetConfig {
   frame_width: number;
   frame_height: number;
   columns: number;
+  interp_multiplier?: number; // interpolation multiplier (2/3/4), default 1 (no interpolation)
 }
 
 export interface AtlasInfo {
@@ -168,7 +169,11 @@ export function createDefaultManifest(
   frameHeight = 128,
   columns = 4,
   framesPerClip = 4,
+  interpMultiplier = 1,
 ): CharacterManifest {
+  const mult = Math.max(1, Math.round(interpMultiplier));
+  const totalFramesPerClip = framesPerClip + (framesPerClip - 1) * (mult - 1);
+  const effectiveColumns = mult > 1 ? totalFramesPerClip : columns;
   const animations: CharacterAnimation[] = [];
   let row = 0;
 
@@ -176,15 +181,35 @@ export function createDefaultManifest(
     for (const dir of DIRECTIONS) {
       const name = `${state}_${DIR_NAMES[dir]}`;
       const frames: CharacterFrame[] = [];
+      let frameIdx = 0;
       for (let f = 0; f < framesPerClip; f++) {
+        // Keyframe
         frames.push({
-          index: f,
-          tile_id: row * columns + f,
-          duration: STATE_DURATIONS[state],
+          index: frameIdx,
+          tile_id: row * effectiveColumns + frameIdx,
+          duration: STATE_DURATIONS[state] / mult,
           status: "pending",
           source: "placeholder",
-          file: `${state}_${dir}_f${f}.png`,
+          file: `${state}_${dir}_f${frameIdx}.png`,
+          keyframe: true,
         });
+        frameIdx++;
+
+        // Interpolation placeholders between keyframes (not after the last one)
+        if (f < framesPerClip - 1) {
+          for (let j = 0; j < mult - 1; j++) {
+            frames.push({
+              index: frameIdx,
+              tile_id: row * effectiveColumns + frameIdx,
+              duration: STATE_DURATIONS[state] / mult,
+              status: "pending",
+              source: "placeholder",
+              file: `${state}_${dir}_f${frameIdx}.png`,
+              keyframe: false,
+            });
+            frameIdx++;
+          }
+        }
       }
       animations.push({ name, state, direction: dir, row, loop: true, frames });
       row++;
@@ -201,7 +226,12 @@ export function createDefaultManifest(
       negative_prompt: "blurry, realistic, 3d render",
       reference_images: [],
     },
-    spritesheet: { frame_width: frameWidth, frame_height: frameHeight, columns },
+    spritesheet: {
+      frame_width: frameWidth,
+      frame_height: frameHeight,
+      columns: effectiveColumns,
+      ...(mult > 1 ? { interp_multiplier: mult } : {}),
+    },
     animations,
   };
 }
