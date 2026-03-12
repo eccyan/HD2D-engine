@@ -1442,6 +1442,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
       for (let i = 0; i < anim.frames.length; i++) {
         const orig = anim.frames[i];
+        const oldIndex = orig.index;
         // Mark original as keyframe
         newFrames.push({
           ...orig,
@@ -1450,6 +1451,17 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           duration: newDuration,
           keyframe: true,
         });
+
+        // Copy pass2 images to the new index if it changed
+        if (newIndex !== oldIndex) {
+          // Copy all pass images that exist for this frame
+          for (const pass of ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'] as PipelineStage[]) {
+            try {
+              const bytes = await api.fetchPassImageBytes(characterId, animName, oldIndex, pass);
+              await api.savePassImage(characterId, animName, newIndex, pass, bytes);
+            } catch { /* pass image doesn't exist at this stage, skip */ }
+          }
+        }
         newIndex++;
 
         // Insert interpolated frames
