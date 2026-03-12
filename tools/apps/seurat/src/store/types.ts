@@ -44,8 +44,7 @@ export interface AIConfig {
   chibiHeadRatio: number;
   openPoseModel: string;
   openPoseStrength: number;
-  pixelPassEnabled: boolean;
-  pixelPassDenoise: number;
+  pixelDownscaleSize: number;
   downscaleMethod: string;
   useAnimateDiff: boolean;
   motionModel: string;
@@ -79,8 +78,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   chibiHeadRatio: 3,
   openPoseModel: 'control_v11p_sd15_openpose',
   openPoseStrength: 1.0,
-  pixelPassEnabled: true,
-  pixelPassDenoise: 0.35,
+  pixelDownscaleSize: 48,
   downscaleMethod: 'nearest-exact',
   useAnimateDiff: false,
   motionModel: 'mm_sd_v15_v2.ckpt',

@@ -312,29 +312,17 @@ export function GenerateActions({ animName }: Props) {
         </div>
       </div>
 
-      {/* Pixel Pass */}
+      {/* Pixelize */}
       <div style={styles.section}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={styles.subTitle}>Pixel Pass</div>
-          <label style={{ ...styles.label, minWidth: 'auto' }}>
-            <input
-              type="checkbox"
-              checked={aiConfig.pixelPassEnabled}
-              onChange={(e) => setAIConfig({ pixelPassEnabled: e.target.checked })}
-            />
-            {' '}Enable
-          </label>
-        </div>
-        {aiConfig.pixelPassEnabled && (
-          <Row>
-            <label style={styles.label}>Pixel Den</label>
-            <input type="range" min={0.1} max={0.7} step={0.05} value={aiConfig.pixelPassDenoise} onChange={(e) => setAIConfig({ pixelPassDenoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-            <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.pixelPassDenoise.toFixed(2)}</span>
-            <ResetBtn field="pixelPassDenoise" current={aiConfig.pixelPassDenoise} onReset={(v) => setAIConfig({ pixelPassDenoise: v })} />
-          </Row>
-        )}
+        <div style={styles.subTitle}>Pixelize</div>
+        <Row>
+          <label style={styles.label}>Pixel Size</label>
+          <input type="range" min={16} max={128} step={8} value={aiConfig.pixelDownscaleSize} onChange={(e) => setAIConfig({ pixelDownscaleSize: parseInt(e.target.value) })} style={{ flex: 1 }} />
+          <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.pixelDownscaleSize}px</span>
+          <ResetBtn field="pixelDownscaleSize" current={aiConfig.pixelDownscaleSize} onReset={(v) => setAIConfig({ pixelDownscaleSize: v })} />
+        </Row>
         <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
-          Pass 3 applies pixel art LoRA to chibi output. Uses LoRAs from the LoRA section above.
+          Pass 3 downscales to {aiConfig.pixelDownscaleSize}px then upscales back to {manifest.spritesheet.frame_width}x{manifest.spritesheet.frame_height} for crisp pixel art.
         </div>
       </div>
 
@@ -438,8 +426,8 @@ export function GenerateActions({ animName }: Props) {
       </div>
 
       {/* Mode */}
-      <div style={{ fontSize: 9, fontFamily: 'monospace', marginBottom: 4, color: !hasConceptImage ? '#666' : aiConfig.useAnimateDiff ? '#f8c860' : (hasChibiImage && aiConfig.pixelPassEnabled) ? '#90f8b8' : hasChibiImage ? '#90f8b8' : '#f890c8' }}>
-        {!hasConceptImage ? 'Upload concept art first' : aiConfig.useAnimateDiff ? 'AnimateDiff mode (all frames)' : (hasChibiImage && aiConfig.pixelPassEnabled) ? 'Three-pass: Pose\u2192Chibi\u2192Pixel' : hasChibiImage ? 'Two-pass: Pose\u2192Chibi' : 'IP-Adapter + OpenPose (single pass)'}
+      <div style={{ fontSize: 9, fontFamily: 'monospace', marginBottom: 4, color: !hasConceptImage ? '#666' : aiConfig.useAnimateDiff ? '#f8c860' : hasChibiImage ? '#90f8b8' : '#f890c8' }}>
+        {!hasConceptImage ? 'Upload concept art first' : aiConfig.useAnimateDiff ? 'AnimateDiff mode (all frames)' : hasChibiImage ? 'Three-pass: Pose\u2192Chibi\u2192Pixelize' : 'IP-Adapter + OpenPose (single pass)'}
       </div>
 
       {/* Generate Animation */}

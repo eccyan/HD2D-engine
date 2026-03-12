@@ -1318,7 +1318,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           }
 
         } else if (pass === 'pass3') {
-          // Pass 3: Pixel LoRA img2img + downscale → final frame
+          // Pass 3: Client-side downscale → upscale (pixelization)
           const cur = get().manifest;
           const frame = cur?.animations.find((a) => a.name === animName)?.frames.find((f) => f.index === fi);
           const inputStage = (frame?.pipeline_stage === 'pass2_edited') ? 'pass2_edited' : 'pass2';
@@ -1328,24 +1328,28 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           catch { pass2Bytes = await api.fetchPassImageBytes(manifest.character_id, animName, fi, 'pass2'); }
 
           const { frame_width, frame_height } = manifest.spritesheet;
-          // Use img2img at 512x512 then downscale client-side
-          let pngBytes = await comfy.generateImg2ImgWithRetry(prompt, pass2Bytes, {
-            width: 512, height: 512, steps: aiConfig.steps, seed: rawSeed, cfgScale: aiConfig.cfg,
-            samplerName: aiConfig.sampler, checkpoint: aiConfig.checkpoint, vae: aiConfig.vae || undefined,
-            negativePrompt: negative, denoise: aiConfig.pixelPassDenoise, loras,
-            removeBackground: aiConfig.removeBackground, remBgNodeType: aiConfig.remBgNodeType,
-          });
-          // Client-side downscale to sprite size
-          if (frame_width !== 512 || frame_height !== 512) {
-            const blob = new Blob([pngBytes as BlobPart], { type: 'image/png' });
-            const bmp = await createImageBitmap(blob);
-            const canvas = new OffscreenCanvas(frame_width, frame_height);
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(bmp, 0, 0, frame_width, frame_height);
-            bmp.close();
-            const outBlob = await canvas.convertToBlob({ type: 'image/png' });
-            pngBytes = new Uint8Array(await outBlob.arrayBuffer());
-          }
+          const smallSize = aiConfig.pixelDownscaleSize;
+          const useNearest = aiConfig.downscaleMethod === 'nearest-exact';
+
+          // Downscale to small pixel size, then upscale back to frame dimensions
+          const srcBlob = new Blob([pass2Bytes as BlobPart], { type: 'image/png' });
+          const srcBmp = await createImageBitmap(srcBlob);
+
+          // Step 1: Downscale to small size
+          const smallCanvas = new OffscreenCanvas(smallSize, smallSize);
+          const smallCtx = smallCanvas.getContext('2d')!;
+          smallCtx.imageSmoothingEnabled = !useNearest;
+          smallCtx.drawImage(srcBmp, 0, 0, smallSize, smallSize);
+
+          // Step 2: Upscale back to frame dimensions (nearest-neighbor for crisp pixels)
+          const outCanvas = new OffscreenCanvas(frame_width, frame_height);
+          const outCtx = outCanvas.getContext('2d')!;
+          outCtx.imageSmoothingEnabled = false;
+          outCtx.drawImage(smallCanvas, 0, 0, frame_width, frame_height);
+          srcBmp.close();
+
+          const outBlob = await outCanvas.convertToBlob({ type: 'image/png' });
+          const pngBytes = new Uint8Array(await outBlob.arrayBuffer());
 
           // Save as final frame
           await api.saveFrameImage(manifest.character_id, animName, fi, pngBytes);
@@ -1560,9 +1564,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
             openPoseStrength: aiConfig.openPoseStrength,
             chibiWeight: aiConfig.chibiWeight,
             chibiDenoise: aiConfig.chibiDenoise,
-            pixelPassEnabled: aiConfig.pixelPassEnabled,
-            pixelPassDenoise: aiConfig.pixelPassDenoise,
-            pixelPassLoras: aiConfig.loras.filter((l) => l.name.trim()),
             removeBackground: aiConfig.removeBackground,
             remBgNodeType: aiConfig.remBgNodeType,
             outputWidth: manifest.spritesheet.frame_width,
@@ -1779,9 +1780,6 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
                 openPoseStrength: aiConfig.openPoseStrength,
                 chibiWeight: aiConfig.chibiWeight,
                 chibiDenoise: aiConfig.chibiDenoise,
-                pixelPassEnabled: aiConfig.pixelPassEnabled,
-                pixelPassDenoise: aiConfig.pixelPassDenoise,
-                pixelPassLoras: aiConfig.loras.filter((l) => l.name.trim()),
                 removeBackground: aiConfig.removeBackground,
                 remBgNodeType: aiConfig.remBgNodeType,
                 outputWidth: fw,

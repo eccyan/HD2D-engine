@@ -190,9 +190,9 @@ export function PipelineControls({ animName }: Props) {
         </Row>
       </div>
 
-      {/* Pass 3: Pixel + Downscale */}
+      {/* Pass 3: Pixelize */}
       <div style={styles.section}>
-        <div style={styles.subTitle}>Pass 3 — Pixel + Downscale</div>
+        <div style={styles.subTitle}>Pass 3 — Pixelize</div>
         <div style={styles.statusText}>{stageCounts.pass3}/{totalFrames} frames</div>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
@@ -205,19 +205,19 @@ export function PipelineControls({ animName }: Props) {
           </button>
         </div>
         <Row>
-          <label style={styles.label}>Pixel Den</label>
-          <input type="range" min={0.1} max={0.7} step={0.05} value={aiConfig.pixelPassDenoise} onChange={(e) => setAIConfig({ pixelPassDenoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-          <span style={styles.valueLabel}>{aiConfig.pixelPassDenoise.toFixed(2)}</span>
-          <ResetBtn field="pixelPassDenoise" current={aiConfig.pixelPassDenoise} onReset={(v) => setAIConfig({ pixelPassDenoise: v })} />
+          <label style={styles.label}>Pixel Size</label>
+          <input type="range" min={16} max={128} step={8} value={aiConfig.pixelDownscaleSize} onChange={(e) => setAIConfig({ pixelDownscaleSize: parseInt(e.target.value) })} style={{ flex: 1 }} />
+          <span style={styles.valueLabel}>{aiConfig.pixelDownscaleSize}px</span>
+          <ResetBtn field="pixelDownscaleSize" current={aiConfig.pixelDownscaleSize} onReset={(v) => setAIConfig({ pixelDownscaleSize: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Output</label>
           <span style={styles.valueLabel}>
-            {manifest.spritesheet.frame_width} x {manifest.spritesheet.frame_height}
+            {aiConfig.pixelDownscaleSize}px → {manifest.spritesheet.frame_width}x{manifest.spritesheet.frame_height}
           </span>
         </Row>
         <Row>
-          <label style={styles.label}>Method</label>
+          <label style={styles.label}>Downscale</label>
           <select
             value={aiConfig.downscaleMethod}
             onChange={(e) => setAIConfig({ downscaleMethod: e.target.value })}
@@ -225,10 +225,6 @@ export function PipelineControls({ animName }: Props) {
           >
             <option value="nearest-exact">nearest-exact</option>
             <option value="bilinear">bilinear</option>
-            <option value="area">area</option>
-            <option value="bicubic">bicubic</option>
-            <option value="bislerp">bislerp</option>
-            <option value="lanczos">lanczos</option>
           </select>
           <ResetBtn field="downscaleMethod" current={aiConfig.downscaleMethod} onReset={(v) => setAIConfig({ downscaleMethod: v })} />
         </Row>
