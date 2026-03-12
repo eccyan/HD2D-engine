@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import type { PipelineStage, CharacterAnimation } from '@vulkan-game-tools/asset-types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import type { PipelineStage, CharacterFrame, CharacterAnimation } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { PaintEditor } from '../shared/PaintEditor.js';
 import { getPose } from '../../lib/pose-templates.js';
@@ -120,6 +120,58 @@ function PoseCell({ animName, frameIndex, size }: { animName: string; frameIndex
   );
 }
 
+/** A display-only frame: either a real manifest frame or a virtual interpolation placeholder */
+interface DisplayFrame {
+  /** The frame data from the manifest (null for virtual placeholders) */
+  frame: CharacterFrame | null;
+  /** Display index in the grid */
+  displayIndex: number;
+  /** Whether this is an interpolated (non-keyframe) slot */
+  isInterpolated: boolean;
+}
+
+/**
+ * Build the list of display frames. If the animation already has keyframe markers,
+ * use frames as-is. Otherwise, expand based on interpMultiplier by inserting
+ * virtual interpolation placeholders between each pair of keyframes.
+ */
+function buildDisplayFrames(anim: CharacterAnimation, interpMultiplier: number): DisplayFrame[] {
+  const hasKeyframeMarkers = anim.frames.some((f) => f.keyframe === true || f.keyframe === false);
+
+  if (hasKeyframeMarkers || interpMultiplier <= 1) {
+    // Already has interpolation structure or no interpolation needed — use as-is
+    return anim.frames.map((f) => ({
+      frame: f,
+      displayIndex: f.index,
+      isInterpolated: f.keyframe === false,
+    }));
+  }
+
+  // Old manifest without keyframe markers — insert virtual interp slots
+  const result: DisplayFrame[] = [];
+  const mult = Math.max(1, Math.round(interpMultiplier));
+  for (let i = 0; i < anim.frames.length; i++) {
+    const keyFrame = anim.frames[i];
+    const displayIdx = i * mult;
+    result.push({
+      frame: keyFrame,
+      displayIndex: displayIdx,
+      isInterpolated: false,
+    });
+    // Insert (mult - 1) virtual placeholders after each keyframe (except after the last)
+    if (i < anim.frames.length - 1) {
+      for (let j = 1; j < mult; j++) {
+        result.push({
+          frame: null,
+          displayIndex: displayIdx + j,
+          isInterpolated: true,
+        });
+      }
+    }
+  }
+  return result;
+}
+
 interface Props {
   animName: string;
 }
@@ -131,6 +183,7 @@ export function FramePipelineGrid({ animName }: Props) {
   const copyFrame = useSeuratStore((s) => s.copyFrame);
   const pasteFrame = useSeuratStore((s) => s.pasteFrame);
   const clipboard = useSeuratStore((s) => s.clipboard);
+  const interpMultiplier = useSeuratStore((s) => s.aiConfig.interpMultiplier);
 
   const [editing, setEditing] = useState<{
     animName: string;
@@ -144,8 +197,14 @@ export function FramePipelineGrid({ animName }: Props) {
   const selectAllFrames = useSeuratStore((s) => s.selectAllFrames);
   const clearFrameSelection = useSeuratStore((s) => s.clearFrameSelection);
 
+  const anim = manifest?.animations.find((a) => a.name === animName);
+  const displayFrames = useMemo(
+    () => anim ? buildDisplayFrames(anim, interpMultiplier) : [],
+    [anim, interpMultiplier],
+  );
+
   // Default to select-all when animation changes or loads
-  const frameCount = manifest?.animations.find((a) => a.name === animName)?.frames.length ?? 0;
+  const frameCount = displayFrames.length;
   useEffect(() => {
     if (frameCount > 0) selectAllFrames(frameCount);
   }, [animName, frameCount]);
@@ -158,8 +217,6 @@ export function FramePipelineGrid({ animName }: Props) {
   } | null>(null);
 
   if (!manifest) return <div style={styles.empty}>Select an animation.</div>;
-
-  const anim = manifest.animations.find((a) => a.name === animName);
   if (!anim) return <div style={styles.empty}>Animation "{animName}" not found.</div>;
 
   const characterId = manifest.character_id;
@@ -215,13 +272,13 @@ export function FramePipelineGrid({ animName }: Props) {
         <div style={styles.frameLabel}>
           <input
             type="checkbox"
-            checked={anim.frames.length > 0 && selectedFrames.size === anim.frames.length}
+            checked={displayFrames.length > 0 && selectedFrames.size === displayFrames.length}
             ref={(el) => {
-              if (el) el.indeterminate = selectedFrames.size > 0 && selectedFrames.size < anim.frames.length;
+              if (el) el.indeterminate = selectedFrames.size > 0 && selectedFrames.size < displayFrames.length;
             }}
             onChange={() => {
-              if (selectedFrames.size === anim.frames.length) clearFrameSelection();
-              else selectAllFrames(anim.frames.length);
+              if (selectedFrames.size === displayFrames.length) clearFrameSelection();
+              else selectAllFrames(displayFrames.length);
             }}
             style={{ marginRight: 4 }}
           />
@@ -234,16 +291,16 @@ export function FramePipelineGrid({ animName }: Props) {
 
       {/* Frame rows */}
       <div style={styles.scrollArea}>
-        {anim.frames.map((frame) => {
-          const isSelected = selectedFrames.has(frame.index);
-          const stage = frame.pipeline_stage;
-
-          const isInterpolated = frame.keyframe === false;
+        {displayFrames.map((df) => {
+          const { frame, displayIndex, isInterpolated } = df;
+          const isSelected = selectedFrames.has(displayIndex);
+          const stage = frame?.pipeline_stage;
+          const isVirtual = frame === null; // no manifest entry yet
 
           return (
             <div
-              key={frame.index}
-              data-testid={`pipeline-row-${frame.index}`}
+              key={displayIndex}
+              data-testid={`pipeline-row-${displayIndex}`}
               style={{
                 ...styles.frameRow,
                 gridTemplateColumns: `60px repeat(${colCount}, 1fr)`,
@@ -254,16 +311,16 @@ export function FramePipelineGrid({ animName }: Props) {
               {/* Frame index + selection */}
               <div
                 style={styles.frameIndexCell}
-                onClick={() => toggleFrameSelection(frame.index)}
+                onClick={() => toggleFrameSelection(displayIndex)}
               >
                 <input
                   type="checkbox"
                   checked={isSelected}
-                  onChange={() => toggleFrameSelection(frame.index)}
+                  onChange={() => toggleFrameSelection(displayIndex)}
                   onClick={(e) => e.stopPropagation()}
                   style={{ margin: 0 }}
                 />
-                <span style={styles.frameIndexLabel}>f{frame.index}</span>
+                <span style={styles.frameIndexLabel}>f{displayIndex}</span>
                 <span style={{
                   ...styles.badge,
                   borderColor: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
@@ -274,12 +331,28 @@ export function FramePipelineGrid({ animName }: Props) {
               </div>
 
               {/* Pose cell */}
-              <div style={styles.passCell}>
-                <PoseCell animName={animName} frameIndex={frame.index} size={128} />
+              <div style={{
+                ...styles.passCell,
+                opacity: isVirtual ? 0.15 : 1,
+              }}>
+                {isVirtual ? (
+                  <span style={styles.cellEmpty}>~</span>
+                ) : (
+                  <PoseCell animName={animName} frameIndex={frame.index} size={128} />
+                )}
               </div>
 
               {/* Pass cells */}
               {PASS_COLUMNS.map((col) => {
+                if (isVirtual) {
+                  // Virtual placeholder — no manifest frame, show empty placeholder
+                  return (
+                    <div key={col.key} style={{ ...styles.passCell, opacity: 0.15 }}>
+                      <span style={styles.cellEmpty}>~</span>
+                    </div>
+                  );
+                }
+
                 const passOrder: PipelineStage[] = ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'];
                 const passIdx = passOrder.indexOf(col.key);
                 const stageIdx = stage ? passOrder.indexOf(stage) : -1;
