@@ -2948,7 +2948,7 @@ export class ComfyUIClient implements ImageProvider {
       `Install ComfyUI-Frame-Interpolation: ` +
       `cd ComfyUI/custom_nodes && git clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation && ` +
       `pip install -r ComfyUI-Frame-Interpolation/requirements-no-cupy.txt ` +
-      `(or requirements-with-cupy.txt for CUDA acceleration)`
+      `(or requirements-with-cupy.txt for CUDA acceleration), then restart ComfyUI`
     );
   }
 
