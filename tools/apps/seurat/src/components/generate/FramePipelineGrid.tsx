@@ -362,11 +362,11 @@ export function FramePipelineGrid({ animName }: Props) {
 
                 const isEditCol = col.key === 'pass1_edited' || col.key === 'pass2_edited';
 
-                // Interpolated frames: show pass2 image in the pass2 column when filled,
-                // and show pass3 when pixelized. Skip pass1/edit columns (not generated for interp).
+                // Interpolated frames: show pass2 image in pass2 and pass2_edited columns,
+                // pass3 when pixelized. Skip pass1/pass1_edited (not generated for interp).
                 let showImage: boolean;
                 if (isInterpolated) {
-                  if (col.key === 'pass2') {
+                  if (col.key === 'pass2' || col.key === 'pass2_edited') {
                     showImage = stage === 'pass2' || stage === 'pass2_edited' || stage === 'pass3';
                   } else if (col.key === 'pass3') {
                     showImage = stage === 'pass3';
@@ -383,6 +383,10 @@ export function FramePipelineGrid({ animName }: Props) {
                 if (showImage) {
                   if (col.key === 'pass3' && frame.status === 'generated') {
                     imageUrl = api.frameThumbnailUrl(characterId, animName, frame.index);
+                  } else if (isInterpolated && col.key === 'pass2_edited') {
+                    // Interpolated frames don't have a separate edited file —
+                    // show the pass2 image (which was derived from edited keyframes)
+                    imageUrl = api.passImageUrl(characterId, animName, frame.index, 'pass2');
                   } else if (isEditCol) {
                     imageUrl = api.passImageUrl(characterId, animName, frame.index, col.key);
                   } else {
