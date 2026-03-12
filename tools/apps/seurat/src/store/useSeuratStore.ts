@@ -1441,94 +1441,28 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         interpResults.set(idxA, intermediates);
       }
 
-      // Fill in placeholder frames in the existing manifest structure.
-      // If placeholders already exist (from createDefaultManifest), update them in place.
-      // If not (legacy manifest), build a new frames array with interpolated frames inserted.
-      const hasPlaceholders = anim.frames.some((f) => f.keyframe === false);
-
+      // Fill in placeholder frames. Walk through frames — each keyframe is
+      // followed by (multiplier-1) interpolation placeholder slots.
       const updated = structuredClone(manifest);
       const updatedAnim = updated.animations.find((a) => a.name === animName)!;
 
-      if (hasPlaceholders) {
-        // Placeholders exist — fill them in. Walk through frames, each keyframe
-        // is followed by (multiplier-1) interpolation slots.
-        let keyIdx = 0;
-        for (let i = 0; i < updatedAnim.frames.length; i++) {
-          const frame = updatedAnim.frames[i];
-          if (frame.keyframe !== false) {
-            // This is a keyframe — the interp slots follow it
-            const interps = interpResults.get(keyIdx);
-            if (interps) {
-              for (let j = 0; j < interps.length && i + 1 + j < updatedAnim.frames.length; j++) {
-                const slot = updatedAnim.frames[i + 1 + j];
-                if (slot.keyframe === false) {
-                  slot.status = 'generated';
-                  slot.source = 'ai';
-                  slot.pipeline_stage = 'pass2';
-                  // Save the interpolated image
-                  await api.savePassImage(characterId, animName, slot.index, 'pass2', interps[j]);
-                }
+      let keyIdx = 0;
+      for (let i = 0; i < updatedAnim.frames.length; i++) {
+        const frame = updatedAnim.frames[i];
+        if (frame.keyframe !== false) {
+          const interps = interpResults.get(keyIdx);
+          if (interps) {
+            for (let j = 0; j < interps.length && i + 1 + j < updatedAnim.frames.length; j++) {
+              const slot = updatedAnim.frames[i + 1 + j];
+              if (slot.keyframe === false) {
+                slot.status = 'generated';
+                slot.source = 'ai';
+                slot.pipeline_stage = 'pass2';
+                await api.savePassImage(characterId, animName, slot.index, 'pass2', interps[j]);
               }
             }
-            keyIdx++;
           }
-        }
-      } else {
-        // No placeholders — build new frames array (legacy path)
-        const newFrames: typeof anim.frames = [];
-        let newIndex = 0;
-
-        for (let i = 0; i < keyframes.length; i++) {
-          const orig = keyframes[i];
-          const oldIndex = orig.index;
-          newFrames.push({
-            ...orig,
-            index: newIndex,
-            tile_id: anim.row * updated.spritesheet.columns + newIndex,
-            duration: (orig.duration ?? 0.12) / multiplier,
-            keyframe: true,
-          });
-
-          // Copy pass images to new index if changed
-          if (newIndex !== oldIndex) {
-            for (const pass of ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'] as PipelineStage[]) {
-              try {
-                const bytes = await api.fetchPassImageBytes(characterId, animName, oldIndex, pass);
-                await api.savePassImage(characterId, animName, newIndex, pass, bytes);
-              } catch { /* skip */ }
-            }
-          }
-          newIndex++;
-
-          // Insert interpolated frames
-          const interps = interpResults.get(i);
-          if (interps) {
-            for (let j = 0; j < interps.length; j++) {
-              newFrames.push({
-                index: newIndex,
-                tile_id: anim.row * updated.spritesheet.columns + newIndex,
-                duration: (orig.duration ?? 0.12) / multiplier,
-                status: 'generated' as const,
-                source: 'ai' as const,
-                file: `${animName}/${animName}_interp_${i}_${j}.png`,
-                pipeline_stage: 'pass2' as PipelineStage,
-                keyframe: false,
-              });
-              await api.savePassImage(characterId, animName, newIndex, 'pass2', interps[j]);
-              newIndex++;
-            }
-          }
-        }
-
-        updatedAnim.frames = newFrames;
-        // Update columns to fit
-        const maxFrames = Math.max(...updated.animations.map((a) => a.frames.length));
-        updated.spritesheet.columns = Math.max(updated.spritesheet.columns, maxFrames);
-        // Recalculate tile_ids
-        for (const a of updated.animations) {
-          for (const f of a.frames) {
-            f.tile_id = a.row * updated.spritesheet.columns + f.index;
-          }
+          keyIdx++;
         }
       }
 
@@ -1552,41 +1486,18 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const anim = manifest.animations.find((a) => a.name === animName);
     if (!anim) return;
 
-    // Filter to keyframes only
-    const keyframes = anim.frames.filter((f) => f.keyframe !== false);
-    if (keyframes.length === anim.frames.length) return; // nothing to revert
+    // Reset interpolation placeholders back to pending
+    const hasFilledSlots = anim.frames.some((f) => f.keyframe === false && f.status === 'generated');
+    if (!hasFilledSlots) return; // nothing to revert
 
-    // Restore original duration (inverse of what interpolation did)
-    const interpFrameCount = anim.frames.length;
-    const keyframeCount = keyframes.length;
-    const multiplier = Math.round(interpFrameCount / keyframeCount);
-    const origDuration = (keyframes[0]?.duration ?? 0.12) * multiplier;
-
-    // Re-index keyframes
-    const restoredFrames = keyframes.map((f, i) => ({
-      ...f,
-      index: i,
-      tile_id: anim.row * manifest.spritesheet.columns + i,
-      duration: origDuration,
-      keyframe: true,
-    }));
-
-    // Recalculate columns (max across all animations)
     const updated = structuredClone(manifest);
     const updatedAnim = updated.animations.find((a) => a.name === animName)!;
-    updatedAnim.frames = restoredFrames;
 
-    // Find max frame count across all animations for columns
-    let maxFrames = 0;
-    for (const a of updated.animations) {
-      maxFrames = Math.max(maxFrames, a.frames.length);
-    }
-    updated.spritesheet.columns = Math.max(4, maxFrames);
-
-    // Re-assign tile_ids with updated columns
-    for (const a of updated.animations) {
-      for (const f of a.frames) {
-        f.tile_id = a.row * updated.spritesheet.columns + f.index;
+    for (const frame of updatedAnim.frames) {
+      if (frame.keyframe === false) {
+        frame.status = 'pending';
+        frame.source = 'placeholder';
+        frame.pipeline_stage = undefined;
       }
     }
 
