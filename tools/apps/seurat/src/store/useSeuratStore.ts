@@ -1220,12 +1220,15 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     if (!anim) return;
 
     const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-    // Filter out interpolation placeholders — only generate for keyframes
+    // Filter out interpolation placeholders for pass1/pass2 (AI generation) —
+    // but allow pass3 (client-side pixelization) to run on all frames including interpolated ones.
     const allIndices = frameIndices ?? anim.frames.map((f) => f.index);
-    const indices = allIndices.filter((idx) => {
-      const frame = anim.frames.find((f) => f.index === idx);
-      return !frame || frame.keyframe !== false;
-    });
+    const indices = pass === 'pass3'
+      ? allIndices
+      : allIndices.filter((idx) => {
+          const frame = anim.frames.find((f) => f.index === idx);
+          return !frame || frame.keyframe !== false;
+        });
 
     const { buildFramePrompt, buildNegativePrompt, buildPass2Prompt, buildPass2NegativePrompt } = await import('../lib/ai-generate.js');
     const { getPose, renderPoseToPng } = await import('../lib/pose-templates.js');
