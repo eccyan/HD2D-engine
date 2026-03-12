@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ViewDirection } from '@vulkan-game-tools/asset-types';
 import { VIEW_DIRECTIONS, DIRECTION_TO_VIEW } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
+import { DEFAULT_AI_CONFIG } from '../../store/types.js';
 import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
 import { NumericInput } from '../NumericInput.js';
 
@@ -94,12 +95,15 @@ export function GenerateActions({ animName }: Props) {
         <Row>
           <label style={styles.label}>Steps</label>
           <NumericInput value={aiConfig.steps} onChange={(v) => setAIConfig({ steps: v })} integer min={1} max={100} fallback={20} style={{ ...styles.input, width: 50 }} />
+          <ResetBtn field="steps" current={aiConfig.steps} onReset={(v) => setAIConfig({ steps: v })} />
           <label style={styles.label}>CFG</label>
           <NumericInput value={aiConfig.cfg} onChange={(v) => setAIConfig({ cfg: v })} min={1} max={30} step={0.5} fallback={7} style={{ ...styles.input, width: 50 }} />
+          <ResetBtn field="cfg" current={aiConfig.cfg} onReset={(v) => setAIConfig({ cfg: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Seed</label>
           <NumericInput value={aiConfig.seed} onChange={(v) => setAIConfig({ seed: v })} integer min={-1} fallback={-1} style={{ ...styles.input, width: 80 }} />
+          <ResetBtn field="seed" current={aiConfig.seed} onReset={(v) => setAIConfig({ seed: v })} />
           <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>-1=rng</span>
         </Row>
         <Row>
@@ -107,6 +111,7 @@ export function GenerateActions({ animName }: Props) {
           <select value={aiConfig.sampler} onChange={(e) => setAIConfig({ sampler: e.target.value })} style={styles.select}>
             {SAMPLER_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
+          <ResetBtn field="sampler" current={aiConfig.sampler} onReset={(v) => setAIConfig({ sampler: v })} />
         </Row>
         {/* Denoise only used in non-IP-Adapter modes (img2img / ControlNet) */}
         {!aiConfig.useIPAdapter && (
@@ -114,6 +119,7 @@ export function GenerateActions({ animName }: Props) {
             <label style={styles.label}>Denoise</label>
             <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.denoise} onChange={(e) => setAIConfig({ denoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
             <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.denoise.toFixed(2)}</span>
+            <ResetBtn field="denoise" current={aiConfig.denoise} onReset={(v) => setAIConfig({ denoise: v })} />
           </Row>
         )}
       </div>
@@ -183,6 +189,7 @@ export function GenerateActions({ animName }: Props) {
           <label style={styles.label}>Strength</label>
           <input type="range" min={0} max={1.5} step={0.05} value={aiConfig.controlStrength} onChange={(e) => setAIConfig({ controlStrength: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.controlStrength.toFixed(2)}</span>
+          <ResetBtn field="controlStrength" current={aiConfig.controlStrength} onReset={(v) => setAIConfig({ controlStrength: v })} />
         </Row>
         <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
           Tiles concept art and uses ControlNet to keep character consistent across frames. Clear model name to disable.
@@ -196,12 +203,14 @@ export function GenerateActions({ animName }: Props) {
           <label style={styles.label}>IP Weight</label>
           <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.ipAdapterWeight} onChange={(e) => setAIConfig({ ipAdapterWeight: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.ipAdapterWeight.toFixed(2)}</span>
+          <ResetBtn field="ipAdapterWeight" current={aiConfig.ipAdapterWeight} onReset={(v) => setAIConfig({ ipAdapterWeight: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Preset</label>
           <select value={aiConfig.ipAdapterPreset} onChange={(e) => setAIConfig({ ipAdapterPreset: e.target.value })} style={styles.select}>
             {['LIGHT - SD1.5 only (low strength)', 'STANDARD (medium strength)', 'VIT-G (medium strength)', 'PLUS (high strength)', 'PLUS FACE (portraits)', 'FULL FACE - SD1.5 only (portraits stronger)'].map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
+          <ResetBtn field="ipAdapterPreset" current={aiConfig.ipAdapterPreset} onReset={(v) => setAIConfig({ ipAdapterPreset: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Pose Model</label>
@@ -216,14 +225,17 @@ export function GenerateActions({ animName }: Props) {
           <label style={styles.label}>Pose Str</label>
           <input type="range" min={0.1} max={1.5} step={0.05} value={aiConfig.openPoseStrength} onChange={(e) => setAIConfig({ openPoseStrength: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.openPoseStrength.toFixed(2)}</span>
+          <ResetBtn field="openPoseStrength" current={aiConfig.openPoseStrength} onReset={(v) => setAIConfig({ openPoseStrength: v })} />
         </Row>
         <Row>
           <label style={styles.label}>IPA Range</label>
           <input type="range" min={0.0} max={1.0} step={0.05} value={aiConfig.ipAdapterStartAt} onChange={(e) => setAIConfig({ ipAdapterStartAt: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.ipAdapterStartAt.toFixed(2)}</span>
+          <ResetBtn field="ipAdapterStartAt" current={aiConfig.ipAdapterStartAt} onReset={(v) => setAIConfig({ ipAdapterStartAt: v })} />
           <span style={{ fontSize: 9, color: '#666', fontFamily: 'monospace' }}>-</span>
           <input type="range" min={0.0} max={1.0} step={0.05} value={aiConfig.ipAdapterEndAt} onChange={(e) => setAIConfig({ ipAdapterEndAt: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.ipAdapterEndAt.toFixed(2)}</span>
+          <ResetBtn field="ipAdapterEndAt" current={aiConfig.ipAdapterEndAt} onReset={(v) => setAIConfig({ ipAdapterEndAt: v })} />
         </Row>
         <Row>
           <label style={{ ...styles.label, minWidth: 'auto' }}>
@@ -287,11 +299,13 @@ export function GenerateActions({ animName }: Props) {
           <label style={styles.label}>Chibi Wt</label>
           <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.chibiWeight} onChange={(e) => setAIConfig({ chibiWeight: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.chibiWeight.toFixed(2)}</span>
+          <ResetBtn field="chibiWeight" current={aiConfig.chibiWeight} onReset={(v) => setAIConfig({ chibiWeight: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Chibi Den</label>
           <input type="range" min={0.2} max={0.8} step={0.05} value={aiConfig.chibiDenoise} onChange={(e) => setAIConfig({ chibiDenoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.chibiDenoise.toFixed(2)}</span>
+          <ResetBtn field="chibiDenoise" current={aiConfig.chibiDenoise} onReset={(v) => setAIConfig({ chibiDenoise: v })} />
         </Row>
         <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
           Lower = closer to posed concept, higher = more chibi style.
@@ -316,6 +330,7 @@ export function GenerateActions({ animName }: Props) {
             <label style={styles.label}>Pixel Den</label>
             <input type="range" min={0.1} max={0.7} step={0.05} value={aiConfig.pixelPassDenoise} onChange={(e) => setAIConfig({ pixelPassDenoise: parseFloat(e.target.value) })} style={{ flex: 1 }} />
             <span style={{ fontSize: 9, color: '#888', fontFamily: 'monospace' }}>{aiConfig.pixelPassDenoise.toFixed(2)}</span>
+            <ResetBtn field="pixelPassDenoise" current={aiConfig.pixelPassDenoise} onReset={(v) => setAIConfig({ pixelPassDenoise: v })} />
           </Row>
         )}
         <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>
@@ -350,6 +365,7 @@ export function GenerateActions({ animName }: Props) {
             <option value="bislerp">bislerp</option>
             <option value="lanczos">lanczos</option>
           </select>
+          <ResetBtn field="downscaleMethod" current={aiConfig.downscaleMethod} onReset={(v) => setAIConfig({ downscaleMethod: v })} />
         </Row>
       </div>
 
@@ -476,6 +492,28 @@ function Row({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{children}</div>;
 }
 
+function ResetBtn<K extends keyof typeof DEFAULT_AI_CONFIG>({
+  field,
+  current,
+  onReset,
+}: {
+  field: K;
+  current: (typeof DEFAULT_AI_CONFIG)[K];
+  onReset: (value: (typeof DEFAULT_AI_CONFIG)[K]) => void;
+}) {
+  const def = DEFAULT_AI_CONFIG[field];
+  if (current === def) return null;
+  return (
+    <button
+      title={`Reset to default (${def})`}
+      onClick={() => onReset(def)}
+      style={styles.resetBtn}
+    >
+      ↺
+    </button>
+  );
+}
+
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
@@ -564,6 +602,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 8,
     padding: '1px 6px',
     cursor: 'pointer',
+  },
+  resetBtn: {
+    background: 'transparent',
+    border: '1px solid #3a3a5a',
+    borderRadius: 3,
+    color: '#666',
+    fontSize: 10,
+    padding: '0px 3px',
+    cursor: 'pointer',
+    lineHeight: '14px',
+    flexShrink: 0,
   },
   jobRow: {
     display: 'flex',
