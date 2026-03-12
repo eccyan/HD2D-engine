@@ -381,6 +381,8 @@ A parameter sweep of 14 experiments (56 frames total) was conducted. See `tools/
 
 6. **GPU recommendation**: For production use, an NVIDIA GPU avoids all MPS precision issues. The black image problem is entirely an Apple Silicon limitation.
 
+7. **RIFE frame interpolation**: ComfyUI-Frame-Interpolation provides the `RIFE VFI` node for AI-powered in-between frame generation. On MPS, use `dtype: float32` (consistent with `--force-fp32`). The `rife47.pth` checkpoint is recommended — `rife49.pth` has unreliable download mirrors. Models go in `custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/`. Install with `requirements-no-cupy.txt` (cupy is CUDA-only). Seurat auto-detects the node class name and queries its schema to handle version differences.
+
 ## Script Location
 
 The generation script is at: `/tmp/generate_medieval_rpg_final.mjs`

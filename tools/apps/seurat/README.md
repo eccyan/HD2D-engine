@@ -71,6 +71,19 @@ Place these in your ComfyUI `models/` directories:
 |------|---------|---------|
 | [ComfyUI_IPAdapter_plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) | IP-Adapter support | `git clone` into `custom_nodes/` |
 | [ComfyUI-BRIA_AI-RMBG](https://github.com/ZHO-ZHO-ZHO/ComfyUI-BRIA_AI-RMBG) | Background removal | `git clone` into `custom_nodes/`, download `model.pth` into `RMBG-1.4/` |
+| [ComfyUI-Frame-Interpolation](https://github.com/Fannovel16/ComfyUI-Frame-Interpolation) | RIFE frame interpolation | `git clone` into `custom_nodes/`, `pip install -r requirements-no-cupy.txt` (or `requirements-with-cupy.txt` for CUDA), restart ComfyUI |
+
+#### RIFE Frame Interpolation Models
+
+ComfyUI-Frame-Interpolation downloads RIFE models on first use. Available checkpoints:
+
+| Model | Architecture | Notes |
+|-------|-------------|-------|
+| `rife47.pth` | RIFE v4.7 | Recommended — reliable downloads |
+| `rife49.pth` | RIFE v4.7 | May fail to download from mirrors |
+| `sudo_rife4_269.662_testV1_scale1.pth` | RIFE v4.0 | Alternative |
+
+Models are stored in `ComfyUI/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/`. If auto-download fails, manually place the `.pth` file there.
 
 ### ComfyUI Settings (in Seurat UI)
 
@@ -128,6 +141,27 @@ Background removal operates at multiple stages:
 
 Frame prompts use `plain white background, solid color background` (SD 1.5 handles solid white reliably) and negative prompts include environment-related terms (`detailed background, room, interior, exterior, furniture, floor, wall, ceiling, sky, ground, environment`).
 
+### Frame Interpolation
+
+Generates in-between frames from existing pass 2 (chibi) outputs to create smoother animations. Interpolation sits between Pass 2 and Pass 3 in the pipeline, operating on 512x512 frames before pixelization.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Method** | Canvas Blend | `Canvas Blend` — instant client-side alpha crossfade. `RIFE (ComfyUI)` — AI-powered optical flow interpolation via RIFE VFI node (requires ComfyUI-Frame-Interpolation). |
+| **Multiplier** | 2x | Number of output frames per original pair: 2x doubles frame count, 3x triples, 4x quadruples. |
+| **RIFE Model** | `rife47` | RIFE checkpoint to use (only relevant when method is RIFE). |
+
+**Keyframe tracking**: Original frames are marked `keyframe: true`, interpolated frames `keyframe: false`. The grid shows interpolated frames at reduced opacity with an "interp" badge. Use **Revert to Keyframes** to discard interpolated frames and restore originals.
+
+**Workflow**:
+1. Generate Pass 1 + Pass 2 frames as usual
+2. Select interpolation method and multiplier
+3. Click **Interpolate** — in-between frames are generated and inserted into the manifest
+4. Run Pass 3 (pixelization) on all frames including interpolated ones
+5. Assemble atlas — the spritesheet columns expand to accommodate the new frame count
+
+**Canvas Blend** is fast and requires no external dependencies — use it for quick previews. **RIFE** produces higher quality motion-aware interpolation but requires ComfyUI with the Frame-Interpolation custom node. Seurat auto-detects the available RIFE node variant (`RIFE VFI`, `VFI_RIFE`, or `RIFEInterpolation`) and queries its schema for required inputs.
+
 ## Generation Modes
 
 Seurat automatically selects the generation mode based on available assets and settings:
@@ -184,9 +218,11 @@ The main pane shows an animation preview when an animation is selected:
 1. **Create a character** via the tree's "+ New Character" button
 2. **Set up concept art** — describe the character, configure style prompt, generate or upload concept art (per-direction: front, back, right, left)
 3. **Generate chibi** — generate chibi versions from concept art using IP-Adapter for character identity; adjust IP-Adapter weight/end_at for the balance between chibi proportions and concept fidelity
-4. **Generate sprites** — select an animation, configure ComfyUI settings, generate frames
-5. **Review frames** — approve, reject, or regenerate individual frames
-6. **Assemble atlas** — validate and build the final spritesheet PNG
+4. **Generate sprites** — select an animation, configure ComfyUI settings, generate frames (Pass 1 + Pass 2)
+5. **(Optional) Interpolate** — generate in-between frames for smoother animation (blend or RIFE)
+6. **Pixelize** — run Pass 3 on all frames (including interpolated) to produce final pixel art
+7. **Review frames** — approve, reject, or regenerate individual frames
+8. **Assemble atlas** — validate and build the final spritesheet PNG
 
 ## Architecture
 
@@ -200,6 +236,7 @@ seurat/
 │   ├── lib/
 │   │   ├── ai-generate.ts           # Prompt builders (frame, row, negative)
 │   │   ├── bridge-api.ts            # REST API client for bridge server
+│   │   ├── frame-interpolate.ts     # Client-side blend interpolation (OffscreenCanvas)
 │   │   ├── frame-utils.ts           # Animation timing helpers
 │   │   └── pose-templates.ts        # OpenPose skeleton data + renderer
 │   ├── components/
