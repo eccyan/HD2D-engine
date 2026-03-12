@@ -2538,6 +2538,75 @@ export class ComfyUIClient implements ImageProvider {
   }
 
   /**
+   * Warmup: run a minimal 1-step inference to force ComfyUI to load all models
+   * (checkpoint, IP-Adapter, OpenPose ControlNet, VAE) into memory.
+   * On Apple Silicon MPS, the first inference after model load can produce
+   * degraded results; this warmup absorbs that cost before real generation.
+   * The result is discarded.
+   */
+  async warmupIPAdapter(
+    conceptImage: Uint8Array,
+    poseImage: Uint8Array,
+    opts: {
+      checkpoint?: string;
+      vae?: string;
+      ipAdapterPreset?: string;
+      openPoseModel?: string;
+      samplerName?: string;
+    } = {},
+  ): Promise<void> {
+    try {
+      console.log("[ComfyUI] Running warmup inference (1 step) to pre-load models...");
+      const conceptImageName = await this.uploadImage(conceptImage);
+      const poseImageName = await this.uploadImage(poseImage);
+
+      const openPoseModel = (opts.openPoseModel ?? "control_v11p_sd15_openpose").includes(".")
+        ? opts.openPoseModel!
+        : `${opts.openPoseModel ?? "control_v11p_sd15_openpose"}.pth`;
+
+      const workflow = buildIPAdapterPoseWorkflow({
+        prompt: "full body character",
+        negativePrompt: "",
+        width: 128,
+        height: 128,
+        steps: 1,
+        seed: 0,
+        cfg: 1,
+        samplerName: opts.samplerName ?? "euler",
+        loras: [],
+        checkpoint: opts.checkpoint,
+        vae: opts.vae,
+        conceptImageName,
+        poseImageName,
+        denoise: 1.0,
+        ipAdapterWeight: 0.5,
+        ipAdapterPreset: opts.ipAdapterPreset ?? "PLUS (high strength)",
+        ipAdapterStartAt: 0.0,
+        ipAdapterEndAt: 1.0,
+        openPoseModel,
+        openPoseStrength: 0.5,
+      });
+
+      const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: workflow } as PromptRequest),
+      });
+
+      if (!submitResponse.ok) {
+        console.warn("[ComfyUI] Warmup submit failed, continuing without warmup");
+        return;
+      }
+
+      const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+      await this.pollForCompletion(prompt_id);
+      console.log("[ComfyUI] Warmup complete — models loaded into memory");
+    } catch (err) {
+      console.warn("[ComfyUI] Warmup failed (non-fatal), continuing:", err);
+    }
+  }
+
+  /**
    * Two-pass IP-Adapter generation with retry on blank results.
    */
   async generateTwoPassIPAdapterWithRetry(

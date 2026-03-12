@@ -1524,6 +1524,18 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           ? (get().poseOverrides[`${animName}:${frameIndex}`] ?? getPose(animName, frameIndex))
           : null;
 
+        // Warmup: pre-load models before the real generation
+        if (aiConfig.useIPAdapter && pose && (singlePassRef || conceptBytes)) {
+          const warmupPose = await renderPoseToPng(pose, 128, 128);
+          await comfy.warmupIPAdapter(singlePassRef ?? conceptBytes!, warmupPose, {
+            checkpoint: aiConfig.checkpoint,
+            vae: aiConfig.vae,
+            ipAdapterPreset: aiConfig.ipAdapterPreset,
+            openPoseModel: aiConfig.openPoseModel,
+            samplerName: aiConfig.sampler,
+          });
+        }
+
         if (canTwoPass && pose) {
           // Two-pass mode: Concept→Pose→Chibi→Pixel (direction-aware refs)
           const genSize = 512;
@@ -1622,6 +1634,26 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         // all_pending — collect animations that have pending frames
         for (const a of manifest.animations) {
           if (a.frames.some((f) => f.status === 'pending')) animsToGenerate.push(a.name);
+        }
+      }
+
+      // Warmup: run a tiny 1-step inference to pre-load models (checkpoint,
+      // IP-Adapter, OpenPose ControlNet) into GPU memory. On Apple Silicon MPS,
+      // the first inference after model load often produces degraded results.
+      if (aiConfig.useIPAdapter && animsToGenerate.length > 0) {
+        const firstAnim = manifest.animations.find((a) => a.name === animsToGenerate[0]);
+        if (firstAnim) {
+          const warmupPoses = getAnimationPoses(animsToGenerate[0], firstAnim.frames.length);
+          if (warmupPoses && warmupPoses[0] && (singlePassRef || conceptBytes)) {
+            const warmupPose = await renderPoseToPng(warmupPoses[0], 128, 128);
+            await comfy.warmupIPAdapter(singlePassRef ?? conceptBytes!, warmupPose, {
+              checkpoint: aiConfig.checkpoint,
+              vae: aiConfig.vae,
+              ipAdapterPreset: aiConfig.ipAdapterPreset,
+              openPoseModel: aiConfig.openPoseModel,
+              samplerName: aiConfig.sampler,
+            });
+          }
         }
       }
 
