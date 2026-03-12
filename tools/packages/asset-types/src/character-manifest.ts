@@ -172,7 +172,9 @@ export function createDefaultManifest(
   interpMultiplier = 1,
 ): CharacterManifest {
   const mult = Math.max(1, Math.round(interpMultiplier));
-  const totalFramesPerClip = framesPerClip + (framesPerClip - 1) * (mult - 1);
+  // Each keyframe is followed by (mult-1) interp slots; for looping anims the
+  // last keyframe also wraps back to the first, so it gets slots too.
+  const totalFramesPerClip = framesPerClip * mult;
   const effectiveColumns = mult > 1 ? totalFramesPerClip : columns;
   const animations: CharacterAnimation[] = [];
   let row = 0;
@@ -195,20 +197,19 @@ export function createDefaultManifest(
         });
         frameIdx++;
 
-        // Interpolation placeholders between keyframes (not after the last one)
-        if (f < framesPerClip - 1) {
-          for (let j = 0; j < mult - 1; j++) {
-            frames.push({
-              index: frameIdx,
-              tile_id: row * effectiveColumns + frameIdx,
-              duration: STATE_DURATIONS[state] / mult,
-              status: "pending",
-              source: "placeholder",
-              file: `${state}_${dir}_f${frameIdx}.png`,
-              keyframe: false,
-            });
-            frameIdx++;
-          }
+        // Interpolation placeholders after each keyframe (including the last
+        // one, since all animations loop and need last→first interpolation)
+        for (let j = 0; j < mult - 1; j++) {
+          frames.push({
+            index: frameIdx,
+            tile_id: row * effectiveColumns + frameIdx,
+            duration: STATE_DURATIONS[state] / mult,
+            status: "pending",
+            source: "placeholder",
+            file: `${state}_${dir}_f${frameIdx}.png`,
+            keyframe: false,
+          });
+          frameIdx++;
         }
       }
       animations.push({ name, state, direction: dir, row, loop: true, frames });

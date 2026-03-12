@@ -158,8 +158,10 @@ function buildDisplayFrames(anim: CharacterAnimation, interpMultiplier: number):
       displayIndex: displayIdx,
       isInterpolated: false,
     });
-    // Insert (mult - 1) virtual placeholders after each keyframe (except after the last)
-    if (i < anim.frames.length - 1) {
+    // Insert (mult - 1) virtual placeholders after each keyframe.
+    // For looping anims the last keyframe also gets slots (last→first interp).
+    const addSlots = (i < anim.frames.length - 1) || anim.loop;
+    if (addSlots) {
       for (let j = 1; j < mult; j++) {
         result.push({
           frame: null,
