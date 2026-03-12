@@ -28,6 +28,10 @@ export function PipelineControls({ animName }: Props) {
   const promptOverride = useSeuratStore((s) => s.promptOverride);
   const setPromptOverride = useSeuratStore((s) => s.setPromptOverride);
 
+  const interpolateAnimation = useSeuratStore((s) => s.interpolateAnimation);
+  const revertInterpolation = useSeuratStore((s) => s.revertInterpolation);
+  const interpProgress = useSeuratStore((s) => s.interpProgress);
+
   const selectedIndices = useSelectedFrameIndices();
 
   const availableVaes = useSeuratStore((s) => s.availableVaes);
@@ -166,6 +170,90 @@ export function PipelineControls({ animName }: Props) {
           <span style={styles.valueLabel}>{aiConfig.chibiDenoise.toFixed(2)}</span>
           <ResetBtn field="chibiDenoise" current={aiConfig.chibiDenoise} onReset={(v) => setAIConfig({ chibiDenoise: v })} />
         </Row>
+      </div>
+
+      {/* Interpolation */}
+      <div style={styles.section}>
+        <div style={styles.subTitle}>Interpolation</div>
+        {(() => {
+          const hasPass2 = stageCounts.pass2 > 0;
+          const hasInterpolated = anim.frames.some((f) => f.keyframe === false);
+          const interpFrameCount = anim.frames.length;
+          const keyframeCount = anim.frames.filter((f) => f.keyframe !== false).length;
+
+          return (
+            <>
+              <Row>
+                <label style={styles.label}>Method</label>
+                <select
+                  value={aiConfig.interpMethod}
+                  onChange={(e) => setAIConfig({ interpMethod: e.target.value as 'blend' | 'rife' })}
+                  style={{ ...styles.select, flex: 1 }}
+                >
+                  <option value="blend">Canvas Blend</option>
+                  <option value="rife">RIFE (ComfyUI)</option>
+                </select>
+              </Row>
+              <Row>
+                <label style={styles.label}>Multiply</label>
+                {[2, 3, 4].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setAIConfig({ interpMultiplier: m })}
+                    style={{
+                      ...styles.clearBtn,
+                      background: aiConfig.interpMultiplier === m ? '#2a3a5a' : '#2a2a3a',
+                      color: aiConfig.interpMultiplier === m ? '#90b8f8' : '#888',
+                      border: aiConfig.interpMultiplier === m ? '1px solid #4a8af8' : '1px solid #444',
+                    }}
+                  >
+                    {m}x
+                  </button>
+                ))}
+              </Row>
+              <div style={styles.statusText}>
+                {hasInterpolated
+                  ? `${keyframeCount} keyframes + ${interpFrameCount - keyframeCount} interpolated = ${interpFrameCount} total`
+                  : `${totalFrames} frames → ${totalFrames + (totalFrames - (anim.loop ? 0 : 1)) * (aiConfig.interpMultiplier - 1)} frames`
+                }
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => interpolateAnimation(animName)}
+                  disabled={!hasPass2 || !!generating}
+                  style={{
+                    ...styles.passBtn,
+                    borderColor: '#b080f0',
+                    color: '#c8a8f8',
+                    opacity: (!hasPass2 || generating) ? 0.5 : 1,
+                    flex: 1,
+                  }}
+                >
+                  Interpolate
+                </button>
+                {hasInterpolated && (
+                  <button
+                    onClick={() => revertInterpolation(animName)}
+                    disabled={!!generating}
+                    style={{
+                      ...styles.passBtn,
+                      borderColor: '#886',
+                      color: '#aa8',
+                      opacity: generating ? 0.5 : 1,
+                    }}
+                  >
+                    Revert
+                  </button>
+                )}
+              </div>
+              {interpProgress && (
+                <div style={{ fontFamily: 'monospace', fontSize: 8, color: '#b080f0' }}>
+                  {interpProgress}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Pass 3: Pixelize */}

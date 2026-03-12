@@ -238,6 +238,8 @@ export function FramePipelineGrid({ animName }: Props) {
           const isSelected = selectedFrames.has(frame.index);
           const stage = frame.pipeline_stage;
 
+          const isInterpolated = frame.keyframe === false;
+
           return (
             <div
               key={frame.index}
@@ -246,6 +248,7 @@ export function FramePipelineGrid({ animName }: Props) {
                 ...styles.frameRow,
                 gridTemplateColumns: `60px repeat(${colCount}, 1fr)`,
                 background: isSelected ? '#1a2a3a' : undefined,
+                opacity: isInterpolated ? 0.6 : 1,
               }}
             >
               {/* Frame index + selection */}
@@ -263,10 +266,10 @@ export function FramePipelineGrid({ animName }: Props) {
                 <span style={styles.frameIndexLabel}>f{frame.index}</span>
                 <span style={{
                   ...styles.badge,
-                  borderColor: stageBadgeColor(stage),
-                  color: stageBadgeColor(stage),
+                  borderColor: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
+                  color: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
                 }}>
-                  {stageBadgeLabel(stage)}
+                  {isInterpolated ? 'interp' : stageBadgeLabel(stage)}
                 </span>
               </div>
 

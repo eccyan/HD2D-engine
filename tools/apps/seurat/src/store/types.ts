@@ -51,6 +51,9 @@ export interface AIConfig {
   animFrameCount: number;
   animFrameRate: number;
   animContextLength: number;
+  interpMethod: 'blend' | 'rife';
+  interpMultiplier: number;
+  rifeModel: string;
 }
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
@@ -85,6 +88,9 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   animFrameCount: 8,
   animFrameRate: 8,
   animContextLength: 16,
+  interpMethod: 'blend',
+  interpMultiplier: 2,
+  rifeModel: 'rife-v4.6',
 };
 
 export interface GenerationJob {

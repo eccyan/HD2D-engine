@@ -50,6 +50,7 @@ export interface CharacterFrame {
   source: FrameSource;
   file: string; // relative path within character directory
   pipeline_stage?: PipelineStage;
+  keyframe?: boolean;
   generation?: FrameGeneration;
   review?: FrameReview;
 }

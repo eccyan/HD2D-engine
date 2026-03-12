@@ -2751,6 +2751,161 @@ export class ComfyUIClient implements ImageProvider {
   }
 
   /**
+   * Interpolate between two frames using RIFE VFI (Video Frame Interpolation).
+   * Requires ComfyUI-Frame-Interpolation custom nodes.
+   *
+   * @param frameA     - PNG bytes of the first frame
+   * @param frameB     - PNG bytes of the second frame
+   * @param opts       - Optional: model name, multiplier (default 2)
+   * @returns Array of only the intermediate frames (excludes A and B)
+   */
+  async interpolateFramesRIFE(
+    frameA: Uint8Array,
+    frameB: Uint8Array,
+    opts?: { model?: string; multiplier?: number },
+  ): Promise<Uint8Array[]> {
+    const model = opts?.model ?? 'rife-v4.6';
+    const multiplier = opts?.multiplier ?? 2;
+
+    // Upload both frames
+    const [nameA, nameB] = await Promise.all([
+      this.uploadImage(frameA),
+      this.uploadImage(frameB),
+    ]);
+
+    // Build workflow: LoadImage -> ImageBatch -> VFI_RIFE -> SaveImage
+    const workflow: Record<string, WorkflowNode> = {
+      "1": {
+        class_type: "LoadImage",
+        inputs: { image: nameA },
+      },
+      "2": {
+        class_type: "LoadImage",
+        inputs: { image: nameB },
+      },
+      "3": {
+        class_type: "ImageBatch",
+        inputs: {
+          image1: ["1", 0],
+          image2: ["2", 0],
+        },
+      },
+      "4": {
+        class_type: "VFI_RIFE",
+        inputs: {
+          ckpt_name: `${model}.pth`,
+          frames: ["3", 0],
+          clear_cache_after_n_frames: 10,
+          multiplier,
+          fast_mode: true,
+          ensemble: false,
+          scale_factor: 1.0,
+        },
+      },
+      "9": {
+        class_type: "SaveImage",
+        inputs: {
+          images: ["4", 0],
+          filename_prefix: "rife_interp",
+        },
+      },
+    };
+
+    // Submit
+    const submitBody: PromptRequest = { prompt: workflow };
+    const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitBody),
+    });
+
+    if (!submitResponse.ok) {
+      const text = await submitResponse.text().catch(() => "(no body)");
+      throw new Error(
+        `ComfyUI RIFE prompt submission failed: HTTP ${submitResponse.status} ${submitResponse.statusText} — ${text}`
+      );
+    }
+
+    const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+
+    // Poll for all output images
+    const allImages = await this.pollForMultipleImages(prompt_id);
+
+    // Fetch intermediate frame bytes (skip first = A and last = B)
+    const intermediates = allImages.slice(1, -1);
+    const results: Uint8Array[] = [];
+    for (const img of intermediates) {
+      const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
+        img.filename
+      )}&subfolder=${encodeURIComponent(img.subfolder)}&type=${encodeURIComponent(
+        img.type
+      )}`;
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error(
+          `ComfyUI RIFE image fetch failed: HTTP ${imageResponse.status}`
+        );
+      }
+      results.push(new Uint8Array(await imageResponse.arrayBuffer()));
+    }
+
+    return results;
+  }
+
+  /**
+   * Poll until a prompt completes and return ALL output images across all nodes.
+   */
+  private async pollForMultipleImages(promptId: string): Promise<HistoryImageFile[]> {
+    const deadline = Date.now() + this.pollTimeoutMs;
+
+    while (Date.now() < deadline) {
+      await sleep(this.pollIntervalMs);
+
+      const response = await fetch(`${this.baseUrl}/history/${promptId}`);
+      if (!response.ok) continue;
+
+      const history = (await response.json()) as HistoryResponse;
+      const entry = history[promptId];
+      if (!entry) continue;
+
+      if (entry.status.status_str === "error") {
+        const errorMsg = entry.status.messages
+          ?.filter(([type]) => type === "execution_error")
+          .map(([, data]) => {
+            const nodeType = data.node_type ?? "unknown";
+            const msg = data.exception_message ?? "unknown error";
+            return `${nodeType}: ${msg}`;
+          })
+          .join("; ");
+        throw new Error(
+          `ComfyUI RIFE error for prompt ${promptId}${errorMsg ? `: ${errorMsg}` : ""}`
+        );
+      }
+
+      if (!entry.status.completed) continue;
+
+      const images: HistoryImageFile[] = [];
+      for (const nodeOutput of Object.values(entry.outputs)) {
+        if (nodeOutput.images) {
+          images.push(...nodeOutput.images);
+        }
+      }
+
+      if (images.length === 0) {
+        throw new Error(
+          `ComfyUI RIFE prompt ${promptId} completed but produced no image outputs`
+        );
+      }
+
+      return images;
+    }
+
+    throw new Error(
+      `ComfyUI RIFE generation timed out after ${this.pollTimeoutMs}ms for prompt ${promptId}`
+    );
+  }
+
+  /**
    * List available AnimateDiff motion model filenames from ComfyUI.
    * Queries GET /object_info/ADE_LoadAnimateDiffModel.
    */
