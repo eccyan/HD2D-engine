@@ -17,8 +17,8 @@ cd tools/apps/bridge && pnpm dev    # or: pnpm build && node dist/index.js
 # Terminal 2: Seurat dev server
 cd tools/apps/seurat && pnpm dev    # http://localhost:5179
 
-# Terminal 3: ComfyUI (required for generation)
-cd /path/to/ComfyUI && python main.py --listen --enable-cors-header "*"
+# Terminal 3: ComfyUI (required for generation — --force-fp32 needed on Apple Silicon)
+cd tools/ComfyUI && ./venv/bin/python main.py --listen localhost --port 8188 --force-fp32 --enable-cors-header "*"
 ```
 
 ### Ports

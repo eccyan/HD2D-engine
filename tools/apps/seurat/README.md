@@ -7,7 +7,7 @@ Seurat is a browser-based tool for generating, reviewing, and assembling pixel-a
 ```bash
 # 1. Start ComfyUI (must be running for generation)
 cd tools/ComfyUI
-./venv/bin/python main.py --listen localhost --port 8188 --fp32-vae --enable-cors-header "*"
+./venv/bin/python main.py --listen localhost --port 8188 --force-fp32 --enable-cors-header "*"
 
 # 2. Start the bridge server
 cd tools/apps/bridge
@@ -37,7 +37,7 @@ Seurat uses a 3-pane layout:
 
 ## ComfyUI Setup
 
-Seurat requires a running ComfyUI instance with Stable Diffusion 1.5. ComfyUI **must** be started with `--enable-cors-header "*"` since Seurat makes cross-origin requests directly from the browser to the ComfyUI API.
+Seurat requires a running ComfyUI instance with Stable Diffusion 1.5. ComfyUI **must** be started with `--force-fp32 --enable-cors-header "*"`. The `--force-fp32` flag is required on Apple Silicon (MPS) to prevent ControlNet precision issues that cause OpenPose pose guidance to fail. The `--enable-cors-header` flag is needed since Seurat makes cross-origin requests directly from the browser to the ComfyUI API.
 
 ### Required Models
 
@@ -106,7 +106,7 @@ Uses IP-Adapter for character appearance consistency from concept art, combined 
 - **Pose Model**: OpenPose ControlNet model filename (default `control_v11p_sd15_openpose`)
 - **Pose Strength**: OpenPose conditioning strength (0.1–1.5, default 0.80)
 
-When enabled, Seurat generates each frame individually with a programmatically rendered OpenPose skeleton matching the expected pose (idle breathing, walk cycle, run cycle) for each direction and frame index.
+When enabled, Seurat generates each frame individually with a programmatically rendered OpenPose skeleton matching the expected pose (idle breathing, walk cycle, run cycle) for each direction and frame index. Pose skeletons use a **14-keypoint format** (no mid_hip) where neck connects directly to r_hip and l_hip — this is the format OpenPose ControlNet v1.1 expects.
 
 **IP-Adapter embeds_scaling**: Pass-1 identity nodes use `"V only"` — this provides the best character consistency while letting the text prompt control composition, direction, and pose. Pass-2 chibi nodes use `"K+mean(V) w/ C penalty"` to reduce background leakage during style transfer. The `weight_type` is `"linear"` for all passes.
 

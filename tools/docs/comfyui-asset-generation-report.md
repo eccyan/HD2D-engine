@@ -26,10 +26,10 @@ The most significant issue encountered was **black (empty) 512x512 PNG outputs**
 |------|--------|---------------|
 | `--fp32-vae` | Reduces black rate to ~30-40% | No quality loss, slight speed decrease |
 | `--cpu-vae` | Same as fp32-vae (~30-40% black) | No quality loss |
-| `--force-fp32` | Reduces black rate to ~20% | **Degrades quality significantly** — model produces blurry/abstract outputs |
+| `--force-fp32` | Reduces black rate to ~20%, **fixes ControlNet** | Slower, but required for ControlNet (OpenPose) to function correctly on MPS |
 | LoRA loaded | Reduces black rate independently | LoRA presence changes latent space, avoiding some degenerate regions |
 
-**Best solution**: `--fp32-vae` + LoRA + retry with different seeds (prime offset `seed + 7919 * attempt`). With 10 retries, success rate reaches ~99%.
+**Best solution**: `--force-fp32` + LoRA + retry with different seeds (prime offset `seed + 7919 * attempt`). With 10 retries, success rate reaches ~99%. Note: `--force-fp32` is now recommended over `--fp32-vae` because it also fixes ControlNet (OpenPose) precision on MPS — without it, OpenPose ControlNet produces garbage output (head-in-circle instead of full-body poses).
 
 ### 2. LoRA Weight Impact
 
@@ -77,7 +77,7 @@ The same seed + prompt + settings can produce **different outputs** after restar
 LoRA: PixelArtRedmond15V weight=0.85
 Steps: 20 | CFG: 7 | Sampler: euler
 Resolution: 512x512
-ComfyUI flags: --fp32-vae --listen --enable-cors-header '*'
+ComfyUI flags: --force-fp32 --listen --enable-cors-header '*'
 Retry: up to 10 attempts with seed offset +7919*attempt
 ```
 
@@ -207,10 +207,10 @@ const models = await client.listMotionModels();
 
 ```bash
 cd tools/ComfyUI
-./venv/bin/python main.py --listen localhost --port 8188 --fp32-vae --enable-cors-header "*"
+./venv/bin/python main.py --listen localhost --port 8188 --force-fp32 --enable-cors-header "*"
 ```
 
-> **Note**: `--fp32-vae` is sufficient for single-image and two-pass workflows. Use `--force-fp32` only for AnimateDiff (slower but required for temporal attention layers).
+> **Note**: `--force-fp32` is required on Apple Silicon (MPS) for both ControlNet and AnimateDiff. Without it, OpenPose ControlNet produces garbage (head-in-circle closeups instead of full-body posed output) and AnimateDiff produces all-black frames. The older `--fp32-vae` flag only fixes the VAE decoder but not ControlNet precision.
 
 ### Experiment Results
 
@@ -340,8 +340,9 @@ const cleaned = await client.removeBackground(imageBytes, "BRIA_RMBG_Zho");
 
 ### MPS / Apple Silicon Notes
 
-- **`--force-fp32` is required** for the two-pass workflow on MPS. The intermediate VAEEncode/VAEDecode between passes produces all-black images without fp32 precision (`--cpu-vae` is not sufficient).
-- Expect ~40s per frame at 512x512 with 20 steps on Apple Silicon.
+- **`--force-fp32` is required** for all IP-Adapter + OpenPose workflows on MPS. Without full fp32, OpenPose ControlNet fails to control pose (produces head closeups instead of full-body). The intermediate VAEEncode/VAEDecode between passes also produces all-black images without fp32 precision.
+- **OpenPose skeleton format**: Must use **14 keypoints** (no mid_hip). Neck connects directly to r_hip and l_hip. The 15-keypoint format with mid_hip creates a visual topology that ControlNet v1.1 OpenPose does not recognize.
+- Expect ~40s per frame at 512x512 with 30 steps on Apple Silicon.
 
 ### Experiment Results
 
