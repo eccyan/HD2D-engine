@@ -108,6 +108,10 @@ export interface SeuratState {
   ) => Promise<void>;
   frameRevision: number;
 
+  // Prompt override — if non-empty, replaces the auto-generated frame prompt
+  promptOverride: string;
+  setPromptOverride: (prompt: string) => void;
+
   // Pipeline (step-by-step)
   editingFrame: { animName: string; frameIndex: number; pass: PipelineStage } | null;
   setEditingFrame: (frame: { animName: string; frameIndex: number; pass: PipelineStage } | null) => void;
@@ -1117,6 +1121,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       generationJobs: s.generationJobs.filter((j) => j.status !== 'done' && j.status !== 'error'),
     })),
 
+  // Prompt override
+  promptOverride: '',
+  setPromptOverride: (prompt) => set({ promptOverride: prompt }),
+
   // Pipeline (step-by-step)
   editingFrame: null,
   setEditingFrame: (frame) => set({ editingFrame: frame }),
@@ -1179,7 +1187,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   },
 
   generatePass: async (pass, animName, frameIndices) => {
-    const { manifest: _manifest, aiConfig, animRefOverride } = get();
+    const { manifest: _manifest, aiConfig, animRefOverride, promptOverride } = get();
     if (!_manifest) return;
     const manifest = _manifest;
 
@@ -1212,7 +1220,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       get().addGenerationJob({ id: jobId, animName, frameIndex: fi, status: 'running', pass, seed: rawSeed });
 
       try {
-        const prompt = buildFramePrompt(manifest, anim, fi);
+        const prompt = promptOverride.trim() || buildFramePrompt(manifest, anim, fi);
 
         if (pass === 'pass1') {
           // Pass 1: IP-Adapter (concept) + OpenPose → 512x512

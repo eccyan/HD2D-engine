@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { ViewDirection } from '@vulkan-game-tools/asset-types';
 import { VIEW_DIRECTIONS, DIRECTION_TO_VIEW } from '@vulkan-game-tools/asset-types';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
-import { SAMPLER_NAMES } from '../../lib/ai-generate.js';
+import { SAMPLER_NAMES, buildFramePrompt, buildNegativePrompt } from '../../lib/ai-generate.js';
 import { NumericInput } from '../NumericInput.js';
 
 interface Props {
@@ -29,6 +29,8 @@ export function PipelineControls({ animName }: Props) {
   const chibiViewUrls = useSeuratStore((s) => s.chibiViewUrls);
   const animRefOverride = useSeuratStore((s) => s.animRefOverride);
   const setAnimRefOverride = useSeuratStore((s) => s.setAnimRefOverride);
+  const promptOverride = useSeuratStore((s) => s.promptOverride);
+  const setPromptOverride = useSeuratStore((s) => s.setPromptOverride);
 
   const [generating, setGenerating] = useState<string | null>(null);
   const [ckptSearch, setCkptSearch] = useState('');
@@ -91,6 +93,26 @@ export function PipelineControls({ animName }: Props) {
             </div>
           </React.Fragment>
         ))}
+      </div>
+
+      {/* Prompt */}
+      <div style={styles.section}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={styles.subTitle}>Prompt</div>
+          {promptOverride.trim() && (
+            <button onClick={() => setPromptOverride('')} style={styles.clearBtn}>Reset</button>
+          )}
+        </div>
+        <textarea
+          value={promptOverride}
+          onChange={(e) => setPromptOverride(e.target.value)}
+          placeholder={buildFramePrompt(manifest, anim, 0)}
+          rows={3}
+          style={styles.promptTextarea}
+        />
+        <div style={{ fontFamily: 'monospace', fontSize: 8, color: '#555' }}>
+          {promptOverride.trim() ? 'Custom prompt active' : 'Empty = auto-generated per frame'}
+        </div>
       </div>
 
       {/* Pass 1: Pose Generation */}
@@ -512,6 +534,19 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
+  },
+  promptTextarea: {
+    background: '#1a1a2e',
+    border: '1px solid #3a3a5a',
+    borderRadius: 3,
+    color: '#ddd',
+    fontFamily: 'monospace',
+    fontSize: 9,
+    padding: '4px 6px',
+    outline: 'none',
+    resize: 'vertical' as const,
+    width: '100%',
+    boxSizing: 'border-box' as const,
   },
   jobRow: {
     display: 'flex',
