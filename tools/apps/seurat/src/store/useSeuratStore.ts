@@ -1200,7 +1200,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const shouldPreRemBg = aiConfig.useIPAdapter && aiConfig.removeBackground;
     async function preRemBg(bytes: Uint8Array): Promise<Uint8Array> {
       if (!shouldPreRemBg) return bytes;
-      try { return await comfy.removeBackground(bytes, aiConfig.remBgNodeType); } catch { return bytes; }
+      try {
+        const cleaned = await comfy.removeBackground(bytes, aiConfig.remBgNodeType);
+        return await compositeOnWhite(cleaned);
+      } catch { return bytes; }
     }
 
     for (const fi of indices) {
@@ -1350,7 +1353,10 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         console.log('[Seurat] Pre-processing reference image through RemBG...');
         const cleaned = await comfy.removeBackground(bytes, aiConfig.remBgNodeType);
         console.log(`[Seurat] RemBG done: ${bytes.length} → ${cleaned.length} bytes`);
-        return cleaned;
+        // Composite onto white so IP-Adapter doesn't see black/transparent regions
+        const onWhite = await compositeOnWhite(cleaned);
+        console.log(`[Seurat] Composited on white: ${onWhite.length} bytes`);
+        return onWhite;
       } catch (err) {
         console.warn('[Seurat] RemBG pre-processing failed, using original:', err);
         return bytes;
@@ -1982,6 +1988,26 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
  * within the target strip dimensions (targetWidth x targetHeight).
  * Returns PNG bytes of the tiled strip.
  */
+/**
+ * Composite a PNG (possibly with transparency) onto a solid white background.
+ * This prevents IP-Adapter from seeing black/transparent regions that muddy
+ * the character identity embedding.
+ */
+async function compositeOnWhite(pngBytes: Uint8Array): Promise<Uint8Array> {
+  const blob = new Blob([pngBytes as BlobPart], { type: 'image/png' });
+  const bitmap = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext('2d')!;
+  // Fill white first, then draw the character on top
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, bitmap.width, bitmap.height);
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const resultBlob = await canvas.convertToBlob({ type: 'image/png' });
+  const buf = await resultBlob.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
 async function tileImageHorizontally(
   sourceBytes: Uint8Array,
   tileCount: number,
