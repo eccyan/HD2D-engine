@@ -17,10 +17,10 @@
     "generation_settings": {
       "checkpoint": "AnythingV5_v5PrtRE.safetensors",
       "vae": "vae-ft-mse-840000-ema-pruned.safetensors",
-      "steps": 20,
-      "cfg": 6,
-      "sampler": "euler_ancestral",
-      "scheduler": "karras",
+      "steps": 30,
+      "cfg": 7,
+      "sampler": "euler",
+      "scheduler": "normal",
       "seed": -1,
       "loras": []
     }
@@ -97,7 +97,8 @@
           "duration": 0.3,
           "status": "generated",
           "source": "placeholder",
-          "file": "idle_up/idle_up_0.png"
+          "file": "idle_up/idle_up_0.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 1,
@@ -105,7 +106,8 @@
           "duration": 0.3,
           "status": "generated",
           "source": "placeholder",
-          "file": "idle_up/idle_up_1.png"
+          "file": "idle_up/idle_up_1.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 2,
@@ -113,7 +115,8 @@
           "duration": 0.3,
           "status": "generated",
           "source": "placeholder",
-          "file": "idle_up/idle_up_2.png"
+          "file": "idle_up/idle_up_2.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 3,
@@ -121,7 +124,8 @@
           "duration": 0.3,
           "status": "generated",
           "source": "placeholder",
-          "file": "idle_up/idle_up_3.png"
+          "file": "idle_up/idle_up_3.png",
+          "pipeline_stage": "pass1"
         }
       ]
     },
@@ -384,7 +388,8 @@
           "duration": 0.07,
           "status": "pending",
           "source": "placeholder",
-          "file": "run_S_f0.png"
+          "file": "run_S_f0.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 1,
@@ -392,7 +397,8 @@
           "duration": 0.07,
           "status": "pending",
           "source": "placeholder",
-          "file": "run_S_f1.png"
+          "file": "run_S_f1.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 2,
@@ -400,7 +406,8 @@
           "duration": 0.07,
           "status": "pending",
           "source": "placeholder",
-          "file": "run_S_f2.png"
+          "file": "run_S_f2.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 3,
@@ -408,7 +415,8 @@
           "duration": 0.07,
           "status": "pending",
           "source": "placeholder",
-          "file": "run_S_f3.png"
+          "file": "run_S_f3.png",
+          "pipeline_stage": "pass1"
         }
       ]
     },
@@ -463,34 +471,38 @@
         {
           "index": 0,
           "tile_id": 40,
-          "duration": 0.07,
+          "duration": 0.2,
           "status": "generated",
           "source": "placeholder",
-          "file": "run_right/run_right_0.png"
+          "file": "run_right/run_right_0.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 1,
           "tile_id": 41,
-          "duration": 0.07,
+          "duration": 0.2,
           "status": "generated",
           "source": "placeholder",
-          "file": "run_right/run_right_1.png"
+          "file": "run_right/run_right_1.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 2,
           "tile_id": 42,
-          "duration": 0.07,
+          "duration": 0.2,
           "status": "generated",
           "source": "placeholder",
-          "file": "run_right/run_right_2.png"
+          "file": "run_right/run_right_2.png",
+          "pipeline_stage": "pass1"
         },
         {
           "index": 3,
           "tile_id": 43,
-          "duration": 0.07,
+          "duration": 0.2,
           "status": "generated",
           "source": "placeholder",
-          "file": "run_right/run_right_3.png"
+          "file": "run_right/run_right_3.png",
+          "pipeline_stage": "pass1"
         }
       ]
     },
@@ -560,16 +572,16 @@
     "generation_settings": {
       "checkpoint": "AnythingV5_v5PrtRE.safetensors",
       "vae": "vae-ft-mse-840000-ema-pruned.safetensors",
-      "steps": 20,
-      "cfg": 1,
+      "steps": 30,
+      "cfg": 7,
       "sampler": "euler",
-      "scheduler": "karras",
+      "scheduler": "normal",
       "seed": -1,
-      "denoise": 0.45,
+      "denoise": 0.40,
       "loras": [
         {
           "name": "PixelArtRedmond15V-PixelArt-PIXARFK.safetensors",
-          "weight": 1
+          "weight": 0.4
         }
       ]
     }
