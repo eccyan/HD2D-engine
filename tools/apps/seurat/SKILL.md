@@ -53,6 +53,7 @@ tools/
 | `src/store/types.ts` | AIConfig, TreeSelection, GenerationJob, ClipboardFrame |
 | `src/lib/bridge-api.ts` | REST client for bridge (frame images, pass images, manifests) |
 | `src/lib/ai-generate.ts` | Prompt builders (frame, row, negative) |
+| `src/lib/frame-interpolate.ts` | Client-side blend interpolation (OffscreenCanvas alpha crossfade) |
 | `src/lib/pose-templates.ts` | OpenPose skeleton data + canvas renderer |
 | `src/components/layout/` | TreePane, MainPane, RightPane, BottomPane, Toolbar, StatusBar |
 | `src/components/generate/` | FramePipelineGrid, PipelineControls |
@@ -154,6 +155,7 @@ When adding UI components that need test coverage, add `data-testid` attributes:
 - Shared types go in `packages/asset-types` — rebuild after changes
 - Store-specific types go in `src/store/types.ts`
 - Use `PipelineStage` for frame pipeline tracking: `'pending' | 'pass1' | 'pass1_edited' | 'pass2' | 'pass2_edited' | 'pass3'`
+- `CharacterFrame.keyframe?: boolean` — `true` for original/artist frames, `false` for interpolated in-betweens. Omitted or `true` means keyframe.
 
 ### Bridge API
 - Client functions in `src/lib/bridge-api.ts`
@@ -175,3 +177,6 @@ When adding UI components that need test coverage, add `data-testid` attributes:
 | Puppeteer "Ping failed" | TestClient connects before browser loads page | Open page first, then connect TestClient |
 | `OffscreenCanvas` not available | Running in Node.js instead of browser | Client-side canvas ops only work in browser context |
 | Pass image 404 from client | Vite proxy not forwarding to bridge | Check bridge is running on port 9101 |
+| Interpolated keyframes show no image | Pass images stored at old indices after re-indexing | `interpolateAnimation` copies pass images to new indices |
+| RIFE model download fails | Upstream mirrors broken (esp. rife49.pth) | Manually place `.pth` in `ComfyUI/custom_nodes/ComfyUI-Frame-Interpolation/ckpts/rife/`; code prefers rife47.pth as fallback |
+| RIFE node not found | ComfyUI-Frame-Interpolation not installed or server not restarted | Install custom node + `pip install -r requirements-no-cupy.txt`, restart ComfyUI |
