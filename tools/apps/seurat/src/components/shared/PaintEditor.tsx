@@ -14,8 +14,10 @@ function brushCircle(
   radius: number,
   mode: BrushMode,
   color: string,
+  opacity: number,
 ): void {
   ctx.save();
+  ctx.globalAlpha = opacity;
   if (mode === 'erase') {
     ctx.globalCompositeOperation = 'destination-out';
   } else {
@@ -44,6 +46,7 @@ export function PaintEditor({
   const painting = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
   const [brushSize, setBrushSize] = useState(20);
+  const [brushOpacity, setBrushOpacity] = useState(1.0);
   const [brushMode, setBrushMode] = useState<BrushMode>('erase');
   const [brushColor, setBrushColor] = useState('#ffffff');
   const [saving, setSaving] = useState(false);
@@ -137,9 +140,9 @@ export function PaintEditor({
     const steps = Math.max(1, Math.ceil(dist / (radius * 0.5)));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      brushCircle(ctx, x0 + dx * t, y0 + dy * t, radius, brushMode, brushColor);
+      brushCircle(ctx, x0 + dx * t, y0 + dy * t, radius, brushMode, brushColor, brushOpacity);
     }
-  }, [brushMode, brushColor]);
+  }, [brushMode, brushColor, brushOpacity]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     pushUndo();
@@ -147,9 +150,9 @@ export function PaintEditor({
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext('2d')!;
     const pos = getCanvasPos(e);
-    brushCircle(ctx, pos.x, pos.y, getRadius(), brushMode, brushColor);
+    brushCircle(ctx, pos.x, pos.y, getRadius(), brushMode, brushColor, brushOpacity);
     lastPos.current = pos;
-  }, [getCanvasPos, getRadius, pushUndo, brushMode, brushColor]);
+  }, [getCanvasPos, getRadius, pushUndo, brushMode, brushColor, brushOpacity]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!painting.current) return;
@@ -160,10 +163,10 @@ export function PaintEditor({
     if (lastPos.current) {
       strokeLine(ctx, lastPos.current.x, lastPos.current.y, pos.x, pos.y, radius);
     } else {
-      brushCircle(ctx, pos.x, pos.y, radius, brushMode, brushColor);
+      brushCircle(ctx, pos.x, pos.y, radius, brushMode, brushColor, brushOpacity);
     }
     lastPos.current = pos;
-  }, [getCanvasPos, getRadius, strokeLine, brushMode, brushColor]);
+  }, [getCanvasPos, getRadius, strokeLine, brushMode, brushColor, brushOpacity]);
 
   const handleMouseUp = useCallback(() => {
     painting.current = false;
@@ -285,16 +288,30 @@ export function PaintEditor({
         )}
 
         <div style={styles.brushRow}>
-          <span style={styles.editorLabel}>Brush</span>
+          <span style={styles.editorLabel}>Size</span>
           <input
             type="range"
             min={4}
             max={80}
             value={brushSize}
             onChange={(e) => setBrushSize(Number(e.target.value))}
-            style={{ width: 120, height: 12 }}
+            style={{ width: 100, height: 12 }}
           />
           <span style={styles.editorLabel}>{brushSize}px</span>
+        </div>
+
+        <div style={styles.brushRow}>
+          <span style={styles.editorLabel}>Opacity</span>
+          <input
+            type="range"
+            min={0.05}
+            max={1}
+            step={0.05}
+            value={brushOpacity}
+            onChange={(e) => setBrushOpacity(Number(e.target.value))}
+            style={{ width: 80, height: 12 }}
+          />
+          <span style={styles.editorLabel}>{Math.round(brushOpacity * 100)}%</span>
         </div>
 
         {/* Flip & Rotate */}
