@@ -20,6 +20,8 @@ import type {
   PlaybackState,
   ReviewFilter,
   AssembleResult,
+  ProjectMeta,
+  RecentProject,
 } from './types.js';
 import { DEFAULT_AI_CONFIG } from './types.js';
 import * as api from '../lib/bridge-api.js';
@@ -170,6 +172,19 @@ export interface SeuratState {
   interpProgress: string | null;
   interpolateAnimation: (animName: string) => Promise<void>;
   revertInterpolation: (animName: string) => Promise<void>;
+
+  // Project
+  project: ProjectMeta | null;
+  projectPath: string | null;
+  projectDirty: boolean;
+  recentProjects: RecentProject[];
+  exportProgress: string | null;
+  exportError: string | null;
+  createProject: (dirPath: string, name: string) => Promise<void>;
+  openProject: (dirPath: string) => Promise<void>;
+  closeProject: () => Promise<void>;
+  saveProject: () => Promise<void>;
+  exportCharacters: (opts: { characterIds?: string[]; format?: string; outputDir?: string }) => Promise<void>;
 
   // Test helpers (inject manifest directly without bridge)
   selectCharacterDirect: (manifest: CharacterManifest) => void;
@@ -1117,7 +1132,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   setAIConfig: (config) => set((s) => {
     const aiConfig = { ...s.aiConfig, ...config };
     try { localStorage.setItem('seurat-ai-config', JSON.stringify(aiConfig)); } catch { /* ignore */ }
-    return { aiConfig };
+    return { aiConfig, projectDirty: s.project ? true : s.projectDirty };
   }),
   generationJobs: [],
   frameRevision: 0,
@@ -2181,6 +2196,90 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const { selectedCharacterId } = get();
     if (!selectedCharacterId) return;
     set({ spriteSheetUrl: api.spriteSheetUrl(selectedCharacterId) });
+  },
+
+  // Project
+  project: null,
+  projectPath: null,
+  projectDirty: false,
+  recentProjects: (() => {
+    try {
+      const saved = localStorage.getItem('seurat-recent-projects');
+      if (saved) return JSON.parse(saved) as RecentProject[];
+    } catch { /* ignore */ }
+    return [];
+  })(),
+  exportProgress: null,
+  exportError: null,
+
+  createProject: async (dirPath, name) => {
+    try {
+      const res = await api.createProject(dirPath, name);
+      const project = res.project as unknown as ProjectMeta;
+      set({ project, projectPath: dirPath, projectDirty: false });
+      // Add to recent projects
+      const recents = get().recentProjects.filter((r) => r.path !== dirPath);
+      const updated = [{ path: dirPath, name, openedAt: new Date().toISOString() }, ...recents].slice(0, 10);
+      set({ recentProjects: updated });
+      try { localStorage.setItem('seurat-recent-projects', JSON.stringify(updated)); } catch { /* ignore */ }
+      await get().refreshCharacters();
+    } catch (err) {
+      console.error('Failed to create project:', err);
+    }
+  },
+
+  openProject: async (dirPath) => {
+    try {
+      const res = await api.openProject(dirPath);
+      const project = res.project as unknown as ProjectMeta;
+      set({ project, projectPath: res.path, projectDirty: false });
+      // Restore AI config from project if available
+      if (project.ai_config) {
+        set({ aiConfig: { ...DEFAULT_AI_CONFIG, ...project.ai_config } });
+      }
+      // Add to recent projects
+      const recents = get().recentProjects.filter((r) => r.path !== dirPath);
+      const updated = [{ path: dirPath, name: project.name, openedAt: new Date().toISOString() }, ...recents].slice(0, 10);
+      set({ recentProjects: updated });
+      try { localStorage.setItem('seurat-recent-projects', JSON.stringify(updated)); } catch { /* ignore */ }
+      await get().refreshCharacters();
+    } catch (err) {
+      console.error('Failed to open project:', err);
+    }
+  },
+
+  closeProject: async () => {
+    try {
+      await api.closeProject();
+    } catch { /* best effort */ }
+    set({ project: null, projectPath: null, projectDirty: false });
+    await get().refreshCharacters();
+  },
+
+  saveProject: async () => {
+    const { project, projectPath, aiConfig } = get();
+    if (!project || !projectPath) return;
+    try {
+      // Sync current AI config into project
+      const updatedProject = { ...project, ai_config: aiConfig, modified_at: new Date().toISOString() };
+      // Sync character list
+      const chars = get().characters;
+      updatedProject.characters = chars;
+      await api.saveProject(updatedProject as unknown as Record<string, unknown>);
+      set({ project: updatedProject, projectDirty: false });
+    } catch (err) {
+      console.error('Failed to save project:', err);
+    }
+  },
+
+  exportCharacters: async (opts) => {
+    set({ exportProgress: 'Exporting...', exportError: null });
+    try {
+      const res = await api.exportCharacters(opts);
+      set({ exportProgress: `Export complete: ${JSON.stringify(res.results?.length ?? 0)} character(s)` });
+    } catch (err) {
+      set({ exportError: err instanceof Error ? err.message : String(err), exportProgress: null });
+    }
   },
 
   // Test helpers

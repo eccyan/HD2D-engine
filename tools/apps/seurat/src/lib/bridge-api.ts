@@ -241,6 +241,62 @@ export async function fetchPassImageBytes(
   return new Uint8Array(buf);
 }
 
+// --- Project endpoints ---
+
+export async function createProject(dirPath: string, name: string): Promise<{ project: Record<string, unknown> }> {
+  const res = await fetch(`${BASE}/api/projects/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: dirPath, name }),
+  });
+  if (!res.ok) throw new Error(`Failed to create project: ${res.status}`);
+  return res.json();
+}
+
+export async function openProject(dirPath: string): Promise<{ project: Record<string, unknown>; path: string }> {
+  const res = await fetch(`${BASE}/api/projects/open`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: dirPath }),
+  });
+  if (!res.ok) throw new Error(`Failed to open project: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchCurrentProject(): Promise<{ project: Record<string, unknown> | null; path: string | null }> {
+  const res = await fetch(`${BASE}/api/projects/current`);
+  if (!res.ok) throw new Error(`Failed to get current project: ${res.status}`);
+  return res.json();
+}
+
+export async function saveProject(project: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${BASE}/api/projects/save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project }),
+  });
+  if (!res.ok) throw new Error(`Failed to save project: ${res.status}`);
+}
+
+export async function closeProject(): Promise<void> {
+  const res = await fetch(`${BASE}/api/projects/close`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to close project: ${res.status}`);
+}
+
+export async function exportCharacters(opts: {
+  characterIds?: string[];
+  format?: string;
+  outputDir?: string;
+}): Promise<{ results: Record<string, unknown>[] }> {
+  const res = await fetch(`${BASE}/api/projects/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+  return res.json();
+}
+
 export async function savePassImage(
   characterId: string,
   animName: string,

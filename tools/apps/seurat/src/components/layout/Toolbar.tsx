@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { TreeSelection } from '../../store/types.js';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { getClipDuration } from '../../lib/frame-utils.js';
+import { ProjectDialog } from '../project/ProjectDialog.js';
+import { ExportDialog } from '../project/ExportDialog.js';
 
 function getSelectionLabel(sel: TreeSelection): string {
   switch (sel.kind) {
@@ -13,14 +15,95 @@ function getSelectionLabel(sel: TreeSelection): string {
 
 export function Toolbar() {
   const treeSelection = useSeuratStore((s) => s.treeSelection);
+  const project = useSeuratStore((s) => s.project);
+  const projectDirty = useSeuratStore((s) => s.projectDirty);
+  const saveProject = useSeuratStore((s) => s.saveProject);
+  const closeProject = useSeuratStore((s) => s.closeProject);
+
+  const [showProjectDialog, setShowProjectDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // Debounced auto-save on dirty
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (project && projectDirty) {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = setTimeout(() => {
+        saveProject();
+      }, 2000);
+    }
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [project, projectDirty, saveProject]);
+
+  const handleClose = () => {
+    if (projectDirty) {
+      setShowCloseConfirm(true);
+    } else {
+      closeProject();
+    }
+  };
+
+  const confirmClose = async (save: boolean) => {
+    if (save) await saveProject();
+    await closeProject();
+    setShowCloseConfirm(false);
+  };
 
   return (
-    <div style={styles.toolbar}>
-      <span style={styles.appTitle}>SEURAT</span>
-      <span style={styles.divider} />
-      <span style={styles.sectionTitle}>{getSelectionLabel(treeSelection)}</span>
-      <div style={{ flex: 1 }} />
-    </div>
+    <>
+      <div style={styles.toolbar}>
+        <span style={styles.appTitle}>SEURAT</span>
+        <span style={styles.divider} />
+
+        {project ? (
+          <>
+            <span style={styles.projectName}>{project.name}</span>
+            {projectDirty && <span style={styles.dirtyDot} title="Unsaved changes" />}
+            <button onClick={() => saveProject()} style={styles.tbBtn} title="Save Project">
+              Save
+            </button>
+            <button onClick={handleClose} style={styles.tbBtn} title="Close Project">
+              Close
+            </button>
+            <button onClick={() => setShowExportDialog(true)} style={styles.tbBtn} title="Export">
+              Export
+            </button>
+          </>
+        ) : (
+          <>
+            <button onClick={() => setShowProjectDialog(true)} style={styles.tbBtn} title="New / Open Project">
+              Project
+            </button>
+          </>
+        )}
+
+        <span style={styles.divider} />
+        <span style={styles.sectionTitle}>{getSelectionLabel(treeSelection)}</span>
+        <div style={{ flex: 1 }} />
+      </div>
+
+      {showProjectDialog && (
+        <ProjectDialog onClose={() => setShowProjectDialog(false)} />
+      )}
+      {showExportDialog && (
+        <ExportDialog onClose={() => setShowExportDialog(false)} />
+      )}
+      {showCloseConfirm && (
+        <div style={styles.overlay} onClick={() => setShowCloseConfirm(false)}>
+          <div style={styles.confirmDialog} onClick={(e) => e.stopPropagation()}>
+            <p style={styles.confirmText}>Unsaved changes. Save before closing?</p>
+            <div style={styles.confirmBtns}>
+              <button onClick={() => confirmClose(true)} style={styles.tbBtn}>Save & Close</button>
+              <button onClick={() => confirmClose(false)} style={styles.tbBtn}>Discard</button>
+              <button onClick={() => setShowCloseConfirm(false)} style={styles.tbBtn}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -110,6 +193,19 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#aaa',
     fontWeight: 600,
   },
+  projectName: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: '#c0d0f0',
+    fontWeight: 600,
+  },
+  dirtyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: '50%',
+    background: '#f0c040',
+    flexShrink: 0,
+  },
   tbBtn: {
     background: '#1e1e30',
     border: '1px solid #333',
@@ -125,5 +221,30 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 10,
     color: '#888',
     minWidth: 100,
+  },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  confirmDialog: {
+    background: '#1a1a2a',
+    border: '1px solid #3a3a5a',
+    borderRadius: 8,
+    padding: 20,
+  },
+  confirmText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: '#ddd',
+    margin: '0 0 12px',
+  },
+  confirmBtns: {
+    display: 'flex',
+    gap: 8,
   },
 };

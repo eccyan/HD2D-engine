@@ -215,3 +215,4 @@ function generateEngineAnimations(
 export { loadManifest, saveManifest } from "./manifest-ops.js";
 export * from "./manifest-ops.js";
 export * from "./quality-checks.js";
+export * from "./export.js";

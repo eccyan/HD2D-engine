@@ -34,6 +34,18 @@ const TEXTURES_DIR = path.join(ENGINE_DIR, 'assets', 'textures');
 const CHARACTERS_DIR = path.join(ENGINE_DIR, 'assets', 'characters');
 
 // ---------------------------------------------------------------------------
+// Project context — mutable active project directory
+// ---------------------------------------------------------------------------
+
+let activeProjectDir: string | null = null;
+
+function getCharactersDir(): string {
+  return activeProjectDir
+    ? path.join(activeProjectDir, 'characters')
+    : CHARACTERS_DIR;
+}
+
+// ---------------------------------------------------------------------------
 // Instantiate core components
 // ---------------------------------------------------------------------------
 
@@ -288,11 +300,12 @@ app.post('/api/files/textures/:name', async (req: Request, res: Response) => {
 // GET /api/characters — list all character IDs with manifests
 app.get('/api/characters', async (_req: Request, res: Response) => {
   try {
-    const entries = await fs.readdir(CHARACTERS_DIR, { withFileTypes: true });
+    const charsDir = getCharactersDir();
+    const entries = await fs.readdir(charsDir, { withFileTypes: true });
     const ids: string[] = [];
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        const mPath = path.join(CHARACTERS_DIR, entry.name, 'manifest.json');
+        const mPath = path.join(charsDir, entry.name, 'manifest.json');
         try {
           await fs.access(mPath);
           ids.push(entry.name);
@@ -311,7 +324,7 @@ app.get('/api/characters', async (_req: Request, res: Response) => {
 // GET /api/characters/:id — read a character manifest
 app.get('/api/characters/:id', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const filePath = path.join(charDir, 'manifest.json');
     const content = await fs.readFile(filePath, 'utf8');
     res.setHeader('Content-Type', 'application/json');
@@ -326,7 +339,7 @@ app.get('/api/characters/:id', async (req: Request, res: Response) => {
 // POST /api/characters/:id — write/update a character manifest
 app.post('/api/characters/:id', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     await fs.mkdir(charDir, { recursive: true });
     const filePath = path.join(charDir, 'manifest.json');
     const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body, null, 2);
@@ -364,7 +377,7 @@ app.post('/api/characters/:id/concept-image', saveConceptImageHandler);
 
 async function saveConceptImageHandler(req: Request, res: Response) {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const view = req.params['view'];
     if (view && !VALID_VIEWS.includes(view)) {
       res.status(400).json({ error: `Invalid view: ${view}` });
@@ -393,7 +406,7 @@ app.get('/api/characters/:id/concept-image', serveConceptImageHandler);
 
 async function serveConceptImageHandler(req: Request, res: Response) {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const view = req.params['view'];
     if (view && !VALID_VIEWS.includes(view)) {
       res.status(400).json({ error: `Invalid view: ${view}` });
@@ -428,7 +441,7 @@ app.post('/api/characters/:id/chibi-image', saveChibiImageHandler);
 
 async function saveChibiImageHandler(req: Request, res: Response) {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const view = req.params['view'];
     if (view && !VALID_VIEWS.includes(view)) {
       res.status(400).json({ error: `Invalid view: ${view}` });
@@ -455,7 +468,7 @@ app.get('/api/characters/:id/chibi-image', serveChibiImageHandler);
 
 async function serveChibiImageHandler(req: Request, res: Response) {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const view = req.params['view'];
     if (view && !VALID_VIEWS.includes(view)) {
       res.status(400).json({ error: `Invalid view: ${view}` });
@@ -486,7 +499,7 @@ async function serveChibiImageHandler(req: Request, res: Response) {
 // POST /api/characters/:id/pixel-image — save pixel art image (base64 PNG)
 app.post('/api/characters/:id/pixel-image', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     await fs.mkdir(charDir, { recursive: true });
     const filePath = path.join(charDir, 'pixel.png');
 
@@ -516,7 +529,7 @@ app.post('/api/characters/:id/pixel-image', async (req: Request, res: Response) 
 // GET /api/characters/:id/pixel-image — serve pixel art image
 app.get('/api/characters/:id/pixel-image', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const filePath = path.join(charDir, 'pixel.png');
     const data = await fs.readFile(filePath);
     res.setHeader('Content-Type', 'image/png');
@@ -531,7 +544,7 @@ app.get('/api/characters/:id/pixel-image', async (req: Request, res: Response) =
 // POST /api/characters/:id/frames/:anim/:frame/image — save a frame PNG
 app.post('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const animDir = path.join(charDir, req.params['anim']!);
     await fs.mkdir(animDir, { recursive: true });
     const filename = `${req.params['anim']}_${req.params['frame']}.png`;
@@ -578,7 +591,7 @@ app.post('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, r
 // GET /api/characters/:id/frames/:anim/:frame/image — serve a frame PNG
 app.get('/api/characters/:id/frames/:anim/:frame/image', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const filename = `${req.params['anim']}_${req.params['frame']}.png`;
     const filePath = path.join(charDir, req.params['anim']!, filename);
     await fs.access(filePath);
@@ -602,7 +615,7 @@ const VALID_PASSES = ['pending', 'pass1', 'pass1_edited', 'pass2', 'pass2_edited
 // GET /api/characters/:id/frames/:anim/:frame/pass/:pass — serve an intermediate pass image
 app.get('/api/characters/:id/frames/:anim/:frame/pass/:pass', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const pass = req.params['pass']!;
     if (!VALID_PASSES.includes(pass)) {
       res.status(400).json({ error: `Invalid pass: ${pass}` });
@@ -630,7 +643,7 @@ app.get('/api/characters/:id/frames/:anim/:frame/pass/:pass', async (req: Reques
 // POST /api/characters/:id/frames/:anim/:frame/pass/:pass — save an intermediate pass image
 app.post('/api/characters/:id/frames/:anim/:frame/pass/:pass', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const pass = req.params['pass']!;
     if (!VALID_PASSES.includes(pass)) {
       res.status(400).json({ error: `Invalid pass: ${pass}` });
@@ -672,7 +685,7 @@ app.post('/api/characters/:id/frames/:anim/:frame/pass/:pass', async (req: Reque
 // GET /api/characters/:id/frames/:anim/:frame — get a specific frame's status
 app.get('/api/characters/:id/frames/:anim/:frame', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const filePath = path.join(charDir, 'manifest.json');
     const content = await fs.readFile(filePath, 'utf8');
     const manifest = JSON.parse(content);
@@ -697,7 +710,7 @@ app.get('/api/characters/:id/frames/:anim/:frame', async (req: Request, res: Res
 // POST /api/characters/:id/frames/:anim/:frame — update a frame's status
 app.post('/api/characters/:id/frames/:anim/:frame', async (req: Request, res: Response) => {
   try {
-    const charDir = safeResolve(CHARACTERS_DIR, req.params['id']!);
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
     const filePath = path.join(charDir, 'manifest.json');
     const content = await fs.readFile(filePath, 'utf8');
     const manifest = JSON.parse(content);
@@ -743,6 +756,167 @@ app.post('/api/characters/:id/assemble', async (req: Request, res: Response) => 
     const validate = req.body?.validate === true;
     const result = await mod.assembleCharacterAtlas(req.params['id']!, { validate });
     res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Project endpoints
+// ---------------------------------------------------------------------------
+
+// POST /api/projects/create — create a new project directory
+app.post('/api/projects/create', async (req: Request, res: Response) => {
+  try {
+    const { path: dirPath, name } = req.body as { path: string; name: string };
+    if (!dirPath || !name) {
+      res.status(400).json({ error: 'path and name are required' });
+      return;
+    }
+    const projectDir = path.resolve(dirPath);
+    const charsDir = path.join(projectDir, 'characters');
+    await fs.mkdir(charsDir, { recursive: true });
+
+    const project = {
+      version: 1,
+      name,
+      created_at: new Date().toISOString(),
+      modified_at: new Date().toISOString(),
+      characters: [] as string[],
+      ai_config: null,
+      export_presets: {
+        default: { format: 'spritesheet', include_characters: [], output_dir: 'export' },
+      },
+    };
+    await fs.writeFile(path.join(projectDir, 'project.json'), JSON.stringify(project, null, 2), 'utf8');
+
+    activeProjectDir = projectDir;
+    console.log(`[Bridge] Project created: ${projectDir}`);
+    res.json({ ok: true, project });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/projects/open — open an existing project
+app.post('/api/projects/open', async (req: Request, res: Response) => {
+  try {
+    const { path: dirPath } = req.body as { path: string };
+    if (!dirPath) {
+      res.status(400).json({ error: 'path is required' });
+      return;
+    }
+    const projectDir = path.resolve(dirPath);
+    const projectFile = path.join(projectDir, 'project.json');
+    const content = await fs.readFile(projectFile, 'utf8');
+    const project = JSON.parse(content);
+
+    activeProjectDir = projectDir;
+    console.log(`[Bridge] Project opened: ${projectDir}`);
+    res.json({ ok: true, project, path: projectDir });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const statusCode = message.includes('ENOENT') ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+});
+
+// GET /api/projects/current — get current project meta
+app.get('/api/projects/current', async (_req: Request, res: Response) => {
+  if (!activeProjectDir) {
+    res.json({ project: null, path: null });
+    return;
+  }
+  try {
+    const projectFile = path.join(activeProjectDir, 'project.json');
+    const content = await fs.readFile(projectFile, 'utf8');
+    const project = JSON.parse(content);
+    res.json({ project, path: activeProjectDir });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/projects/save — save project metadata
+app.post('/api/projects/save', async (req: Request, res: Response) => {
+  try {
+    if (!activeProjectDir) {
+      res.status(400).json({ error: 'No active project' });
+      return;
+    }
+    const { project } = req.body as { project: Record<string, unknown> };
+    if (!project) {
+      res.status(400).json({ error: 'project body is required' });
+      return;
+    }
+    project.modified_at = new Date().toISOString();
+    const projectFile = path.join(activeProjectDir, 'project.json');
+    await fs.writeFile(projectFile, JSON.stringify(project, null, 2), 'utf8');
+    console.log(`[Bridge] Project saved: ${projectFile}`);
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/projects/close — close active project
+app.post('/api/projects/close', (_req: Request, res: Response) => {
+  console.log(`[Bridge] Project closed: ${activeProjectDir}`);
+  activeProjectDir = null;
+  res.json({ ok: true });
+});
+
+// POST /api/projects/export — export characters
+app.post('/api/projects/export', async (req: Request, res: Response) => {
+  try {
+    if (!activeProjectDir) {
+      res.status(400).json({ error: 'No active project' });
+      return;
+    }
+    const {
+      characterIds,
+      format = 'spritesheet',
+      outputDir,
+    } = req.body as { characterIds?: string[]; format?: string; outputDir?: string };
+
+    // Dynamically import the export function
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mod = await (import('@vulkan-game-tools/atlas-assembler' as any) as Promise<any>);
+    const exportFn = mod.exportCharacters;
+    if (typeof exportFn !== 'function') {
+      res.status(500).json({ error: 'Export function not available — update atlas-assembler' });
+      return;
+    }
+
+    const charsDir = getCharactersDir();
+    const exportDir = outputDir
+      ? path.resolve(activeProjectDir, outputDir)
+      : path.join(activeProjectDir, 'export');
+
+    // If no characterIds specified, list all characters
+    let ids = characterIds;
+    if (!ids || ids.length === 0) {
+      const entries = await fs.readdir(charsDir, { withFileTypes: true });
+      ids = [];
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const mPath = path.join(charsDir, entry.name, 'manifest.json');
+          try { await fs.access(mPath); ids.push(entry.name); } catch { /* skip */ }
+        }
+      }
+    }
+
+    const results = await exportFn(ids, {
+      charactersDir: charsDir,
+      outputDir: exportDir,
+      format: format as 'spritesheet' | 'individual',
+    });
+
+    res.json({ ok: true, results });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: message });

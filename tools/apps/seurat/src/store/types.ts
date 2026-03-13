@@ -120,3 +120,25 @@ export interface AssembleResult {
   errors: string[];
   spritesheetUrl?: string;
 }
+
+export interface ExportPreset {
+  format: 'spritesheet' | 'individual';
+  include_characters: string[];
+  output_dir: string;
+}
+
+export interface ProjectMeta {
+  version: number;
+  name: string;
+  created_at: string;
+  modified_at: string;
+  characters: string[];
+  ai_config: AIConfig | null;
+  export_presets: Record<string, ExportPreset>;
+}
+
+export interface RecentProject {
+  path: string;
+  name: string;
+  openedAt: string;
+}

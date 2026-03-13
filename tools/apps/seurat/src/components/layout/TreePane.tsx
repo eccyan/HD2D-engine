@@ -10,6 +10,8 @@ export function TreePane() {
   const selectCharacter = useSeuratStore((s) => s.selectCharacter);
   const refreshCharacters = useSeuratStore((s) => s.refreshCharacters);
   const createCharacter = useSeuratStore((s) => s.createCharacter);
+  const project = useSeuratStore((s) => s.project);
+  const projectPath = useSeuratStore((s) => s.projectPath);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [creating, setCreating] = useState(false);
@@ -74,6 +76,17 @@ export function TreePane() {
 
   return (
     <div style={styles.pane}>
+      {/* Project header */}
+      {project && (
+        <div style={styles.projectHeader}>
+          <span style={styles.projectLabel}>PROJECT</span>
+          <span style={styles.projectNameText}>{project.name}</span>
+          {projectPath && (
+            <span style={styles.projectPathText}>{projectPath}</span>
+          )}
+        </div>
+      )}
+
       {/* New Character */}
       {creating ? (
         <div style={styles.createForm}>
@@ -238,6 +251,32 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 9,
     padding: '3px 6px',
     cursor: 'pointer',
+  },
+  projectHeader: {
+    padding: '8px 10px',
+    borderBottom: '1px solid #2a2a3a',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  projectLabel: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    color: '#4a6a9a',
+    fontWeight: 700,
+    letterSpacing: '0.1em',
+  },
+  projectNameText: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: '#c0d0f0',
+    fontWeight: 600,
+  },
+  projectPathText: {
+    fontFamily: 'monospace',
+    fontSize: 8,
+    color: '#555',
+    wordBreak: 'break-all',
   },
   treeNode: {
     display: 'flex',
