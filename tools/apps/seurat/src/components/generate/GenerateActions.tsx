@@ -96,9 +96,6 @@ export function GenerateActions({ animName }: Props) {
           <label style={styles.label}>Steps</label>
           <NumericInput value={aiConfig.steps} onChange={(v) => setAIConfig({ steps: v })} integer min={1} max={100} fallback={20} style={{ ...styles.input, width: 50 }} />
           <ResetBtn field="steps" current={aiConfig.steps} onReset={(v) => setAIConfig({ steps: v })} />
-          <label style={styles.label}>CFG</label>
-          <NumericInput value={aiConfig.cfg} onChange={(v) => setAIConfig({ cfg: v })} min={1} max={30} step={0.5} fallback={7} style={{ ...styles.input, width: 50 }} />
-          <ResetBtn field="cfg" current={aiConfig.cfg} onReset={(v) => setAIConfig({ cfg: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Seed</label>

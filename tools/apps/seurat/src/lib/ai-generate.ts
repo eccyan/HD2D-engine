@@ -54,7 +54,7 @@ const DIR_DESCRIPTIONS: Record<string, string> = {
 const STATE_PHASES: Record<string, string[]> = {
   idle: ['standing still', 'standing still, slight movement', 'standing still', 'standing still, slight sway'],
   walk: ['left foot forward', 'standing upright mid-step', 'right foot forward', 'standing upright mid-step'],
-  run: ['left foot extended', 'both feet off ground', 'right foot extended', 'both feet off ground'],
+  run: ['foot contact, leg extended forward', 'both feet off ground, airborne', 'foot contact, other leg extended', 'both feet off ground, airborne'],
 };
 
 export function buildFramePrompt(
@@ -79,17 +79,15 @@ export function buildFramePrompt(
 }
 
 /**
- * Build a pass-2 prompt that adds head-body ratio guidance on top of the base frame prompt.
- * headRatio: target body-to-head proportion (e.g. 3 = 1:3, body is 3x the head).
+ * Build a pass-2 prompt.
+ * Pass 2 relies on IP-Adapter with chibi reference for style transfer.
+ * The prompt provides base frame context only.
  */
 export function buildPass2Prompt(
   manifest: CharacterManifest,
   anim: CharacterAnimation,
   frameIndex: number,
-  _headRatio: number,
 ): string {
-  // Pass 2 relies on IP-Adapter with chibi reference for style transfer.
-  // The prompt just provides the base frame context — no proportion overrides.
   return buildFramePrompt(manifest, anim, frameIndex);
 }
 

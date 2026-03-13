@@ -127,6 +127,12 @@ export function PipelineControls({ animName }: Props) {
           </button>
         </div>
         <Row>
+          <label style={styles.label}>CFG</label>
+          <input type="range" min={1} max={20} step={0.5} value={aiConfig.pass1Cfg} onChange={(e) => setAIConfig({ pass1Cfg: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+          <span style={styles.valueLabel}>{aiConfig.pass1Cfg.toFixed(1)}</span>
+          <ResetBtn field="pass1Cfg" current={aiConfig.pass1Cfg} onReset={(v) => setAIConfig({ pass1Cfg: v })} />
+        </Row>
+        <Row>
           <label style={styles.label}>IP Weight</label>
           <input type="range" min={0.1} max={1.0} step={0.05} value={aiConfig.ipAdapterWeight} onChange={(e) => setAIConfig({ ipAdapterWeight: parseFloat(e.target.value) })} style={{ flex: 1 }} />
           <span style={styles.valueLabel}>{aiConfig.ipAdapterWeight.toFixed(2)}</span>
@@ -155,10 +161,10 @@ export function PipelineControls({ animName }: Props) {
           </button>
         </div>
         <Row>
-          <label style={styles.label}>Head Ratio</label>
-          <input type="range" min={2} max={5} step={0.5} value={aiConfig.chibiHeadRatio} onChange={(e) => setAIConfig({ chibiHeadRatio: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-          <span style={styles.valueLabel}>1:{aiConfig.chibiHeadRatio}</span>
-          <ResetBtn field="chibiHeadRatio" current={aiConfig.chibiHeadRatio} onReset={(v) => setAIConfig({ chibiHeadRatio: v })} />
+          <label style={styles.label}>CFG</label>
+          <input type="range" min={1} max={20} step={0.5} value={aiConfig.pass2Cfg} onChange={(e) => setAIConfig({ pass2Cfg: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+          <span style={styles.valueLabel}>{aiConfig.pass2Cfg.toFixed(1)}</span>
+          <ResetBtn field="pass2Cfg" current={aiConfig.pass2Cfg} onReset={(v) => setAIConfig({ pass2Cfg: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Chibi Wt</label>
@@ -368,9 +374,6 @@ export function PipelineControls({ animName }: Props) {
           <label style={styles.label}>Steps</label>
           <NumericInput value={aiConfig.steps} onChange={(v) => setAIConfig({ steps: v })} integer min={1} max={100} fallback={20} style={{ ...styles.input, width: 50 }} />
           <ResetBtn field="steps" current={aiConfig.steps} onReset={(v) => setAIConfig({ steps: v })} />
-          <label style={styles.label}>CFG</label>
-          <NumericInput value={aiConfig.cfg} onChange={(v) => setAIConfig({ cfg: v })} min={1} max={30} step={0.5} fallback={7} style={{ ...styles.input, width: 50 }} />
-          <ResetBtn field="cfg" current={aiConfig.cfg} onReset={(v) => setAIConfig({ cfg: v })} />
         </Row>
         <Row>
           <label style={styles.label}>Seed</label>
