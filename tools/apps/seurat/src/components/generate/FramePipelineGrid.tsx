@@ -332,15 +332,15 @@ export function FramePipelineGrid({ animName }: Props) {
                 </span>
               </div>
 
-              {/* Pose cell */}
+              {/* Pose cell — only keyframes have poses; interpolated frames are derived from pixels */}
               <div style={{
                 ...styles.passCell,
-                opacity: isVirtual ? 0.15 : 1,
+                opacity: (isVirtual || isInterpolated) ? 0.15 : 1,
               }}>
-                {isVirtual ? (
+                {(isVirtual || isInterpolated) ? (
                   <span style={styles.cellEmpty}>~</span>
                 ) : (
-                  <PoseCell animName={animName} frameIndex={frame.index} size={128} />
+                  <PoseCell animName={animName} frameIndex={frame!.index} size={128} />
                 )}
               </div>
 
