@@ -205,10 +205,10 @@ export function FramePipelineGrid({ animName }: Props) {
     [anim, interpMultiplier],
   );
 
-  // Default to select-all when animation changes or loads
+  // Clear selection when animation changes or loads
   const frameCount = displayFrames.length;
   useEffect(() => {
-    if (frameCount > 0) selectAllFrames(frameCount);
+    clearFrameSelection();
   }, [animName, frameCount]);
 
   const [contextMenu, setContextMenu] = useState<{
