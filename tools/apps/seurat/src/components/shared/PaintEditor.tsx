@@ -244,91 +244,95 @@ export function PaintEditor({
 
   return (
     <div style={styles.editorOverlay}>
-      {/* Toolbar */}
+      {/* Toolbar — two rows */}
       <div style={styles.editorToolbar}>
-        <span style={styles.editorTitle}>{title}</span>
+        <div style={styles.toolbarRow}>
+          <span style={styles.editorTitle}>{title}</span>
 
-        {/* Mode toggle */}
-        <div style={styles.modeGroup}>
-          <button
-            onClick={() => setBrushMode('erase')}
-            style={{ ...styles.modeBtn, ...(brushMode === 'erase' ? styles.modeBtnActive : {}) }}
-          >
-            Erase
-          </button>
-          <button
-            onClick={() => setBrushMode('draw')}
-            style={{ ...styles.modeBtn, ...(brushMode === 'draw' ? styles.modeBtnActive : {}) }}
-          >
-            Draw
-          </button>
-        </div>
-
-        {/* Color picker (only in draw mode) */}
-        {brushMode === 'draw' && (
-          <div style={styles.paletteRow}>
-            {PALETTE_COLORS.map((c) => (
-              <div
-                key={c}
-                onClick={() => setBrushColor(c)}
-                style={{
-                  ...styles.colorSwatch,
-                  backgroundColor: c,
-                  outline: c === brushColor ? '2px solid #f0c040' : 'none',
-                }}
-              />
-            ))}
-            <input
-              type="color"
-              value={brushColor}
-              onChange={(e) => setBrushColor(e.target.value)}
-              style={{ width: 20, height: 20, border: 'none', padding: 0, cursor: 'pointer' }}
-            />
+          {/* Mode toggle */}
+          <div style={styles.modeGroup}>
+            <button
+              onClick={() => setBrushMode('erase')}
+              style={{ ...styles.modeBtn, ...(brushMode === 'erase' ? styles.modeBtnActive : {}) }}
+            >
+              Erase
+            </button>
+            <button
+              onClick={() => setBrushMode('draw')}
+              style={{ ...styles.modeBtn, ...(brushMode === 'draw' ? styles.modeBtnActive : {}) }}
+            >
+              Draw
+            </button>
           </div>
-        )}
 
-        <div style={styles.brushRow}>
-          <span style={styles.editorLabel}>Size</span>
-          <input
-            type="range"
-            min={4}
-            max={80}
-            value={brushSize}
-            onChange={(e) => setBrushSize(Number(e.target.value))}
-            style={{ width: 100, height: 12 }}
-          />
-          <span style={styles.editorLabel}>{brushSize}px</span>
+          {/* Color picker (only in draw mode) */}
+          {brushMode === 'draw' && (
+            <div style={styles.paletteRow}>
+              {PALETTE_COLORS.map((c) => (
+                <div
+                  key={c}
+                  onClick={() => setBrushColor(c)}
+                  style={{
+                    ...styles.colorSwatch,
+                    backgroundColor: c,
+                    outline: c === brushColor ? '2px solid #f0c040' : 'none',
+                  }}
+                />
+              ))}
+              <input
+                type="color"
+                value={brushColor}
+                onChange={(e) => setBrushColor(e.target.value)}
+                style={{ width: 20, height: 20, border: 'none', padding: 0, cursor: 'pointer' }}
+              />
+            </div>
+          )}
+
+          <div style={{ flex: 1 }} />
+          <button onClick={handleSave} disabled={saving} style={styles.editorSaveBtn}>
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button onClick={onClose} style={styles.editorCloseBtn}>Cancel</button>
         </div>
 
-        <div style={styles.brushRow}>
-          <span style={styles.editorLabel}>Opacity</span>
-          <input
-            type="range"
-            min={0.05}
-            max={1}
-            step={0.05}
-            value={brushOpacity}
-            onChange={(e) => setBrushOpacity(Number(e.target.value))}
-            style={{ width: 80, height: 12 }}
-          />
-          <span style={styles.editorLabel}>{Math.round(brushOpacity * 100)}%</span>
+        <div style={styles.toolbarRow}>
+          <div style={styles.brushRow}>
+            <span style={styles.editorLabel}>Size</span>
+            <input
+              type="range"
+              min={4}
+              max={80}
+              value={brushSize}
+              onChange={(e) => setBrushSize(Number(e.target.value))}
+              style={{ width: 100, height: 12 }}
+            />
+            <span style={styles.editorLabel}>{brushSize}px</span>
+          </div>
+
+          <div style={styles.brushRow}>
+            <span style={styles.editorLabel}>Opacity</span>
+            <input
+              type="range"
+              min={0.05}
+              max={1}
+              step={0.05}
+              value={brushOpacity}
+              onChange={(e) => setBrushOpacity(Number(e.target.value))}
+              style={{ width: 80, height: 12 }}
+            />
+            <span style={styles.editorLabel}>{Math.round(brushOpacity * 100)}%</span>
+          </div>
+
+          {/* Flip & Rotate */}
+          <div style={styles.modeGroup}>
+            <button onClick={handleFlip} style={styles.toolBtn} title="Flip Horizontal">Flip</button>
+            <button onClick={() => handleRotate('ccw')} style={styles.toolBtn} title="Rotate 90 CCW">CCW</button>
+            <button onClick={() => handleRotate('cw')} style={styles.toolBtn} title="Rotate 90 CW">CW</button>
+          </div>
+
+          {/* Undo */}
+          <button onClick={popUndo} style={styles.toolBtn} title="Undo (Ctrl+Z)">Undo</button>
         </div>
-
-        {/* Flip & Rotate */}
-        <div style={styles.modeGroup}>
-          <button onClick={handleFlip} style={styles.toolBtn} title="Flip Horizontal">Flip</button>
-          <button onClick={() => handleRotate('ccw')} style={styles.toolBtn} title="Rotate 90 CCW">CCW</button>
-          <button onClick={() => handleRotate('cw')} style={styles.toolBtn} title="Rotate 90 CW">CW</button>
-        </div>
-
-        {/* Undo */}
-        <button onClick={popUndo} style={styles.toolBtn} title="Undo (Ctrl+Z)">Undo</button>
-
-        <div style={{ flex: 1 }} />
-        <button onClick={handleSave} disabled={saving} style={styles.editorSaveBtn}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button onClick={onClose} style={styles.editorCloseBtn}>Cancel</button>
       </div>
       {/* Canvas area */}
       <div ref={containerRef} style={styles.editorCanvasWrap}>
@@ -354,12 +358,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   editorToolbar: {
     display: 'flex',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: 'column',
+    gap: 6,
     padding: '8px 12px',
     background: '#12121e',
     borderBottom: '1px solid #2a2a3a',
     flexShrink: 0,
+  },
+  toolbarRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
     flexWrap: 'wrap',
   },
   editorTitle: {
