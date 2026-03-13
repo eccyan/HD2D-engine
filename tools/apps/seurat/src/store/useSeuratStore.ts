@@ -1023,7 +1023,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     if (!manifest) return;
 
     const pixel = manifest.pixel;
-    const stylePrompt = pixel?.style_prompt || 'pixel art, 8-bit, clean edges, retro game sprite';
+    const stylePrompt = pixel?.style_prompt || 'game sprite, clean edges, simple shading, flat color';
     const negPrompt = pixel?.negative_prompt || 'blurry, realistic, 3d render, smooth shading';
 
     set({ pixelGenerating: true, pixelError: null });
@@ -1105,7 +1105,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       const updated = {
         ...manifest,
         pixel: {
-          style_prompt: manifest.pixel?.style_prompt || 'pixel art, 8-bit, clean edges, retro game sprite',
+          style_prompt: manifest.pixel?.style_prompt || 'game sprite, clean edges, simple shading, flat color',
           negative_prompt: manifest.pixel?.negative_prompt || 'blurry, realistic, 3d render, smooth shading',
           reference_image: 'pixel.png',
         },

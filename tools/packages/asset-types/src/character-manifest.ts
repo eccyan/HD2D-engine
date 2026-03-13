@@ -223,8 +223,8 @@ export function createDefaultManifest(
     display_name: displayName,
     concept: {
       description: "",
-      style_prompt: `pixel art, ${frameWidth}x${frameHeight}`,
-      negative_prompt: "blurry, realistic, 3d render",
+      style_prompt: "game character sprite, clean design, simple shading",
+      negative_prompt: "blurry, realistic, 3d render, watercolor, line art, sketch",
       reference_images: [],
     },
     spritesheet: {
