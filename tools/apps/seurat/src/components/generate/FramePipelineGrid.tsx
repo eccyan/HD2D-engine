@@ -410,6 +410,7 @@ export function FramePipelineGrid({ animName }: Props) {
                         src={imageUrl}
                         alt={`f${frame.index} ${col.key}`}
                         style={styles.cellImg}
+                        loading="lazy"
                       />
                     ) : (
                       <span style={styles.cellEmpty}>{isInterpolated ? '~' : '--'}</span>

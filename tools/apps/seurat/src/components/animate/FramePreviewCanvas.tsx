@@ -40,7 +40,7 @@ export function FramePreviewCanvas({ characterId, clip, currentTime, playbackSta
     return () => ro.disconnect();
   }, []);
 
-  // Load individual frame images
+  // Load individual frame images (batched to avoid ERR_NO_BUFFER_SPACE)
   useEffect(() => {
     const hasImages = clip.frames.some((f) => f.status !== 'pending' && f.status !== 'generating');
     if (!hasImages) {
@@ -49,24 +49,41 @@ export function FramePreviewCanvas({ characterId, clip, currentTime, playbackSta
       return;
     }
 
+    let cancelled = false;
     const images: (HTMLImageElement | null)[] = new Array(clip.frames.length).fill(null);
     let loaded = 0;
 
-    clip.frames.forEach((frame, i) => {
-      if (frame.status === 'pending' || frame.status === 'generating') return;
-      const img = new Image();
-      img.onload = () => {
-        images[i] = img;
-        loaded++;
-        imagesRef.current = [...images];
-        setLoadedCount(loaded);
-      };
-      img.onerror = () => {
-        loaded++;
-        setLoadedCount(loaded);
-      };
-      img.src = frameThumbnailUrl(characterId, clip.name, frame.index);
-    });
+    const loadableFrames = clip.frames
+      .map((frame, i) => ({ frame, i }))
+      .filter(({ frame }) => frame.status !== 'pending' && frame.status !== 'generating');
+
+    const BATCH = 4;
+    let cursor = 0;
+
+    function loadNext() {
+      while (cursor < loadableFrames.length && cursor - loaded < BATCH) {
+        const { frame, i } = loadableFrames[cursor++];
+        const img = new Image();
+        img.onload = () => {
+          if (cancelled) return;
+          images[i] = img;
+          loaded++;
+          imagesRef.current = [...images];
+          setLoadedCount(loaded);
+          loadNext();
+        };
+        img.onerror = () => {
+          if (cancelled) return;
+          loaded++;
+          setLoadedCount(loaded);
+          loadNext();
+        };
+        img.src = frameThumbnailUrl(characterId, clip.name, frame.index);
+      }
+    }
+    loadNext();
+
+    return () => { cancelled = true; };
   }, [characterId, clip.name, clip.frames.map((f) => f.status).join(','), frameRevision]);
 
   // Draw
