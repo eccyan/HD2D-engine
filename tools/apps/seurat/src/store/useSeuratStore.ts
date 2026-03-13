@@ -1378,6 +1378,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         get().updateGenerationJob(jobId, { status: 'error', error: err instanceof Error ? err.message : String(err) });
       }
     }
+
+    // Persist manifest to disk so progress survives page refresh / re-navigation
+    const final = get().manifest;
+    if (final) {
+      await api.saveManifest(final);
+    }
   },
 
   // Interpolation
