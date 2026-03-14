@@ -1774,86 +1774,107 @@ export class ComfyUIClient implements ImageProvider {
       ? [opts.nodeType]
       : ["DWPreprocessor", "OpenposePreprocessor", "AIO_Preprocessor"];
 
-    // DWPreprocessor input variants to try — different versions of
-    // comfyui_controlnet_aux expect different model parameter names.
-    const dwVariants: Record<string, unknown>[] = [
-      // Newer versions: no model params, auto-downloads
-      { detect_hand: "enable", detect_body: "enable", detect_face: "disable" },
-      // Older versions with explicit model names
-      { detect_hand: "enable", detect_body: "enable", detect_face: "disable",
-        bbox_detector: "yolox_l.onnx", pose_estimator: "dw-ll_ucoco_384_bs5.torchscript.pt" },
-    ];
-
     let lastError = "";
     for (const nodeType of nodeTypes) {
-      // For DWPreprocessor, try multiple input variants
-      const inputVariants: Record<string, unknown>[] = nodeType === "DWPreprocessor"
-        ? dwVariants.map((extra) => ({ image: ["1", 0], resolution, ...extra }))
-        : [nodeType === "AIO_Preprocessor"
-          ? { image: ["1", 0], resolution, preprocessor: "DWPreprocessor" }
-          : { image: ["1", 0], resolution }];
-
-      for (const inputs of inputVariants) {
-
-        const workflow: Record<string, WorkflowNode> = {
-          "1": {
-            class_type: "LoadImage",
-            inputs: { image: imageName },
-          },
-          "2": {
-            class_type: nodeType,
-            inputs,
-          },
-          "9": {
-            class_type: "SaveImage",
-            inputs: {
-              filename_prefix: "openpose_detect",
-              images: ["2", 0],
-            },
-          },
-        };
-
-        const submitBody: PromptRequest = { prompt: workflow };
-        const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(submitBody),
-        });
-
-        if (!submitResponse.ok) {
-          lastError = await submitResponse.text().catch(() => "(no body)");
-          console.warn(`[ComfyUI] detectOpenPose: ${nodeType} variant failed (${submitResponse.status}), trying next...`);
+      // Query /object_info to discover the node's required inputs
+      let nodeInfo: Record<string, { required?: Record<string, unknown>; optional?: Record<string, unknown> }> | null = null;
+      try {
+        const infoResp = await fetch(`${this.baseUrl}/object_info/${nodeType}`);
+        if (!infoResp.ok) {
+          console.warn(`[ComfyUI] detectOpenPose: ${nodeType} not found, trying next...`);
           continue;
         }
+        const infoData = await infoResp.json() as Record<string, { input?: Record<string, Record<string, unknown>> }>;
+        nodeInfo = infoData[nodeType]?.input ?? null;
+      } catch {
+        console.warn(`[ComfyUI] detectOpenPose: failed to query object_info for ${nodeType}`);
+        continue;
+      }
 
-        const { prompt_id } = (await submitResponse.json()) as PromptResponse;
-
-        let imageFile;
-        try {
-          imageFile = await this.pollForCompletion(prompt_id);
-        } catch (e) {
-          lastError = e instanceof Error ? e.message : String(e);
-          console.warn(`[ComfyUI] detectOpenPose: ${nodeType} execution failed, trying next...`);
-          continue;
+      // Build inputs dynamically from the node's schema
+      const inputs: Record<string, unknown> = { image: ["1", 0] };
+      if (nodeInfo) {
+        const allFields: Record<string, unknown> = { ...nodeInfo.required, ...nodeInfo.optional };
+        // Set resolution if the node accepts it
+        if (allFields["resolution"]) inputs.resolution = resolution;
+        // Enable/disable toggles
+        if (allFields["detect_hand"]) inputs.detect_hand = "enable";
+        if (allFields["detect_body"]) inputs.detect_body = "enable";
+        if (allFields["detect_face"]) inputs.detect_face = "disable";
+        // Model selectors: pick the first option from the enum if available
+        if (allFields["bbox_detector"]) {
+          const choices = allFields["bbox_detector"];
+          inputs.bbox_detector = Array.isArray(choices) && Array.isArray(choices[0]) ? choices[0][0] : "yolox_l.onnx";
         }
-
-        const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
-          imageFile.filename,
-        )}&subfolder=${encodeURIComponent(imageFile.subfolder)}&type=${encodeURIComponent(
-          imageFile.type,
-        )}`;
-
-        const imageResponse = await fetch(imageUrl);
-        if (!imageResponse.ok) {
-          throw new Error(
-            `ComfyUI detectOpenPose image fetch failed: HTTP ${imageResponse.status} ${imageResponse.statusText}`,
-          );
+        if (allFields["pose_estimator"]) {
+          const choices = allFields["pose_estimator"];
+          inputs.pose_estimator = Array.isArray(choices) && Array.isArray(choices[0]) ? choices[0][0] : "dw-ll_ucoco_384_bs5.torchscript.pt";
         }
+        // AIO_Preprocessor uses a "preprocessor" selector
+        if (allFields["preprocessor"]) inputs.preprocessor = "DWPreprocessor";
+      }
 
-        const buf = await imageResponse.arrayBuffer();
-        return new Uint8Array(buf);
-      } // end inputVariants loop
-    } // end nodeTypes loop
+      console.log(`[ComfyUI] detectOpenPose: trying ${nodeType} with inputs`, inputs);
+
+      const workflow: Record<string, WorkflowNode> = {
+        "1": {
+          class_type: "LoadImage",
+          inputs: { image: imageName },
+        },
+        "2": {
+          class_type: nodeType,
+          inputs,
+        },
+        "9": {
+          class_type: "SaveImage",
+          inputs: {
+            filename_prefix: "openpose_detect",
+            images: ["2", 0],
+          },
+        },
+      };
+
+      const submitBody: PromptRequest = { prompt: workflow };
+      const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(submitBody),
+      });
+
+      if (!submitResponse.ok) {
+        lastError = await submitResponse.text().catch(() => "(no body)");
+        console.warn(`[ComfyUI] detectOpenPose: ${nodeType} prompt rejected (${submitResponse.status}): ${lastError}`);
+        continue;
+      }
+
+      const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+
+      let imageFile;
+      try {
+        imageFile = await this.pollForCompletion(prompt_id);
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
+        console.warn(`[ComfyUI] detectOpenPose: ${nodeType} execution failed: ${lastError}`);
+        continue;
+      }
+
+      const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
+        imageFile.filename,
+      )}&subfolder=${encodeURIComponent(imageFile.subfolder)}&type=${encodeURIComponent(
+        imageFile.type,
+      )}`;
+
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error(
+          `ComfyUI detectOpenPose image fetch failed: HTTP ${imageResponse.status} ${imageResponse.statusText}`,
+        );
+      }
+
+      console.log(`[ComfyUI] detectOpenPose: success with ${nodeType}`);
+      const buf = await imageResponse.arrayBuffer();
+      return new Uint8Array(buf);
+    }
 
     throw new Error(
       `ComfyUI detectOpenPose: all preprocessor nodes failed. Last error: ${lastError}. ` +
