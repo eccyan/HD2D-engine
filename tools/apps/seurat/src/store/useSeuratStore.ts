@@ -518,11 +518,23 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     try {
       const comfy = new ComfyUIClient(aiConfig.comfyUrl);
 
-      // Remove background first for cleaner pose detection
+      // Remove background, then composite on white for cleaner pose detection.
+      // OpenPose needs a solid background — transparent PNGs produce blank results.
       let cleanBytes = conceptBytes;
       if (aiConfig.removeBackground) {
         try {
-          cleanBytes = await comfy.removeBackground(conceptBytes, aiConfig.remBgNodeType);
+          const rmbgBytes = await comfy.removeBackground(conceptBytes, aiConfig.remBgNodeType);
+          // Composite on white background
+          const blob = new Blob([rmbgBytes as BlobPart], { type: 'image/png' });
+          const bmp = await createImageBitmap(blob);
+          const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+          const ctx = canvas.getContext('2d')!;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(bmp, 0, 0);
+          bmp.close();
+          const whiteBlob = await canvas.convertToBlob({ type: 'image/png' });
+          cleanBytes = new Uint8Array(await whiteBlob.arrayBuffer());
         } catch {
           console.warn('[Seurat] Background removal failed before pose detection, using original image');
         }
