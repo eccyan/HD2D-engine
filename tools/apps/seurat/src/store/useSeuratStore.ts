@@ -60,6 +60,9 @@ export interface SeuratState {
   uploadConceptImage: (file: File) => Promise<void>;
   uploadConceptImageForView: (file: File, view: ViewDirection) => Promise<void>;
   loadConceptImage: () => void;
+  detectedPoseUrl: string | null;
+  detectingPose: boolean;
+  detectConceptPose: () => Promise<void>;
 
   // Directional poses
   conceptViewUrls: Record<ViewDirection, string | null>;
@@ -494,6 +497,35 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const { selectedCharacterId } = get();
     if (!selectedCharacterId) return;
     set({ conceptImageUrl: api.conceptImageUrl(selectedCharacterId) });
+  },
+
+  detectedPoseUrl: null,
+  detectingPose: false,
+  detectConceptPose: async () => {
+    const { manifest, aiConfig } = get();
+    if (!manifest) return;
+
+    let conceptBytes: Uint8Array | null = null;
+    try {
+      conceptBytes = await api.fetchConceptImageBytes(manifest.character_id);
+    } catch { /* missing */ }
+    if (!conceptBytes) {
+      set({ conceptError: 'No concept image to detect pose from.' });
+      return;
+    }
+
+    set({ detectingPose: true, detectedPoseUrl: null });
+    try {
+      const comfy = new ComfyUIClient(aiConfig.comfyUrl);
+      const poseBytes = await comfy.detectOpenPose(conceptBytes, { resolution: 512 });
+      const blob = new Blob([poseBytes as BlobPart], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      set({ detectedPoseUrl: url });
+    } catch (err) {
+      set({ conceptError: `Pose detection failed: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      set({ detectingPose: false });
+    }
   },
 
   // Directional poses

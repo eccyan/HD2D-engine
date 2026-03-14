@@ -79,6 +79,9 @@ export function ConceptPreview() {
   const chibiViewUrls = useSeuratStore((s) => s.chibiViewUrls);
   const hasConceptBase = useSeuratStore((s) => s.hasConceptBase);
   const conceptPoseCurrentView = useSeuratStore((s) => s.conceptPoseCurrentView);
+  const detectedPoseUrl = useSeuratStore((s) => s.detectedPoseUrl);
+  const detectingPose = useSeuratStore((s) => s.detectingPose);
+  const detectConceptPose = useSeuratStore((s) => s.detectConceptPose);
   const loadConceptViewUrls = useSeuratStore((s) => s.loadConceptViewUrls);
   const loadChibiViewUrls = useSeuratStore((s) => s.loadChibiViewUrls);
   const uploadConceptImageForView = useSeuratStore((s) => s.uploadConceptImageForView);
@@ -182,24 +185,40 @@ export function ConceptPreview() {
       {/* ── Top: Identity Anchor ── */}
       <div style={styles.anchorSection}>
         <div style={styles.anchorLabel}>Concept</div>
-        {hasConceptBase && conceptImageUrl ? (
-          <div
-            style={styles.anchorImageWrap}
-            onClick={() => setEditing({ url: conceptImageUrl, title: 'Concept', type: 'concept', view: 'base' })}
-          >
-            <img
-              src={conceptImageUrl}
-              alt="Identity concept"
-              crossOrigin="anonymous"
-              style={styles.anchorImg}
-              onError={() => setImgError((prev) => ({ ...prev, anchor: true }))}
-            />
-          </div>
-        ) : (
-          <div style={styles.anchorPlaceholder}>
-            Generate or upload a concept image
-          </div>
-        )}
+        <div style={styles.anchorRow}>
+          {hasConceptBase && conceptImageUrl ? (
+            <div
+              style={styles.anchorImageWrap}
+              onClick={() => setEditing({ url: conceptImageUrl, title: 'Concept', type: 'concept', view: 'base' })}
+            >
+              <img
+                src={conceptImageUrl}
+                alt="Identity concept"
+                crossOrigin="anonymous"
+                style={styles.anchorImg}
+                onError={() => setImgError((prev) => ({ ...prev, anchor: true }))}
+              />
+            </div>
+          ) : (
+            <div style={styles.anchorPlaceholder}>
+              Generate or upload a concept image
+            </div>
+          )}
+
+          {/* Detected pose skeleton */}
+          {detectedPoseUrl ? (
+            <div style={styles.anchorPoseWrap}>
+              <img src={detectedPoseUrl} alt="Detected pose" style={styles.anchorImg} />
+            </div>
+          ) : hasConceptBase ? (
+            <div
+              style={{ ...styles.anchorPlaceholder, cursor: detectingPose ? 'wait' : 'pointer' }}
+              onClick={!detectingPose ? detectConceptPose : undefined}
+            >
+              {detectingPose ? 'Detecting...' : 'Detect Pose'}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* ── Bottom: Directional Views Grid ── */}
@@ -350,6 +369,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#aaa',
   },
+  anchorRow: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   anchorImageWrap: {
     width: 160,
     height: 160,
@@ -361,6 +386,17 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
+  },
+  anchorPoseWrap: {
+    width: 160,
+    height: 160,
+    background: '#000',
+    border: '2px solid #4a4a6a',
+    borderRadius: 6,
+    overflow: 'hidden',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   anchorImg: {
     width: '100%',

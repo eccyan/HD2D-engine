@@ -1757,6 +1757,79 @@ export class ComfyUIClient implements ImageProvider {
   }
 
   /**
+   * Detect an OpenPose skeleton from an image using the DWPreprocessor node
+   * (comfyui_controlnet_aux). Returns the rendered skeleton as PNG bytes.
+   *
+   * Falls back to OpenposePreprocessor if DWPreprocessor is not available.
+   */
+  async detectOpenPose(
+    imageBytes: Uint8Array,
+    opts?: { resolution?: number; nodeType?: string },
+  ): Promise<Uint8Array> {
+    const imageName = await this.uploadImage(imageBytes);
+    const resolution = opts?.resolution ?? 512;
+    const nodeType = opts?.nodeType ?? "DWPreprocessor";
+
+    const workflow: Record<string, WorkflowNode> = {
+      "1": {
+        class_type: "LoadImage",
+        inputs: { image: imageName },
+      },
+      "2": {
+        class_type: nodeType,
+        inputs: {
+          image: ["1", 0],
+          detect_hand: "enable",
+          detect_body: "enable",
+          detect_face: "disable",
+          resolution,
+          ...(nodeType === "DWPreprocessor" ? { bbox_detector: "yolox_l.onnx", pose_estimator: "dw-ll_ucoco_384_bs5.torchscript.pt" } : {}),
+        },
+      },
+      "9": {
+        class_type: "SaveImage",
+        inputs: {
+          filename_prefix: "openpose_detect",
+          images: ["2", 0],
+        },
+      },
+    };
+
+    const submitBody: PromptRequest = { prompt: workflow };
+    const submitResponse = await fetch(`${this.baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitBody),
+    });
+
+    if (!submitResponse.ok) {
+      const text = await submitResponse.text().catch(() => "(no body)");
+      throw new Error(
+        `ComfyUI detectOpenPose failed: HTTP ${submitResponse.status} ${submitResponse.statusText} — ${text}`,
+      );
+    }
+
+    const { prompt_id } = (await submitResponse.json()) as PromptResponse;
+    const imageFile = await this.pollForCompletion(prompt_id);
+
+    const imageUrl = `${this.baseUrl}/view?filename=${encodeURIComponent(
+      imageFile.filename,
+    )}&subfolder=${encodeURIComponent(imageFile.subfolder)}&type=${encodeURIComponent(
+      imageFile.type,
+    )}`;
+
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(
+        `ComfyUI detectOpenPose image fetch failed: HTTP ${imageResponse.status} ${imageResponse.statusText}`,
+      );
+    }
+
+    const buf = await imageResponse.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  /**
    * Poll GET /history/{id} until the job completes, then return the first
    * output image file descriptor.
    */
