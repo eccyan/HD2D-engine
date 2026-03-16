@@ -183,6 +183,22 @@ export function ConceptPreview() {
 
   return (
     <div style={styles.container}>
+      {/* ── Step indicators ── */}
+      <div style={styles.stepIndicators}>
+        {[
+          { n: 1, label: 'Concept', done: hasConceptBase },
+          { n: 2, label: 'Skeleton', done: !!detectedPoseUrl },
+          { n: 3, label: 'View Poses', done: Object.values(detectedViewPoseUrls).filter(Boolean).length === 4 },
+          { n: 4, label: 'Concepts', done: Object.values(conceptViewUrls).filter(Boolean).length === 4 },
+          { n: 5, label: 'Chibi', done: Object.values(chibiViewUrls).filter(Boolean).length === 4 },
+        ].map(({ n, label, done }) => (
+          <div key={n} style={{ ...styles.stepDot, borderColor: done ? '#44aa44' : '#333', color: done ? '#70d870' : '#555' }}>
+            <span style={{ fontSize: 8, fontWeight: 700 }}>{n}</span>
+            <span style={{ fontSize: 7 }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
       {/* ── Top: Identity Anchor ── */}
       <div style={styles.anchorSection}>
         <div style={styles.anchorLabel}>Concept</div>
@@ -366,6 +382,23 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#555',
     fontFamily: 'monospace',
     fontSize: 12,
+  },
+  /* Step indicators */
+  stepIndicators: {
+    display: 'flex',
+    gap: 4,
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  stepDot: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 1,
+    fontFamily: 'monospace',
+    padding: '2px 6px',
+    borderRadius: 4,
+    border: '1px solid',
   },
   /* Identity anchor */
   anchorSection: {

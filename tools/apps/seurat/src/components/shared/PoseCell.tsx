@@ -31,6 +31,7 @@ interface PoseCellProps {
 export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseOverrides = useSeuratStore((s) => s.poseOverrides);
+  const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -44,7 +45,7 @@ export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellPro
     ctx.fillRect(0, 0, size, size);
 
     const key = `${animName}:${frameIndex}`;
-    const pose = staticPose ? getPose(animName, frameIndex) : (poseOverrides[key] ?? getPose(animName, frameIndex));
+    const pose = staticPose ? getPose(animName, frameIndex) : (poseOverrides[key] ?? derivedAnimPoses[animName]?.[frameIndex] ?? getPose(animName, frameIndex));
     if (!pose) {
       ctx.fillStyle = '#333';
       ctx.font = '9px monospace';

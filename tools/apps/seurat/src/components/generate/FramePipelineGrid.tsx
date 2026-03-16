@@ -3,6 +3,7 @@ import type { PipelineStage, CharacterFrame, CharacterAnimation } from '@vulkan-
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { PaintEditor } from '../shared/PaintEditor.js';
 import { PoseCell } from '../shared/PoseCell.js';
+import { SinglePoseEditor } from '../shared/SinglePoseEditor.js';
 import * as api from '../../lib/bridge-api.js';
 
 /** Columns after the Pose column */
@@ -110,6 +111,8 @@ export function FramePipelineGrid({ animName }: Props) {
   const pasteFrame = useSeuratStore((s) => s.pasteFrame);
   const clipboard = useSeuratStore((s) => s.clipboard);
   const interpMultiplier = useSeuratStore((s) => s.aiConfig.interpMultiplier);
+  const poseOverrides = useSeuratStore((s) => s.poseOverrides);
+  const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
 
   const [editing, setEditing] = useState<{
     animName: string;
@@ -117,6 +120,8 @@ export function FramePipelineGrid({ animName }: Props) {
     pass: PipelineStage;
     imageUrl: string;
   } | null>(null);
+
+  const [editingPose, setEditingPose] = useState<{ animName: string; frameIndex: number; title: string } | null>(null);
 
   const selectedFrames = useSeuratStore((s) => s.selectedFrames);
   const toggleFrameSelection = useSeuratStore((s) => s.toggleFrameSelection);
@@ -231,7 +236,6 @@ export function FramePipelineGrid({ animName }: Props) {
                 ...styles.frameRow,
                 gridTemplateColumns: `60px repeat(${colCount}, 1fr)`,
                 background: isSelected ? '#1a2a3a' : undefined,
-                opacity: isInterpolated ? 0.6 : 1,
               }}
             >
               {/* Frame index + selection */}
@@ -256,17 +260,31 @@ export function FramePipelineGrid({ animName }: Props) {
                 </span>
               </div>
 
-              {/* Pose cell — only keyframes have poses; interpolated frames are derived from pixels */}
-              <div style={{
-                ...styles.passCell,
-                opacity: (isVirtual || isInterpolated) ? 0.15 : 1,
-              }}>
-                {(isVirtual || isInterpolated) ? (
-                  <span style={styles.cellEmpty}>~</span>
-                ) : (
-                  <PoseCell animName={animName} frameIndex={frame!.index} size={128} />
-                )}
-              </div>
+              {/* Pose cell — all frames are first-class, with visual indicators */}
+              {(() => {
+                const fi = frame?.index ?? displayIndex;
+                const overrideKey = `${animName}:${fi}`;
+                const hasOverride = !!poseOverrides[overrideKey];
+                const hasDerived = !!derivedAnimPoses[animName]?.[fi];
+                const poseBorder = hasOverride ? '#f8a04a' : hasDerived ? '#44aa44' : '#2a2a3a';
+                return (
+                  <div
+                    style={{
+                      ...styles.passCell,
+                      borderColor: poseBorder,
+                      opacity: isVirtual ? 0.15 : 1,
+                      cursor: isVirtual ? 'default' : 'pointer',
+                    }}
+                    onClick={() => !isVirtual && setEditingPose({ animName, frameIndex: fi, title: `${animName} f${fi} Pose` })}
+                  >
+                    {isVirtual ? (
+                      <span style={styles.cellEmpty}>~</span>
+                    ) : (
+                      <PoseCell animName={animName} frameIndex={fi} size={128} />
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Pass cells */}
               {PASS_COLUMNS.map((col) => {
@@ -377,6 +395,16 @@ export function FramePipelineGrid({ animName }: Props) {
             </div>
           </div>
         </>
+      )}
+
+      {/* Pose editor overlay */}
+      {editingPose && (
+        <SinglePoseEditor
+          animName={editingPose.animName}
+          frameIndex={editingPose.frameIndex}
+          title={editingPose.title}
+          onClose={() => setEditingPose(null)}
+        />
       )}
     </div>
   );

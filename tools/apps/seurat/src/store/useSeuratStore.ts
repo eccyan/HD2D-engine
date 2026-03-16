@@ -164,6 +164,11 @@ export interface SeuratState {
   clearPoseOverride: (animName: string, frameIndex: number) => void;
   clearAllPoseOverrides: (animName: string) => void;
 
+  // Derived animation poses (from anchor skeleton)
+  derivedAnimPoses: Record<string, ([number, number] | null)[][]>;
+  derivingAnimPoses: boolean;
+  deriveAnimationPoses: () => Promise<void>;
+
   // ComfyUI model lists
   availableCheckpoints: string[];
   availableLoras: string[];
@@ -788,17 +793,23 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         const viewPrompt = `${basePrompt}, ${CONCEPT_VIEW_PROMPTS[view]}`;
         console.log(`[Seurat] Concept pose — ${view} prompt:`, viewPrompt);
 
-        // Prefer detected pose from concept images, then fall back to templates
-        const { detectedPoseBytes: frontDetected, detectedViewPoseBytes } = get();
+        // Prefer: pose overrides > detected view pose > detected concept pose > template
+        const { detectedPoseBytes: frontDetected, detectedViewPoseBytes, poseOverrides: overrides } = get();
         let poseBytes: Uint8Array | null = null;
-        if (detectedViewPoseBytes[view]) {
+        const poseDef = CONCEPT_VIEW_POSES[view];
+        const overrideKey = poseDef ? `${poseDef.animName}:${poseDef.frameIndex}` : null;
+        const poseOverride = overrideKey ? overrides[overrideKey] : null;
+
+        if (poseOverride) {
+          console.log(`[Seurat] Concept pose — ${view}: using edited skeleton override`);
+          poseBytes = await renderPoseToPng(poseOverride, 512, 512);
+        } else if (detectedViewPoseBytes[view]) {
           console.log(`[Seurat] Concept pose — ${view}: using detected pose from directional view`);
           poseBytes = detectedViewPoseBytes[view];
         } else if (view === 'front' && frontDetected) {
           console.log('[Seurat] Concept pose — front: using detected pose from concept image');
           poseBytes = frontDetected;
         } else {
-          const poseDef = CONCEPT_VIEW_POSES[view];
           const pose = poseDef ? getPose(poseDef.animName, poseDef.frameIndex) : null;
           poseBytes = pose ? await renderPoseToPng(pose, 512, 512) : null;
         }
@@ -1408,15 +1419,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     if (!anim) return;
 
     const comfy = new ComfyUIClient(aiConfig.comfyUrl);
-    // Filter out interpolation placeholders for pass1/pass2 (AI generation) —
-    // but allow pass3 (client-side pixelization) to run on all frames including interpolated ones.
-    const allIndices = frameIndices ?? anim.frames.map((f) => f.index);
-    const indices = pass === 'pass3'
-      ? allIndices
-      : allIndices.filter((idx) => {
-          const frame = anim.frames.find((f) => f.index === idx);
-          return !frame || frame.keyframe !== false;
-        });
+    // All frames are now first-class — generate for all selected indices
+    const indices = frameIndices ?? anim.frames.map((f) => f.index);
 
     const { buildFramePrompt, buildNegativePrompt, buildPass2Prompt, buildPass2NegativePrompt } = await import('../lib/ai-generate.js');
     const { getPose, renderPoseToPng } = await import('../lib/pose-templates.js');
@@ -1450,7 +1454,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           catch { conceptBytes = await api.fetchConceptImageBytes(manifest.character_id); }
           conceptBytes = await preRemBg(conceptBytes);
 
-          const pose = get().poseOverrides[`${animName}:${fi}`] ?? getPose(animName, fi);
+          const pose = get().poseOverrides[`${animName}:${fi}`]
+            ?? get().derivedAnimPoses[animName]?.[fi]
+            ?? getPose(animName, fi);
           const poseBytes = pose ? await renderPoseToPng(pose, 512, 512) : null;
 
           let pngBytes: Uint8Array;
@@ -1867,7 +1873,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
         let pngBytes: Uint8Array;
         const pose = aiConfig.useIPAdapter
-          ? (get().poseOverrides[`${animName}:${frameIndex}`] ?? getPose(animName, frameIndex))
+          ? (get().poseOverrides[`${animName}:${frameIndex}`]
+             ?? get().derivedAnimPoses[animName]?.[frameIndex]
+             ?? getPose(animName, frameIndex))
           : null;
 
         // Warmup: pre-load models before the real generation
@@ -2017,8 +2025,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
           // Check if IP-Adapter per-frame mode applies (with pose overrides)
           const overrides = get().poseOverrides;
+          const derivedPoses = get().derivedAnimPoses[an];
           const animPoses = aiConfig.useIPAdapter ? getAnimationPoses(an, frameCount)?.map(
-            (p, i) => overrides[`${an}:${i}`] ?? p
+            (p, i) => overrides[`${an}:${i}`] ?? derivedPoses?.[i] ?? p
           ) ?? null : null;
 
           if (aiConfig.useAnimateDiff && singlePassRef) {
@@ -2317,6 +2326,45 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       if (key.startsWith(`${animName}:`)) delete overrides[key];
     }
     set({ poseOverrides: overrides });
+  },
+
+  // Derived animation poses
+  derivedAnimPoses: {},
+  derivingAnimPoses: false,
+  deriveAnimationPoses: async () => {
+    const { detectedPoseBytes } = get();
+    if (!detectedPoseBytes) {
+      set({ conceptPoseError: 'Detect the concept pose first.' });
+      return;
+    }
+
+    set({ derivingAnimPoses: true, conceptPoseProgress: 'Extracting keypoints for animation poses...' });
+    try {
+      const { extractKeypointsFromPoseImage, deriveAllAnimationPoses } = await import('../lib/pose-templates.js');
+      const keypoints = await extractKeypointsFromPoseImage(detectedPoseBytes);
+      const validCount = keypoints.filter((k) => k !== null).length;
+      console.log(`[Seurat] Extracted ${validCount}/14 keypoints for animation poses`);
+
+      if (validCount < 5) {
+        set({ conceptPoseError: `Only ${validCount} keypoints detected — not enough to derive poses.` });
+        return;
+      }
+
+      set({ conceptPoseProgress: 'Deriving all animation poses...' });
+      const allPoses = deriveAllAnimationPoses(keypoints);
+
+      const totalPoseCount = Object.values(allPoses).reduce((s, p) => s + p.length, 0);
+      console.log(`[Seurat] Derived ${totalPoseCount} poses across ${Object.keys(allPoses).length} animations`);
+
+      set({
+        derivedAnimPoses: allPoses,
+        conceptPoseProgress: `Derived ${totalPoseCount} poses across ${Object.keys(allPoses).length} animations.`,
+      });
+    } catch (err) {
+      set({ conceptPoseError: `Animation pose derivation failed: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      set({ derivingAnimPoses: false });
+    }
   },
 
   // ComfyUI model lists

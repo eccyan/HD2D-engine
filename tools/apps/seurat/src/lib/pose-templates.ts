@@ -409,6 +409,160 @@ export function getAnimationPoses(animName: string, frameCount: number): Pose[] 
   return poses;
 }
 
+/**
+ * Exported types for external use (store, components).
+ */
+export type { Keypoint, Pose };
+
+/**
+ * Get the KEYFRAME_STRIDE for a given animation state.
+ */
+export function getKeyframeStride(state: string): number {
+  return KEYFRAME_STRIDE[state] ?? 1;
+}
+
+/**
+ * Get the total number of template keyframes for a given animation state.
+ */
+export function getTemplateKeyframeCount(animName: string): number {
+  const parts = animName.split('_');
+  if (parts.length < 2) return 0;
+  const state = parts[0];
+  const dirRaw = parts.slice(1).join('_');
+  const dirMap: Record<string, string> = {
+    down: 'down', south: 'down', up: 'up', north: 'up',
+    right: 'right', east: 'right', left: 'left', west: 'left',
+  };
+  const dir = dirMap[dirRaw.toLowerCase()];
+  if (!dir) return 0;
+  const statePoses = POSE_MAP[state];
+  if (!statePoses) return 0;
+  return statePoses[dir]?.length ?? 0;
+}
+
+/**
+ * Interpolate between keyframe poses to produce a full set of poses for all frames.
+ * Linearly interpolates keypoint coordinates between bracketing keyframes.
+ * For cyclic animations, the last keyframe wraps to the first.
+ *
+ * @param keyframePoses - Array of poses at keyframe positions
+ * @param stride - Number of frame indices between each keyframe
+ * @param totalFrames - Total number of frames in the animation
+ */
+export function interpolateTemplatePoses(
+  keyframePoses: Pose[],
+  stride: number,
+  totalFrames: number,
+): Pose[] {
+  if (keyframePoses.length === 0) return [];
+  if (stride <= 1) {
+    // No interpolation needed — just tile keyframes to fill totalFrames
+    return Array.from({ length: totalFrames }, (_, i) =>
+      keyframePoses[i % keyframePoses.length],
+    );
+  }
+
+  const result: Pose[] = [];
+
+  for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
+    const keyframePos = frameIdx / stride;
+    const kfA = Math.floor(keyframePos) % keyframePoses.length;
+    const kfB = (kfA + 1) % keyframePoses.length; // wraps for cyclic
+    const t = keyframePos - Math.floor(keyframePos);
+
+    if (t < 0.001) {
+      // Exactly on a keyframe
+      result.push(keyframePoses[kfA].map((kp) => kp ? [...kp] as [number, number] : null));
+    } else {
+      // Interpolate between kfA and kfB
+      const poseA = keyframePoses[kfA];
+      const poseB = keyframePoses[kfB];
+      const lerped: Pose = poseA.map((kpA, i) => {
+        const kpB = poseB[i];
+        if (!kpA || !kpB) return null;
+        return [
+          kpA[0] + (kpB[0] - kpA[0]) * t,
+          kpA[1] + (kpB[1] - kpA[1]) * t,
+        ] as [number, number];
+      });
+      result.push(lerped);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Derive skeleton poses for ALL animations from detected front-view keypoints.
+ * For each animation (idle_down, walk_right, run_up, etc.), gets template keyframes,
+ * expands to full frame count via interpolation, and applies template X + detected Y.
+ *
+ * @param detectedFrontKeypoints - Keypoints extracted from the front concept skeleton
+ * @returns Map keyed by animation name → array of poses for all frames
+ */
+export function deriveAllAnimationPoses(
+  detectedFrontKeypoints: Keypoint[],
+): Record<string, Pose[]> {
+  const result: Record<string, Pose[]> = {};
+  const states = Object.keys(POSE_MAP); // idle, walk, run
+  const directions = ['down', 'up', 'right', 'left'];
+
+  for (const state of states) {
+    for (const dir of directions) {
+      const animName = `${state}_${dir}`;
+      const statePoses = POSE_MAP[state];
+      if (!statePoses || !statePoses[dir]) continue;
+
+      const templateKeyframes = statePoses[dir];
+      const stride = KEYFRAME_STRIDE[state] ?? 1;
+      const totalFrames = templateKeyframes.length * stride;
+
+      // Expand keyframes to all frames via interpolation
+      const allTemplatePoses = interpolateTemplatePoses(templateKeyframes, stride, totalFrames);
+
+      // Apply template X + detected Y for each pose
+      const derivedPoses: Pose[] = allTemplatePoses.map((templatePose) => {
+        // For front/down direction, use detected keypoints directly
+        if (dir === 'down') {
+          return templatePose.map((templateKp, i) => {
+            const detectedKp = detectedFrontKeypoints[i];
+            if (!templateKp) return null;
+            if (!detectedKp) return templateKp ? [...templateKp] as [number, number] : null;
+            // For down-facing, use detected proportions for both X and Y
+            // (detected is front view which maps to down)
+            return [detectedKp[0], detectedKp[1]] as [number, number];
+          });
+        }
+
+        return templatePose.map((templateKp, i) => {
+          const detectedKp = detectedFrontKeypoints[i];
+          if (!templateKp) return null;
+          if (!detectedKp) return templateKp ? [...templateKp] as [number, number] : null;
+          // Template X (defines direction) + detected Y (defines proportions)
+          return [templateKp[0], detectedKp[1]] as [number, number];
+        });
+      });
+
+      // For "up" directions: null out nose
+      if (dir === 'up') {
+        for (const pose of derivedPoses) {
+          pose[0] = null;
+        }
+      }
+
+      // For "left": mirror X of derived right if right was derived
+      if (dir === 'left' && result[`${state}_right`]) {
+        result[animName] = result[`${state}_right`].map((pose) => mirrorX(pose));
+        continue;
+      }
+
+      result[animName] = derivedPoses;
+    }
+  }
+
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Extract keypoints from a DWPreprocessor skeleton image and derive
 // directional poses by combining detected proportions with template shapes.

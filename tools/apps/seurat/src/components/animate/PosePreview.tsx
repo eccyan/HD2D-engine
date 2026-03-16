@@ -40,6 +40,7 @@ export function PosePreview({ animName, frameCount }: Props) {
   const setPoseOverride = useSeuratStore((s) => s.setPoseOverride);
   const clearPoseOverride = useSeuratStore((s) => s.clearPoseOverride);
   const clearAllPoseOverrides = useSeuratStore((s) => s.clearAllPoseOverrides);
+  const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
 
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -47,8 +48,8 @@ export function PosePreview({ animName, frameCount }: Props) {
 
   const getEffectivePose = useCallback((frameIndex: number): Keypoint[] | null => {
     const key = `${animName}:${frameIndex}`;
-    return poseOverrides[key] ?? getPose(animName, frameIndex);
-  }, [animName, poseOverrides]);
+    return poseOverrides[key] ?? derivedAnimPoses[animName]?.[frameIndex] ?? getPose(animName, frameIndex);
+  }, [animName, poseOverrides, derivedAnimPoses]);
 
   const poses = Array.from({ length: frameCount }, (_, i) => getEffectivePose(i));
   const hasPoses = poses.some((p) => p !== null);

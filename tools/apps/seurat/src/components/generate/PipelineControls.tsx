@@ -32,6 +32,11 @@ export function PipelineControls({ animName }: Props) {
   const revertInterpolation = useSeuratStore((s) => s.revertInterpolation);
   const interpProgress = useSeuratStore((s) => s.interpProgress);
 
+  const detectedPoseBytes = useSeuratStore((s) => s.detectedPoseBytes);
+  const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
+  const derivingAnimPoses = useSeuratStore((s) => s.derivingAnimPoses);
+  const deriveAnimationPoses = useSeuratStore((s) => s.deriveAnimationPoses);
+
   const selectedIndices = useSelectedFrameIndices();
 
   const availableVaes = useSeuratStore((s) => s.availableVaes);
@@ -59,15 +64,13 @@ export function PipelineControls({ animName }: Props) {
     ? availableVaes.filter((v) => v.toLowerCase().includes(vaeSearch.toLowerCase()))
     : availableVaes;
 
-  // Count frames at each stage (keyframes only for pass1/pass2)
-  const keyframesOnly = anim.frames.filter((f) => f.keyframe !== false);
-  const keyframeCount = keyframesOnly.length;
+  // Count frames at each stage (all frames are first-class)
+  const totalFrames = anim.frames.length;
   const stageCounts = {
-    pass1: keyframesOnly.filter((f) => f.pipeline_stage && ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'].includes(f.pipeline_stage)).length,
-    pass2: keyframesOnly.filter((f) => f.pipeline_stage && ['pass2', 'pass2_edited', 'pass3'].includes(f.pipeline_stage)).length,
+    pass1: anim.frames.filter((f) => f.pipeline_stage && ['pass1', 'pass1_edited', 'pass2', 'pass2_edited', 'pass3'].includes(f.pipeline_stage)).length,
+    pass2: anim.frames.filter((f) => f.pipeline_stage && ['pass2', 'pass2_edited', 'pass3'].includes(f.pipeline_stage)).length,
     pass3: anim.frames.filter((f) => f.pipeline_stage === 'pass3').length,
   };
-  const totalFrames = anim.frames.length;
 
   const handleRunPass = async (pass: 'pass1' | 'pass2' | 'pass3') => {
     if (selectedIndices.length === 0) return;
@@ -90,8 +93,35 @@ export function PipelineControls({ animName }: Props) {
 
   const animJobs = generationJobs.filter((j) => j.animName === animName);
 
+  const derivedForAnim = derivedAnimPoses[animName];
+  const derivedPoseCount = derivedForAnim?.length ?? 0;
+
   return (
     <div style={styles.container} data-testid="pipeline-controls">
+      {/* Derive Poses from Anchor */}
+      <div style={styles.section}>
+        <div style={styles.subTitle}>Skeleton Poses</div>
+        <div style={styles.statusText}>
+          {derivedPoseCount > 0
+            ? `${derivedPoseCount}/${anim.frames.length} poses derived from anchor`
+            : detectedPoseBytes
+              ? 'Anchor skeleton available — derive poses'
+              : 'Anchor skeleton required (detect in Concept tab)'}
+        </div>
+        <button
+          onClick={deriveAnimationPoses}
+          disabled={!detectedPoseBytes || derivingAnimPoses}
+          style={{
+            ...styles.passBtn,
+            borderColor: '#44aa44',
+            color: '#70d870',
+            opacity: (!detectedPoseBytes || derivingAnimPoses) ? 0.5 : 1,
+          }}
+        >
+          {derivingAnimPoses ? 'Deriving...' : 'Derive Poses from Anchor'}
+        </button>
+      </div>
+
       {/* Prompt */}
       <div style={styles.section}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -115,7 +145,7 @@ export function PipelineControls({ animName }: Props) {
       {/* Pass 1: Pose Generation */}
       <div style={styles.section}>
         <div style={styles.subTitle}>Pass 1 — Pose Generation</div>
-        <div style={styles.statusText}>{stageCounts.pass1}/{keyframeCount} keyframes</div>
+        <div style={styles.statusText}>{stageCounts.pass1}/{totalFrames} frames</div>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
             data-testid="run-pass1-btn"
@@ -149,7 +179,7 @@ export function PipelineControls({ animName }: Props) {
       {/* Pass 2: Chibi Styling */}
       <div style={styles.section}>
         <div style={styles.subTitle}>Pass 2 — Chibi Styling</div>
-        <div style={styles.statusText}>{stageCounts.pass2}/{keyframeCount} keyframes</div>
+        <div style={styles.statusText}>{stageCounts.pass2}/{totalFrames} frames</div>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
             data-testid="run-pass2-btn"
@@ -222,7 +252,7 @@ export function PipelineControls({ animName }: Props) {
               </Row>
               <div style={styles.statusText}>
                 {hasPlaceholders
-                  ? `${keyframeCount} keyframes + ${filledSlots.length}/${interpSlots.length} interp filled = ${totalFrames} total`
+                  ? `${anim.frames.filter((f) => f.keyframe !== false).length} keyframes + ${filledSlots.length}/${interpSlots.length} interp filled = ${totalFrames} total`
                   : `${totalFrames} frames → ${totalFrames + (totalFrames - (anim.loop ? 0 : 1)) * (aiConfig.interpMultiplier - 1)} frames`
                 }
               </div>

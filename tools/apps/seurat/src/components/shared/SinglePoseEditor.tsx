@@ -41,6 +41,7 @@ interface Props {
 export function SinglePoseEditor({ animName, frameIndex, title, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseOverrides = useSeuratStore((s) => s.poseOverrides);
+  const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
   const setPoseOverride = useSeuratStore((s) => s.setPoseOverride);
   const clearPoseOverride = useSeuratStore((s) => s.clearPoseOverride);
 
@@ -51,8 +52,8 @@ export function SinglePoseEditor({ animName, frameIndex, title, onClose }: Props
   const hasOverride = !!poseOverrides[key];
 
   const getPoseData = useCallback((): Keypoint[] | null => {
-    return poseOverrides[key] ?? getPose(animName, frameIndex);
-  }, [animName, frameIndex, poseOverrides, key]);
+    return poseOverrides[key] ?? derivedAnimPoses[animName]?.[frameIndex] ?? getPose(animName, frameIndex);
+  }, [animName, frameIndex, poseOverrides, derivedAnimPoses, key]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;

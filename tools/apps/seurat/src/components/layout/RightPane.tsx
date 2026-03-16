@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { ManifestJsonEditor } from '../manifest/ManifestJsonEditor.js';
 import { ConceptActions } from '../concept/ConceptActions.js';
-import { ChibiActions } from '../concept/ChibiActions.js';
+// ChibiActions is now integrated into ConceptActions step 5
 import { AtlasActions } from '../atlas/AtlasActions.js';
 import { GenerateActions } from '../generate/GenerateActions.js';
 import { PipelineControls } from '../generate/PipelineControls.js';
@@ -69,11 +69,8 @@ function RightContent({ selection }: { selection: ReturnType<typeof useSeuratSto
 function CharacterSections() {
   return (
     <>
-      <Collapsible title="Concept Art" defaultOpen>
+      <Collapsible title="Concept Pipeline" defaultOpen>
         <ConceptActions />
-      </Collapsible>
-      <Collapsible title="Chibi / Deformed" defaultOpen>
-        <ChibiActions />
       </Collapsible>
       <Collapsible title="Sprite Generation" defaultOpen>
         <SpriteGenerationSection />
