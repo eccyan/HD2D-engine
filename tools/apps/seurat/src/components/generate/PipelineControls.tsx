@@ -98,6 +98,37 @@ export function PipelineControls({ animName }: Props) {
 
   return (
     <div style={styles.container} data-testid="pipeline-controls">
+      {/* Reference Direction */}
+      {anim && (
+        <div style={styles.section}>
+          <div style={styles.subTitle}>Reference Direction</div>
+          {(() => {
+            const autoView = DIRECTION_TO_VIEW[anim.direction];
+            const selected = animRefOverride[animName] ?? autoView;
+            const conceptUrl = conceptViewUrls[selected];
+            const chibiUrl = chibiViewUrls[selected];
+            return (
+              <Row>
+                {conceptUrl && (
+                  <img src={conceptUrl} alt="concept" style={styles.refThumb} />
+                )}
+                {chibiUrl && (
+                  <img src={chibiUrl} alt="chibi" style={styles.refThumb} />
+                )}
+                <select
+                  value={animRefOverride[animName] ?? 'auto'}
+                  onChange={(e) => setAnimRefOverride(animName, e.target.value === 'auto' ? null : e.target.value as ViewDirection)}
+                  style={{ ...styles.select, flex: 1 }}
+                >
+                  <option value="auto">Auto ({autoView})</option>
+                  {VIEW_DIRECTIONS.map((v) => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
+                </select>
+              </Row>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Derive Poses from Anchor */}
       <div style={styles.section}>
         <div style={styles.subTitle}>Skeleton Poses</div>
@@ -383,37 +414,6 @@ export function PipelineControls({ animName }: Props) {
           </Row>
         ))}
       </div>
-
-      {/* Reference Direction */}
-      {anim && (
-        <div style={styles.section}>
-          <div style={styles.subTitle}>Reference Direction</div>
-          {(() => {
-            const autoView = DIRECTION_TO_VIEW[anim.direction];
-            const selected = animRefOverride[animName] ?? autoView;
-            const conceptUrl = conceptViewUrls[selected];
-            const chibiUrl = chibiViewUrls[selected];
-            return (
-              <Row>
-                {conceptUrl && (
-                  <img src={conceptUrl} alt="concept" style={styles.refThumb} />
-                )}
-                {chibiUrl && (
-                  <img src={chibiUrl} alt="chibi" style={styles.refThumb} />
-                )}
-                <select
-                  value={animRefOverride[animName] ?? 'auto'}
-                  onChange={(e) => setAnimRefOverride(animName, e.target.value === 'auto' ? null : e.target.value as ViewDirection)}
-                  style={{ ...styles.select, flex: 1 }}
-                >
-                  <option value="auto">Auto ({autoView})</option>
-                  {VIEW_DIRECTIONS.map((v) => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
-                </select>
-              </Row>
-            );
-          })()}
-        </div>
-      )}
 
       {/* Background Removal */}
       <div style={styles.section}>
