@@ -2421,30 +2421,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         return;
       }
 
-      // Extract per-direction keypoints from concept view skeletons
-      const directionKeypoints: Partial<Record<string, ([number, number] | null)[]>> = {};
-      const views = ['front', 'back', 'right', 'left'] as const;
-      for (const view of views) {
-        const viewBytes = detectedViewPoseBytes[view];
-        if (!viewBytes) continue;
-        try {
-          set({ conceptPoseProgress: `Extracting ${view} keypoints...` });
-          const viewKp = await extractKeypointsFromPoseImage(viewBytes);
-          const viewValid = viewKp.filter((k) => k !== null).length;
-          if (viewValid >= 5) {
-            directionKeypoints[view] = viewKp;
-            console.log(`[Seurat] Extracted ${viewValid}/14 ${view} keypoints`);
-          } else {
-            console.log(`[Seurat] ${view} skeleton has only ${viewValid} keypoints — skipping`);
-          }
-        } catch (err) {
-          console.warn(`[Seurat] Failed to extract ${view} keypoints:`, err);
-        }
-      }
-
-      const dirCount = Object.keys(directionKeypoints).length;
-      set({ conceptPoseProgress: `Deriving all animation poses (${dirCount} direction skeletons available)...` });
-      const allPoses = deriveAllAnimationPoses(keypoints, directionKeypoints);
+      // Use front keypoints + template X for all directions.
+      // Direction-specific keypoint extraction via extractKeypointsFromPoseImage
+      // is unreliable for side/back views (Y-band heuristic assumes front-facing).
+      // Direction skeleton PNGs are still used directly for concept art generation.
+      set({ conceptPoseProgress: 'Deriving all animation poses...' });
+      const allPoses = deriveAllAnimationPoses(keypoints);
 
       const totalPoseCount = Object.values(allPoses).reduce((s, p) => s + p.length, 0);
       console.log(`[Seurat] Derived ${totalPoseCount} poses across ${Object.keys(allPoses).length} animations`);
