@@ -412,6 +412,50 @@ test('interpolateTemplatePoses: all null keypoints', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: Modulo lookup for expanded animations
+// ---------------------------------------------------------------------------
+
+test('modulo lookup: derived array shorter than manifest frame count', () => {
+  // Simulate idle animation: 4 derived poses, but 16 manifest frames
+  const derivedAnimPoses: Record<string, Pose[]> = {
+    idle_down: [
+      [[0.50, 0.15]], // template frame 0
+      [[0.50, 0.15]], // template frame 1
+      [[0.50, 0.15]], // template frame 2
+      [[0.50, 0.14]], // template frame 3
+    ],
+  };
+
+  // Frame index 5 (interpolation slot) should cycle: 5 % 4 = 1
+  const dp = derivedAnimPoses['idle_down'];
+  const pose5 = dp?.length ? dp[5 % dp.length] : undefined;
+  assert(pose5 !== undefined, 'Frame 5 should resolve via modulo');
+  assertEqual(pose5![0]![1], 0.15, 'Frame 5 resolves to template frame 1');
+
+  // Frame index 15 should cycle: 15 % 4 = 3
+  const pose15 = dp?.length ? dp[15 % dp.length] : undefined;
+  assert(pose15 !== undefined, 'Frame 15 should resolve via modulo');
+  assertEqual(pose15![0]![1], 0.14, 'Frame 15 resolves to template frame 3');
+
+  // Frame index 0 should be direct: 0 % 4 = 0
+  const pose0 = dp?.length ? dp[0 % dp.length] : undefined;
+  assertEqual(pose0![0]![1], 0.15, 'Frame 0 is direct');
+});
+
+test('modulo lookup: empty derived array returns undefined', () => {
+  const dp: Pose[] = [];
+  const result = dp?.length ? dp[5 % dp.length] : undefined;
+  assertEqual(result, undefined, 'Empty array returns undefined');
+});
+
+test('modulo lookup: undefined animation returns undefined', () => {
+  const derivedAnimPoses: Record<string, Pose[]> = {};
+  const dp = derivedAnimPoses['nonexistent'];
+  const result = dp?.length ? dp[0 % dp.length] : undefined;
+  assertEqual(result, undefined, 'Missing animation returns undefined');
+});
+
+// ---------------------------------------------------------------------------
 // Run and report
 // ---------------------------------------------------------------------------
 

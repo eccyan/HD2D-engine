@@ -52,7 +52,9 @@ export function SinglePoseEditor({ animName, frameIndex, title, onClose }: Props
   const hasOverride = !!poseOverrides[key];
 
   const getPoseData = useCallback((): Keypoint[] | null => {
-    return poseOverrides[key] ?? derivedAnimPoses[animName]?.[frameIndex] ?? getPose(animName, frameIndex);
+    const dp = derivedAnimPoses[animName];
+    const derivedPose = dp?.length ? dp[frameIndex % dp.length] : undefined;
+    return poseOverrides[key] ?? derivedPose ?? getPose(animName, frameIndex);
   }, [animName, frameIndex, poseOverrides, derivedAnimPoses, key]);
 
   const draw = useCallback(() => {

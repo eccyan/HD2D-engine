@@ -45,7 +45,9 @@ export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellPro
     ctx.fillRect(0, 0, size, size);
 
     const key = `${animName}:${frameIndex}`;
-    const pose = staticPose ? getPose(animName, frameIndex) : (poseOverrides[key] ?? derivedAnimPoses[animName]?.[frameIndex] ?? getPose(animName, frameIndex));
+    const dp = derivedAnimPoses[animName];
+    const derivedPose = dp?.length ? dp[frameIndex % dp.length] : undefined;
+    const pose = staticPose ? getPose(animName, frameIndex) : (poseOverrides[key] ?? derivedPose ?? getPose(animName, frameIndex));
     if (!pose) {
       ctx.fillStyle = '#333';
       ctx.font = '9px monospace';
@@ -77,7 +79,7 @@ export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellPro
       ctx.arc(kp[0] * size, kp[1] * size, dr, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [animName, frameIndex, size, staticPose, poseOverrides]);
+  }, [animName, frameIndex, size, staticPose, poseOverrides, derivedAnimPoses]);
 
   return (
     <canvas

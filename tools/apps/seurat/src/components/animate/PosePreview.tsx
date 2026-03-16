@@ -48,7 +48,9 @@ export function PosePreview({ animName, frameCount }: Props) {
 
   const getEffectivePose = useCallback((frameIndex: number): Keypoint[] | null => {
     const key = `${animName}:${frameIndex}`;
-    return poseOverrides[key] ?? derivedAnimPoses[animName]?.[frameIndex] ?? getPose(animName, frameIndex);
+    const dp = derivedAnimPoses[animName];
+    const derivedPose = dp?.length ? dp[frameIndex % dp.length] : undefined;
+    return poseOverrides[key] ?? derivedPose ?? getPose(animName, frameIndex);
   }, [animName, poseOverrides, derivedAnimPoses]);
 
   const poses = Array.from({ length: frameCount }, (_, i) => getEffectivePose(i));

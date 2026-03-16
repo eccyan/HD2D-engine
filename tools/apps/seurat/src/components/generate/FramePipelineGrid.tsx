@@ -265,7 +265,8 @@ export function FramePipelineGrid({ animName }: Props) {
                 const fi = frame?.index ?? displayIndex;
                 const overrideKey = `${animName}:${fi}`;
                 const hasOverride = !!poseOverrides[overrideKey];
-                const hasDerived = !!derivedAnimPoses[animName]?.[fi];
+                const dpGrid = derivedAnimPoses[animName];
+                const hasDerived = dpGrid?.length ? !!dpGrid[fi % dpGrid.length] : false;
                 const poseBorder = hasOverride ? '#f8a04a' : hasDerived ? '#44aa44' : '#2a2a3a';
                 return (
                   <div

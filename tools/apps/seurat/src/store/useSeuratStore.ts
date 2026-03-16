@@ -1454,8 +1454,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           catch { conceptBytes = await api.fetchConceptImageBytes(manifest.character_id); }
           conceptBytes = await preRemBg(conceptBytes);
 
+          const dpArr = get().derivedAnimPoses[animName];
           const pose = get().poseOverrides[`${animName}:${fi}`]
-            ?? get().derivedAnimPoses[animName]?.[fi]
+            ?? (dpArr?.length ? dpArr[fi % dpArr.length] : undefined)
             ?? getPose(animName, fi);
           const poseBytes = pose ? await renderPoseToPng(pose, 512, 512) : null;
 
@@ -1872,10 +1873,11 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         console.log('[Seurat] Single frame prompt:', prompt);
 
         let pngBytes: Uint8Array;
+        const dpSingle = get().derivedAnimPoses[animName!];
         const pose = aiConfig.useIPAdapter
           ? (get().poseOverrides[`${animName}:${frameIndex}`]
-             ?? get().derivedAnimPoses[animName]?.[frameIndex]
-             ?? getPose(animName, frameIndex))
+             ?? (dpSingle?.length ? dpSingle[frameIndex! % dpSingle.length] : undefined)
+             ?? getPose(animName!, frameIndex!))
           : null;
 
         // Warmup: pre-load models before the real generation
@@ -2025,9 +2027,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
           // Check if IP-Adapter per-frame mode applies (with pose overrides)
           const overrides = get().poseOverrides;
-          const derivedPoses = get().derivedAnimPoses[an];
+          const dpRow = get().derivedAnimPoses[an];
           const animPoses = aiConfig.useIPAdapter ? getAnimationPoses(an, frameCount)?.map(
-            (p, i) => overrides[`${an}:${i}`] ?? derivedPoses?.[i] ?? p
+            (p, i) => overrides[`${an}:${i}`] ?? (dpRow?.length ? dpRow[i % dpRow.length] : undefined) ?? p
           ) ?? null : null;
 
           if (aiConfig.useAnimateDiff && singlePassRef) {
