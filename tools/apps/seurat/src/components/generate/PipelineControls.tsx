@@ -129,15 +129,17 @@ export function PipelineControls({ animName }: Props) {
         </div>
       )}
 
-      {/* Derive Poses from Anchor */}
+      {/* Derive Poses */}
       <div style={styles.section}>
-        <div style={styles.subTitle}>Skeleton Poses</div>
+        <div style={styles.subTitle}>Derive Poses</div>
         <div style={styles.statusText}>
-          {derivedPoseCount > 0
-            ? `${derivedPoseCount}/${anim.frames.length} poses derived from anchor`
-            : detectedPoseBytes
-              ? 'Anchor skeleton available — derive poses'
-              : 'Anchor skeleton required (detect in Concept tab)'}
+          {derivedPoseCount > 0 && detectedPoseBytes
+            ? `${derivedPoseCount}/${anim.frames.length} poses derived`
+            : derivedPoseCount > 0
+              ? `${derivedPoseCount}/${anim.frames.length} poses (re-detect skeleton to update)`
+              : detectedPoseBytes
+                ? 'Anchor skeleton available'
+                : 'Detect skeleton in Concept tab first'}
         </div>
         <button
           onClick={deriveAnimationPoses}
@@ -149,7 +151,7 @@ export function PipelineControls({ animName }: Props) {
             opacity: (!detectedPoseBytes || derivingAnimPoses) ? 0.5 : 1,
           }}
         >
-          {derivingAnimPoses ? 'Deriving...' : 'Derive Poses from Anchor'}
+          {derivingAnimPoses ? 'Deriving...' : derivedPoseCount > 0 ? 'Re-derive Poses' : 'Derive Poses'}
         </button>
       </div>
 
