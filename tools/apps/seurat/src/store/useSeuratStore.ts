@@ -61,6 +61,7 @@ export interface SeuratState {
   uploadConceptImageForView: (file: File, view: ViewDirection) => Promise<void>;
   loadConceptImage: () => void;
   detectedPoseUrl: string | null;
+  detectedPoseBytes: Uint8Array | null;
   detectingPose: boolean;
   detectConceptPose: () => Promise<void>;
 
@@ -500,6 +501,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   },
 
   detectedPoseUrl: null,
+  detectedPoseBytes: null,
   detectingPose: false,
   detectConceptPose: async () => {
     const { manifest, aiConfig } = get();
@@ -543,7 +545,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
       const poseBytes = await comfy.detectOpenPose(cleanBytes, { resolution: 512 });
       const blob = new Blob([poseBytes as BlobPart], { type: 'image/png' });
       const url = URL.createObjectURL(blob);
-      set({ detectedPoseUrl: url });
+      set({ detectedPoseUrl: url, detectedPoseBytes: poseBytes });
     } catch (err) {
       set({ conceptError: `Pose detection failed: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
@@ -663,9 +665,18 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         const viewPrompt = `${basePrompt}, ${CONCEPT_VIEW_PROMPTS[view]}`;
         console.log(`[Seurat] Concept pose — ${view} prompt:`, viewPrompt);
 
-        const poseDef = CONCEPT_VIEW_POSES[view];
-        const pose = poseDef ? getPose(poseDef.animName, poseDef.frameIndex) : null;
-        const poseBytes = pose ? await renderPoseToPng(pose, 512, 512) : null;
+        // Use detected pose from concept image for front view if available,
+        // otherwise fall back to template poses
+        const { detectedPoseBytes } = get();
+        let poseBytes: Uint8Array | null = null;
+        if (view === 'front' && detectedPoseBytes) {
+          console.log('[Seurat] Concept pose — front: using detected pose from concept image');
+          poseBytes = detectedPoseBytes;
+        } else {
+          const poseDef = CONCEPT_VIEW_POSES[view];
+          const pose = poseDef ? getPose(poseDef.animName, poseDef.frameIndex) : null;
+          poseBytes = pose ? await renderPoseToPng(pose, 512, 512) : null;
+        }
 
         let resultBytes: Uint8Array;
         if (poseBytes) {
