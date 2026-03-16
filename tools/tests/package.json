@@ -20,7 +20,8 @@
     "test:sfx-designer:scenario": "node --import tsx/esm --conditions source src/qa-runner.ts --tool sfx-designer --scenario",
     "test:bridge-routing": "node --import tsx/esm --conditions source src/bridge-routing.test.ts",
     "test:remote-commands": "node --import tsx/esm --conditions source src/remote-commands.test.ts",
-    "test:normal-map": "node --import tsx/esm --conditions source src/normal-map.test.ts"
+    "test:normal-map": "node --import tsx/esm --conditions source src/normal-map.test.ts",
+    "test:pose-templates": "node --import tsx/esm --conditions source src/pose-templates.test.ts"
   },
   "dependencies": {
     "@vulkan-game-tools/test-harness": "workspace:*",

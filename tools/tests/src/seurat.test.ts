@@ -208,4 +208,53 @@ export function runSeuratTests(runner: TestRunner): void {
     await client.dispatch('updateGenerationJob', 'pass_test_1', { status: 'done' });
     await client.dispatch('clearCompletedJobs');
   });
+
+  // ─── Derived animation poses state ───────────────────────────────
+
+  runner.test('derivedAnimPoses starts empty', async (client) => {
+    const derived = await client.getStateSelector('derivedAnimPoses') as Record<string, unknown>;
+    assert(derived !== null && typeof derived === 'object', 'derivedAnimPoses should be an object');
+    assertEqual(Object.keys(derived).length, 0, 'derivedAnimPoses should start empty');
+  });
+
+  runner.test('derivingAnimPoses starts false', async (client) => {
+    const deriving = await client.getStateSelector('derivingAnimPoses');
+    assertEqual(deriving, false, 'derivingAnimPoses should start false');
+  });
+
+  runner.test('Pose overrides work with 3-level fallback key format', async (client) => {
+    // Verify pose override key format matches what the fallback chain expects
+    const testPose = [[0.5, 0.5], [0.5, 0.3], null, null, null, null, null, null, null, null, null, null, null, null];
+    await client.dispatch('setPoseOverride', 'idle_down', 0, testPose);
+    const overrides = await client.getStateSelector('poseOverrides') as Record<string, unknown>;
+    assert('idle_down:0' in overrides, 'Override key should be animName:frameIndex');
+
+    // Clean up
+    await client.dispatch('clearPoseOverride', 'idle_down', 0);
+    const cleared = await client.getStateSelector('poseOverrides') as Record<string, unknown>;
+    assert(!('idle_down:0' in cleared), 'Override should be cleared');
+  });
+
+  runner.test('clearAllPoseOverrides removes all for animation', async (client) => {
+    // Set multiple overrides
+    const testPose = [[0.5, 0.5], null, null, null, null, null, null, null, null, null, null, null, null, null];
+    await client.dispatch('setPoseOverride', 'walk_down', 0, testPose);
+    await client.dispatch('setPoseOverride', 'walk_down', 1, testPose);
+    await client.dispatch('setPoseOverride', 'idle_down', 0, testPose);
+
+    let overrides = await client.getStateSelector('poseOverrides') as Record<string, unknown>;
+    assert('walk_down:0' in overrides, 'walk_down:0 should exist');
+    assert('walk_down:1' in overrides, 'walk_down:1 should exist');
+    assert('idle_down:0' in overrides, 'idle_down:0 should exist');
+
+    // Clear only walk_down overrides
+    await client.dispatch('clearAllPoseOverrides', 'walk_down');
+    overrides = await client.getStateSelector('poseOverrides') as Record<string, unknown>;
+    assert(!('walk_down:0' in overrides), 'walk_down:0 should be cleared');
+    assert(!('walk_down:1' in overrides), 'walk_down:1 should be cleared');
+    assert('idle_down:0' in overrides, 'idle_down:0 should remain');
+
+    // Clean up
+    await client.dispatch('clearPoseOverride', 'idle_down', 0);
+  });
 }
