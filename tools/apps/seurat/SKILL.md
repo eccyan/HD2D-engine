@@ -54,7 +54,7 @@ tools/
 | `src/lib/bridge-api.ts` | REST client for bridge (frame images, pass images, manifests) |
 | `src/lib/ai-generate.ts` | Prompt builders (frame, row, negative) |
 | `src/lib/frame-interpolate.ts` | Client-side blend interpolation (OffscreenCanvas alpha crossfade) |
-| `src/lib/pose-templates.ts` | OpenPose skeleton data + canvas renderer |
+| `src/lib/pose-templates.ts` | OpenPose skeleton data, interpolation, derivation, canvas renderer |
 | `src/components/layout/` | TreePane, MainPane, RightPane, BottomPane, Toolbar, StatusBar |
 | `src/components/generate/` | FramePipelineGrid, PipelineControls |
 | `src/components/shared/PaintEditor.tsx` | Draw/erase/flip/rotate editor overlay |
@@ -156,7 +156,8 @@ When adding UI components that need test coverage, add `data-testid` attributes:
 - Store-specific types go in `src/store/types.ts`
 - Use `PipelineStage` for frame pipeline tracking: `'pending' | 'pass1' | 'pass1_edited' | 'pass2' | 'pass2_edited' | 'pass3'`
 - `CharacterFrame.keyframe?: boolean` — `true` for original/artist frames, `false` for interpolated in-betweens. Omitted or `true` means keyframe.
-- `SpritesheetConfig.interp_multiplier?: number` — interpolation multiplier (2/3/4). `createDefaultManifest` pre-populates placeholder frames when > 1. `generatePass` auto-skips non-keyframes.
+- `SpritesheetConfig.interp_multiplier?: number` — interpolation multiplier (2/3/4). `createDefaultManifest` pre-populates placeholder frames when > 1. All frames are first-class for generation.
+- `CharacterManifest.derived_poses?: DerivedPoseMap` — persisted derived skeleton poses from anchor, keyed by animation name. Restored on character select.
 
 ### Bridge API
 - Client functions in `src/lib/bridge-api.ts`

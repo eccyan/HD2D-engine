@@ -104,7 +104,8 @@ Tools function fully without any AI backend. AI features appear only when the co
 
 The `tests/` package contains two kinds of tests:
 
-- **Unit tests** (`.test.ts`) — validate individual store actions in isolation (63 tests)
+- **Unit tests** (`.test.ts`) — validate individual store actions in isolation (63+ tests)
+- **Pure function tests** — standalone tests for logic like pose interpolation and skeleton derivation (20 tests in `pose-templates.test.ts`)
 - **Scenario tests** (`.scenario.ts`) — multi-step workflow tests that simulate real user journeys such as "design a complete dungeon room" or "synthesize a bell sound from scratch" (12 scenarios)
 
 Tests run in headless Chrome via Puppeteer, dispatching actions through the test-harness WebSocket bridge.

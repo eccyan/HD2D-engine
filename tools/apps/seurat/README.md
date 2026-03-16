@@ -141,6 +141,27 @@ Background removal operates at multiple stages:
 
 Frame prompts use `plain white background, solid color background` (SD 1.5 handles solid white reliably) and negative prompts include environment-related terms (`detailed background, room, interior, exterior, furniture, floor, wall, ceiling, sky, ground, environment`).
 
+### Skeleton Derivation from Anchor
+
+Seurat can derive per-frame pose skeletons for all animations from the detected concept skeleton (the "anchor"). This replaces generic template poses with character-proportioned skeletons, improving pose accuracy during generation.
+
+**How it works**: `deriveAllAnimationPoses()` takes the 14-keypoint skeleton extracted from the concept image and combines the character's actual Y-proportions (body shape) with template X-positions (directional poses) for each animation state (idle, walk, run) and direction (down, up, right, left). For animations with stride > 1 (e.g., run with stride=4), `interpolateTemplatePoses()` linearly interpolates between keyframes to produce skeletons for every frame.
+
+**3-level pose fallback**: All pose lookups (PoseCell, SinglePoseEditor, PosePreview, generatePass, generateFrames) use this priority:
+1. **Pose overrides** — manually edited keypoints via the pose editor
+2. **Derived poses** — character-proportioned skeletons from the anchor
+3. **Template poses** — generic hardcoded skeleton templates
+
+When the derived pose array is shorter than the manifest frame count (e.g., 4 derived poses for 16 frames due to interpolation multiplier), lookups use modulo cycling: `derivedPoses[frameIndex % derivedPoses.length]`.
+
+**Persistence**: Derived poses are stored in `manifest.derived_poses` (a `DerivedPoseMap` keyed by animation name) and restored on character select.
+
+**Pipeline integration**:
+- Click **"Derive Poses from Anchor"** in the Pipeline Controls panel (requires detected skeleton from Concept tab)
+- The button shows status: "16/16 poses derived" or "Anchor skeleton required"
+- Derived pose cells show a **green border**, overridden poses show **orange**
+- Click any pose cell in the pipeline grid to open the SinglePoseEditor
+
 ### Frame Interpolation
 
 Generates in-between frames from existing pass 2 (chibi) outputs to create smoother animations. Interpolation sits between Pass 2 and Pass 3 in the pipeline, operating on 512x512 frames before pixelization.
@@ -153,7 +174,7 @@ Generates in-between frames from existing pass 2 (chibi) outputs to create smoot
 
 **Manifest integration**: The interpolation multiplier is stored in `spritesheet.interp_multiplier`. When creating a new character, placeholder frames (`keyframe: false`, `status: "pending"`) are pre-populated between keyframes based on the current multiplier setting. This means the manifest always reflects the intended frame count from the start.
 
-**Keyframe tracking**: Original frames are marked `keyframe: true`, interpolated frames `keyframe: false`. The grid shows interpolated frames at reduced opacity with an "interp" badge. Pass 1 and Pass 2 generation automatically skips non-keyframes. Use **Revert to Keyframes** to discard interpolated frames and restore originals.
+**Keyframe tracking**: Original frames are marked `keyframe: true`, interpolated frames `keyframe: false`. The grid shows interpolated frames with an "interp" badge. All frames are first-class — Pass 1 and Pass 2 generate for every selected frame (no automatic keyframe-only filtering). Use **Revert to Keyframes** to discard interpolated frames and restore originals.
 
 **Workflow**:
 1. Set the interpolation multiplier before creating a character (placeholders are pre-populated)
@@ -217,14 +238,24 @@ The main pane shows an animation preview when an animation is selected:
 
 ## Workflow
 
-1. **Create a character** via the tree's "+ New Character" button
-2. **Set up concept art** — describe the character, configure style prompt, generate or upload concept art (per-direction: front, back, right, left)
-3. **Generate chibi** — generate chibi versions from concept art using IP-Adapter for character identity; adjust IP-Adapter weight/end_at for the balance between chibi proportions and concept fidelity
-4. **Generate sprites** — select an animation, configure ComfyUI settings, generate frames (Pass 1 + Pass 2)
-5. **(Optional) Interpolate** — generate in-between frames for smoother animation (blend or RIFE)
-6. **Pixelize** — run Pass 3 on all frames (including interpolated) to produce final pixel art
-7. **Review frames** — approve, reject, or regenerate individual frames
-8. **Assemble atlas** — validate and build the final spritesheet PNG
+### Concept Pipeline (5-step sequential, in the "Concept Pipeline" panel)
+
+1. **Identity Concept** — describe the character, configure style prompt, generate or upload concept art
+2. **Detect Skeleton** — run DWPreprocessor on the concept image to extract the anchor skeleton
+3. **Derive View Skeletons** — derive directional pose skeletons (front/back/right/left) from the anchor; click to edit individual keypoints
+4. **Generate Directional Concepts** — IP-Adapter + OpenPose generates concept art for each direction using derived skeletons
+5. **Generate Chibi** — generate chibi versions from concept art; IP-Adapter preserves character identity
+
+Each step has a status badge (pending/ready/done) and is disabled until its prerequisite is complete.
+
+### Sprite Generation
+
+6. **Derive animation poses** — click "Derive Poses from Anchor" in the Pipeline panel to create character-proportioned skeletons for all animation frames
+7. **Generate sprites** — select an animation, run Pass 1 (pose generation) + Pass 2 (chibi styling) on all frames
+8. **(Optional) Interpolate** — generate in-between frames for smoother animation (blend or RIFE)
+9. **Pixelize** — run Pass 3 on all frames to produce final pixel art
+10. **Review frames** — approve, reject, or regenerate individual frames
+11. **Assemble atlas** — validate and build the final spritesheet PNG
 
 ## Architecture
 
@@ -243,7 +274,7 @@ seurat/
 │   │   └── pose-templates.ts        # OpenPose skeleton data + renderer
 │   ├── components/
 │   │   ├── layout/                  # TreePane, MainPane, RightPane, Toolbar, StatusBar
-│   │   ├── concept/                 # ConceptPreview, ConceptActions, ChibiActions, ComfySettingsPanel
+│   │   ├── concept/                 # ConceptPreview, ConceptActions (5-step pipeline incl. chibi), ComfySettingsPanel
 │   │   ├── generate/                # GenerateActions (ComfyUI settings + scope)
 │   │   ├── review/                  # FrameCell, FrameDetailModal, ReviewActions
 │   │   ├── animate/                 # AnimationMainView, AnimationPreviewCanvas, FramePreviewCanvas
