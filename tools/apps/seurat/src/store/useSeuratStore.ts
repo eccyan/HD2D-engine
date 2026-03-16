@@ -291,6 +291,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           : null,
         pixelError: null,
         animRefOverride: {},
+        derivedAnimPoses: manifest.derived_poses ?? {},
       });
     } catch {
       console.warn(`[Seurat] Could not load manifest for "${id}" — is the bridge running?`);
@@ -2362,6 +2363,14 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         derivedAnimPoses: allPoses,
         conceptPoseProgress: `Derived ${totalPoseCount} poses across ${Object.keys(allPoses).length} animations.`,
       });
+
+      // Persist to manifest
+      const { manifest } = get();
+      if (manifest) {
+        const updated = { ...manifest, derived_poses: allPoses };
+        set({ manifest: updated });
+        await api.saveManifest(updated);
+      }
     } catch (err) {
       set({ conceptPoseError: `Animation pose derivation failed: ${err instanceof Error ? err.message : String(err)}` });
     } finally {

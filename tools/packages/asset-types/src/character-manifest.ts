@@ -115,6 +115,11 @@ export interface PixelArt {
   generation_settings?: StageGenerationSettings;
 }
 
+/** Derived skeleton poses for all animations, keyed by animation name.
+ *  Each value is an array of poses (one per template frame).
+ *  A pose is an array of 14 keypoints, each [x, y] normalized 0-1 or null. */
+export type DerivedPoseMap = Record<string, ([number, number] | null)[][]>;
+
 export interface CharacterManifest {
   version: number;
   character_id: string;
@@ -125,6 +130,7 @@ export interface CharacterManifest {
   spritesheet: SpritesheetConfig;
   animations: CharacterAnimation[];
   atlas?: AtlasInfo;
+  derived_poses?: DerivedPoseMap;
 }
 
 // Engine-consumable animation definition (derived from manifest by assembler)
