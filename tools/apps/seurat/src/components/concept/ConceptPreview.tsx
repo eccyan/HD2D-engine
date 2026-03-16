@@ -312,6 +312,7 @@ export function ConceptPreview() {
               <div style={styles.mirrorRow}>
                 <div style={styles.dirLabel} />
                 <div style={styles.mirrorSpacer} />
+                <div style={styles.mirrorSpacer} />
                 <div style={styles.mirrorBtnGroup}>
                   <button
                     style={{ ...styles.mirrorBtn, opacity: rightConceptUrl ? 1 : 0.3 }}
