@@ -532,15 +532,36 @@ export function interpolateTemplatePoses(
 }
 
 /**
- * Derive skeleton poses for ALL animations from detected front-view keypoints.
- * For each animation (idle_down, walk_right, run_up, etc.), gets template keyframes,
- * expands to full frame count via interpolation, and applies template X + detected Y.
+ * Map from view direction to the template direction it corresponds to.
+ * front→down, back→up, right→right, left→left.
+ */
+const VIEW_TO_DIR: Record<string, string> = {
+  front: 'down',
+  back: 'up',
+  right: 'right',
+  left: 'left',
+};
+
+const DIR_TO_VIEW: Record<string, string> = {
+  down: 'front',
+  up: 'back',
+  right: 'right',
+  left: 'left',
+};
+
+/**
+ * Derive skeleton poses for ALL animations from detected keypoints.
+ * Uses per-direction keypoints when available (e.g., the right-view concept
+ * skeleton for run_right), falling back to front-view keypoints with
+ * template X + detected Y mapping.
  *
- * @param detectedFrontKeypoints - Keypoints extracted from the front concept skeleton
+ * @param detectedFrontKeypoints - Keypoints from the front concept skeleton
+ * @param directionKeypoints - Optional per-direction keypoints (front/back/right/left)
  * @returns Map keyed by animation name → array of poses for all frames
  */
 export function deriveAllAnimationPoses(
   detectedFrontKeypoints: Keypoint[],
+  directionKeypoints?: Partial<Record<string, Keypoint[]>>,
 ): Record<string, Pose[]> {
   const result: Record<string, Pose[]> = {};
   const states = Object.keys(POSE_MAP); // idle, walk, run
@@ -559,25 +580,41 @@ export function deriveAllAnimationPoses(
       // Expand keyframes to all frames via interpolation
       const allTemplatePoses = interpolateTemplatePoses(templateKeyframes, stride, totalFrames);
 
-      // Apply template X + detected Y for each pose
+      // Pick the best detected keypoints for this direction:
+      // 1. Direction-specific keypoints (e.g., right-view skeleton for right anims)
+      // 2. Front-view keypoints as fallback (with template X mapping)
+      const view = DIR_TO_VIEW[dir];
+      const dirKp = view && directionKeypoints?.[view];
+      const hasDirectionKp = dirKp && dirKp.filter((k) => k !== null).length >= 5;
+
       const derivedPoses: Pose[] = allTemplatePoses.map((templatePose) => {
-        // For front/down direction, use detected keypoints directly
-        if (dir === 'down') {
+        if (hasDirectionKp) {
+          // Use direction-specific keypoints: both X and Y from detected
+          // (the detected skeleton already has the correct direction pose)
           return templatePose.map((templateKp, i) => {
-            const detectedKp = detectedFrontKeypoints[i];
+            const detectedKp = dirKp![i];
             if (!templateKp) return null;
             if (!detectedKp) return templateKp ? [...templateKp] as [number, number] : null;
-            // For down-facing, use detected proportions for both X and Y
-            // (detected is front view which maps to down)
             return [detectedKp[0], detectedKp[1]] as [number, number];
           });
         }
 
+        // Fallback: front-view keypoints
+        if (dir === 'down') {
+          // For down-facing, use detected proportions for both X and Y
+          return templatePose.map((templateKp, i) => {
+            const detectedKp = detectedFrontKeypoints[i];
+            if (!templateKp) return null;
+            if (!detectedKp) return templateKp ? [...templateKp] as [number, number] : null;
+            return [detectedKp[0], detectedKp[1]] as [number, number];
+          });
+        }
+
+        // Other directions without specific skeleton: template X + front-detected Y
         return templatePose.map((templateKp, i) => {
           const detectedKp = detectedFrontKeypoints[i];
           if (!templateKp) return null;
           if (!detectedKp) return templateKp ? [...templateKp] as [number, number] : null;
-          // Template X (defines direction) + detected Y (defines proportions)
           return [templateKp[0], detectedKp[1]] as [number, number];
         });
       });
@@ -589,8 +626,8 @@ export function deriveAllAnimationPoses(
         }
       }
 
-      // For "left": mirror X of derived right if right was derived
-      if (dir === 'left' && result[`${state}_right`]) {
+      // For "left" without direction-specific skeleton: mirror from derived right
+      if (dir === 'left' && !hasDirectionKp && result[`${state}_right`]) {
         result[animName] = result[`${state}_right`].map((pose) => mirrorX(pose));
         continue;
       }

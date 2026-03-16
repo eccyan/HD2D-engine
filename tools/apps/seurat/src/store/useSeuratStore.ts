@@ -2335,7 +2335,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
   derivedAnimPoses: {},
   derivingAnimPoses: false,
   deriveAnimationPoses: async () => {
-    const { detectedPoseBytes } = get();
+    const { detectedPoseBytes, detectedViewPoseBytes } = get();
     if (!detectedPoseBytes) {
       set({ conceptPoseError: 'Detect the concept pose first.' });
       return;
@@ -2344,17 +2344,41 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set({ derivingAnimPoses: true, conceptPoseProgress: 'Extracting keypoints for animation poses...' });
     try {
       const { extractKeypointsFromPoseImage, deriveAllAnimationPoses } = await import('../lib/pose-templates.js');
+
+      // Extract front-view keypoints (always required)
       const keypoints = await extractKeypointsFromPoseImage(detectedPoseBytes);
       const validCount = keypoints.filter((k) => k !== null).length;
-      console.log(`[Seurat] Extracted ${validCount}/14 keypoints for animation poses`);
+      console.log(`[Seurat] Extracted ${validCount}/14 front keypoints for animation poses`);
 
       if (validCount < 5) {
         set({ conceptPoseError: `Only ${validCount} keypoints detected — not enough to derive poses.` });
         return;
       }
 
-      set({ conceptPoseProgress: 'Deriving all animation poses...' });
-      const allPoses = deriveAllAnimationPoses(keypoints);
+      // Extract per-direction keypoints from concept view skeletons
+      const directionKeypoints: Partial<Record<string, ([number, number] | null)[]>> = {};
+      const views = ['front', 'back', 'right', 'left'] as const;
+      for (const view of views) {
+        const viewBytes = detectedViewPoseBytes[view];
+        if (!viewBytes) continue;
+        try {
+          set({ conceptPoseProgress: `Extracting ${view} keypoints...` });
+          const viewKp = await extractKeypointsFromPoseImage(viewBytes);
+          const viewValid = viewKp.filter((k) => k !== null).length;
+          if (viewValid >= 5) {
+            directionKeypoints[view] = viewKp;
+            console.log(`[Seurat] Extracted ${viewValid}/14 ${view} keypoints`);
+          } else {
+            console.log(`[Seurat] ${view} skeleton has only ${viewValid} keypoints — skipping`);
+          }
+        } catch (err) {
+          console.warn(`[Seurat] Failed to extract ${view} keypoints:`, err);
+        }
+      }
+
+      const dirCount = Object.keys(directionKeypoints).length;
+      set({ conceptPoseProgress: `Deriving all animation poses (${dirCount} direction skeletons available)...` });
+      const allPoses = deriveAllAnimationPoses(keypoints, directionKeypoints);
 
       const totalPoseCount = Object.values(allPoses).reduce((s, p) => s + p.length, 0);
       console.log(`[Seurat] Derived ${totalPoseCount} poses across ${Object.keys(allPoses).length} animations`);
