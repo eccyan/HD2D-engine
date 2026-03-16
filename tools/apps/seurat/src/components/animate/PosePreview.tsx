@@ -9,6 +9,26 @@ interface Props {
 
 type Keypoint = [number, number] | null;
 
+const VIEW_TO_DIR: Record<string, string> = { front: 'down', back: 'up', right: 'right', left: 'left' };
+
+function resolveDerived(
+  derivedAnimPoses: Record<string, Keypoint[][]>,
+  animName: string, frameIndex: number,
+  animRefOverride?: Record<string, string | null>,
+): Keypoint[] | undefined {
+  let lookupName = animName;
+  const override = animRefOverride?.[animName];
+  if (override) {
+    const parts = animName.split('_');
+    if (parts.length >= 2) {
+      const newDir = VIEW_TO_DIR[override];
+      if (newDir) lookupName = `${parts[0]}_${newDir}`;
+    }
+  }
+  const dp = derivedAnimPoses[lookupName];
+  return dp?.length ? dp[frameIndex % dp.length] : undefined;
+}
+
 const LIMBS: [number, number, string][] = [
   [0, 1, '#ff0000'],
   [1, 2, '#ff5500'],
@@ -41,6 +61,7 @@ export function PosePreview({ animName, frameCount }: Props) {
   const clearPoseOverride = useSeuratStore((s) => s.clearPoseOverride);
   const clearAllPoseOverrides = useSeuratStore((s) => s.clearAllPoseOverrides);
   const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
+  const animRefOverride = useSeuratStore((s) => s.animRefOverride);
 
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -48,10 +69,9 @@ export function PosePreview({ animName, frameCount }: Props) {
 
   const getEffectivePose = useCallback((frameIndex: number): Keypoint[] | null => {
     const key = `${animName}:${frameIndex}`;
-    const dp = derivedAnimPoses[animName];
-    const derivedPose = dp?.length ? dp[frameIndex % dp.length] : undefined;
+    const derivedPose = resolveDerived(derivedAnimPoses, animName, frameIndex, animRefOverride);
     return poseOverrides[key] ?? derivedPose ?? getPose(animName, frameIndex);
-  }, [animName, poseOverrides, derivedAnimPoses]);
+  }, [animName, poseOverrides, derivedAnimPoses, animRefOverride]);
 
   const poses = Array.from({ length: frameCount }, (_, i) => getEffectivePose(i));
   const hasPoses = poses.some((p) => p !== null);

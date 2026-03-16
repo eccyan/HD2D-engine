@@ -4,6 +4,26 @@ import { useSeuratStore } from '../../store/useSeuratStore.js';
 
 type Keypoint = [number, number] | null;
 
+const VIEW_TO_DIR: Record<string, string> = { front: 'down', back: 'up', right: 'right', left: 'left' };
+
+function resolveDerived(
+  derivedAnimPoses: Record<string, Keypoint[][]>,
+  animName: string, frameIndex: number,
+  animRefOverride?: Record<string, string | null>,
+): Keypoint[] | undefined {
+  let lookupName = animName;
+  const override = animRefOverride?.[animName];
+  if (override) {
+    const parts = animName.split('_');
+    if (parts.length >= 2) {
+      const newDir = VIEW_TO_DIR[override];
+      if (newDir) lookupName = `${parts[0]}_${newDir}`;
+    }
+  }
+  const dp = derivedAnimPoses[lookupName];
+  return dp?.length ? dp[frameIndex % dp.length] : undefined;
+}
+
 const LIMBS: [number, number, string][] = [
   [0, 1, '#ff0000'],
   [1, 2, '#ff5500'],
@@ -42,6 +62,7 @@ export function SinglePoseEditor({ animName, frameIndex, title, onClose }: Props
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseOverrides = useSeuratStore((s) => s.poseOverrides);
   const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
+  const animRefOverride = useSeuratStore((s) => s.animRefOverride);
   const setPoseOverride = useSeuratStore((s) => s.setPoseOverride);
   const clearPoseOverride = useSeuratStore((s) => s.clearPoseOverride);
 
@@ -52,10 +73,9 @@ export function SinglePoseEditor({ animName, frameIndex, title, onClose }: Props
   const hasOverride = !!poseOverrides[key];
 
   const getPoseData = useCallback((): Keypoint[] | null => {
-    const dp = derivedAnimPoses[animName];
-    const derivedPose = dp?.length ? dp[frameIndex % dp.length] : undefined;
+    const derivedPose = resolveDerived(derivedAnimPoses, animName, frameIndex, animRefOverride);
     return poseOverrides[key] ?? derivedPose ?? getPose(animName, frameIndex);
-  }, [animName, frameIndex, poseOverrides, derivedAnimPoses, key]);
+  }, [animName, frameIndex, poseOverrides, derivedAnimPoses, animRefOverride, key]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;

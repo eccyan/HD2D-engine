@@ -2,6 +2,28 @@ import React, { useRef, useEffect } from 'react';
 import { useSeuratStore } from '../../store/useSeuratStore.js';
 import { getPose } from '../../lib/pose-templates.js';
 
+const VIEW_TO_DIR: Record<string, string> = { front: 'down', back: 'up', right: 'right', left: 'left' };
+
+/** Resolve derived pose respecting reference direction override */
+function resolveDerived(
+  derivedAnimPoses: Record<string, ([number, number] | null)[][]>,
+  animName: string,
+  frameIndex: number,
+  animRefOverride?: Record<string, string | null>,
+): ([number, number] | null)[] | undefined {
+  let lookupName = animName;
+  const override = animRefOverride?.[animName];
+  if (override) {
+    const parts = animName.split('_');
+    if (parts.length >= 2) {
+      const newDir = VIEW_TO_DIR[override];
+      if (newDir) lookupName = `${parts[0]}_${newDir}`;
+    }
+  }
+  const dp = derivedAnimPoses[lookupName];
+  return dp?.length ? dp[frameIndex % dp.length] : undefined;
+}
+
 /** Limb connections for drawing pose skeletons (14-keypoint OpenPose format) */
 const LIMBS: [number, number, string][] = [
   [0, 1, '#ff0000'],   // nose-neck
@@ -32,6 +54,7 @@ export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellPro
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseOverrides = useSeuratStore((s) => s.poseOverrides);
   const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
+  const animRefOverride = useSeuratStore((s) => s.animRefOverride);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -45,8 +68,7 @@ export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellPro
     ctx.fillRect(0, 0, size, size);
 
     const key = `${animName}:${frameIndex}`;
-    const dp = derivedAnimPoses[animName];
-    const derivedPose = dp?.length ? dp[frameIndex % dp.length] : undefined;
+    const derivedPose = resolveDerived(derivedAnimPoses, animName, frameIndex, animRefOverride);
     const pose = staticPose ? getPose(animName, frameIndex) : (poseOverrides[key] ?? derivedPose ?? getPose(animName, frameIndex));
     if (!pose) {
       ctx.fillStyle = '#333';
@@ -79,7 +101,7 @@ export function PoseCell({ animName, frameIndex, size, staticPose }: PoseCellPro
       ctx.arc(kp[0] * size, kp[1] * size, dr, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [animName, frameIndex, size, staticPose, poseOverrides, derivedAnimPoses]);
+  }, [animName, frameIndex, size, staticPose, poseOverrides, derivedAnimPoses, animRefOverride]);
 
   return (
     <canvas

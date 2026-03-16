@@ -28,6 +28,36 @@ import * as api from '../lib/bridge-api.js';
 
 export { getManifestStats };
 
+/** Map ViewDirection to template direction suffix (front→down, back→up, etc.) */
+const VIEW_TO_TEMPLATE_DIR: Record<string, string> = {
+  front: 'down', back: 'up', right: 'right', left: 'left',
+};
+
+/**
+ * Resolve derived poses for an animation, respecting the reference direction override.
+ * E.g., if run_right is overridden to use 'front', looks up derivedAnimPoses['run_down'].
+ */
+function resolveDerivedPose(
+  derivedAnimPoses: Record<string, ([number, number] | null)[][]>,
+  animName: string,
+  frameIndex: number,
+  animRefOverride: Record<string, ViewDirection | null>,
+  animDirection?: DirectionCode,
+): ([number, number] | null)[] | undefined {
+  const override = animRefOverride[animName];
+  let lookupName = animName;
+  if (override) {
+    // Remap animation name to the overridden direction
+    const parts = animName.split('_');
+    if (parts.length >= 2) {
+      const state = parts[0];
+      const newDir = VIEW_TO_TEMPLATE_DIR[override];
+      if (newDir) lookupName = `${state}_${newDir}`;
+    }
+  }
+  const dp = derivedAnimPoses[lookupName];
+  return dp?.length ? dp[frameIndex % dp.length] : undefined;
+}
 
 
 export interface SeuratState {
@@ -1455,9 +1485,8 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           catch { conceptBytes = await api.fetchConceptImageBytes(manifest.character_id); }
           conceptBytes = await preRemBg(conceptBytes);
 
-          const dpArr = get().derivedAnimPoses[animName];
           const pose = get().poseOverrides[`${animName}:${fi}`]
-            ?? (dpArr?.length ? dpArr[fi % dpArr.length] : undefined)
+            ?? resolveDerivedPose(get().derivedAnimPoses, animName, fi, animRefOverride, anim.direction)
             ?? getPose(animName, fi);
           const poseBytes = pose ? await renderPoseToPng(pose, 512, 512) : null;
 
@@ -1874,10 +1903,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         console.log('[Seurat] Single frame prompt:', prompt);
 
         let pngBytes: Uint8Array;
-        const dpSingle = get().derivedAnimPoses[animName!];
         const pose = aiConfig.useIPAdapter
           ? (get().poseOverrides[`${animName}:${frameIndex}`]
-             ?? (dpSingle?.length ? dpSingle[frameIndex! % dpSingle.length] : undefined)
+             ?? resolveDerivedPose(get().derivedAnimPoses, animName!, frameIndex!, animRefOverride, anim?.direction)
              ?? getPose(animName!, frameIndex!))
           : null;
 
@@ -2028,9 +2056,9 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
 
           // Check if IP-Adapter per-frame mode applies (with pose overrides)
           const overrides = get().poseOverrides;
-          const dpRow = get().derivedAnimPoses[an];
+          const derivedAll = get().derivedAnimPoses;
           const animPoses = aiConfig.useIPAdapter ? getAnimationPoses(an, frameCount)?.map(
-            (p, i) => overrides[`${an}:${i}`] ?? (dpRow?.length ? dpRow[i % dpRow.length] : undefined) ?? p
+            (p, i) => overrides[`${an}:${i}`] ?? resolveDerivedPose(derivedAll, an, i, animRefOverride, anim.direction) ?? p
           ) ?? null : null;
 
           if (aiConfig.useAnimateDiff && singlePassRef) {

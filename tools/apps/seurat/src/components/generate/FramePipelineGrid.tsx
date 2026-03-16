@@ -113,6 +113,7 @@ export function FramePipelineGrid({ animName }: Props) {
   const interpMultiplier = useSeuratStore((s) => s.aiConfig.interpMultiplier);
   const poseOverrides = useSeuratStore((s) => s.poseOverrides);
   const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
+  const animRefOverride = useSeuratStore((s) => s.animRefOverride);
 
   const [editing, setEditing] = useState<{
     animName: string;
@@ -265,7 +266,17 @@ export function FramePipelineGrid({ animName }: Props) {
                 const fi = frame?.index ?? displayIndex;
                 const overrideKey = `${animName}:${fi}`;
                 const hasOverride = !!poseOverrides[overrideKey];
-                const dpGrid = derivedAnimPoses[animName];
+                const refOverride = animRefOverride[animName];
+                let dpLookupName = animName;
+                if (refOverride) {
+                  const VIEW_TO_DIR: Record<string, string> = { front: 'down', back: 'up', right: 'right', left: 'left' };
+                  const parts = animName.split('_');
+                  if (parts.length >= 2) {
+                    const newDir = VIEW_TO_DIR[refOverride];
+                    if (newDir) dpLookupName = `${parts[0]}_${newDir}`;
+                  }
+                }
+                const dpGrid = derivedAnimPoses[dpLookupName];
                 const hasDerived = dpGrid?.length ? !!dpGrid[fi % dpGrid.length] : false;
                 const poseBorder = hasOverride ? '#f8a04a' : hasDerived ? '#44aa44' : '#2a2a3a';
                 return (
