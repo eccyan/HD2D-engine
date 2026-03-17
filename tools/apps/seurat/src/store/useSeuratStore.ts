@@ -336,6 +336,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         pixelError: null,
         animRefOverride: {},
         derivedAnimPoses: manifest.derived_poses ?? {},
+        poseOverrides: manifest.pose_overrides ?? {},
       });
 
       // Restore skeleton files from disk (non-blocking)
@@ -2415,24 +2416,44 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     set({ manifest: updated });
   },
 
-  // Pose editing
+  // Pose editing (persisted to manifest.pose_overrides)
   poseOverrides: {},
   setPoseOverride: (animName, frameIndex, pose) => {
     const key = `${animName}:${frameIndex}`;
-    set({ poseOverrides: { ...get().poseOverrides, [key]: pose } });
+    const poseOverrides = { ...get().poseOverrides, [key]: pose };
+    set({ poseOverrides });
+    // Persist to manifest
+    const { manifest } = get();
+    if (manifest) {
+      const updated = { ...manifest, pose_overrides: poseOverrides };
+      set({ manifest: updated });
+      api.saveManifest(updated).catch(() => {});
+    }
   },
   clearPoseOverride: (animName, frameIndex) => {
     const key = `${animName}:${frameIndex}`;
-    const overrides = { ...get().poseOverrides };
-    delete overrides[key];
-    set({ poseOverrides: overrides });
+    const poseOverrides = { ...get().poseOverrides };
+    delete poseOverrides[key];
+    set({ poseOverrides });
+    const { manifest } = get();
+    if (manifest) {
+      const updated = { ...manifest, pose_overrides: poseOverrides };
+      set({ manifest: updated });
+      api.saveManifest(updated).catch(() => {});
+    }
   },
   clearAllPoseOverrides: (animName) => {
-    const overrides = { ...get().poseOverrides };
-    for (const key of Object.keys(overrides)) {
-      if (key.startsWith(`${animName}:`)) delete overrides[key];
+    const poseOverrides = { ...get().poseOverrides };
+    for (const key of Object.keys(poseOverrides)) {
+      if (key.startsWith(`${animName}:`)) delete poseOverrides[key];
     }
-    set({ poseOverrides: overrides });
+    set({ poseOverrides });
+    const { manifest } = get();
+    if (manifest) {
+      const updated = { ...manifest, pose_overrides: poseOverrides };
+      set({ manifest: updated });
+      api.saveManifest(updated).catch(() => {});
+    }
   },
 
   // Derived animation poses

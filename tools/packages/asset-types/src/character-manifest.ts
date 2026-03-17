@@ -120,6 +120,10 @@ export interface PixelArt {
  *  A pose is an array of 14 keypoints, each [x, y] normalized 0-1 or null. */
 export type DerivedPoseMap = Record<string, ([number, number] | null)[][]>;
 
+/** Manual pose overrides, keyed by "animName:frameIndex".
+ *  Each value is a 14-keypoint pose array. */
+export type PoseOverrideMap = Record<string, ([number, number] | null)[]>;
+
 export interface CharacterManifest {
   version: number;
   character_id: string;
@@ -131,6 +135,7 @@ export interface CharacterManifest {
   animations: CharacterAnimation[];
   atlas?: AtlasInfo;
   derived_poses?: DerivedPoseMap;
+  pose_overrides?: PoseOverrideMap;
 }
 
 // Engine-consumable animation definition (derived from manifest by assembler)
