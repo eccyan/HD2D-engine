@@ -1770,10 +1770,11 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           const targetIndex = startFrame + 1 + i;
           const frame = updatedAnim.frames.find((f) => f.index === targetIndex);
           if (frame) {
+            const editedPass = savePass === 'pass2' ? 'pass2_edited' : 'pass1_edited';
             frame.status = 'generated';
             frame.source = 'ai';
-            frame.pipeline_stage = savePass;
-            await api.savePassImage(characterId, animName, targetIndex, savePass, intermediates[i]);
+            frame.pipeline_stage = editedPass;
+            await api.savePassImage(characterId, animName, targetIndex, editedPass, intermediates[i]);
             set({ interpProgress: `Saved f${targetIndex} (${i + 1}/${intermediates.length})` });
           }
         }
@@ -1940,12 +1941,13 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
           }
 
           if (intermediates.length > 0) {
-            await api.savePassImage(characterId, animName, oddFrame.index, savePass, intermediates[0]);
+            const editedPass = savePass === 'pass2' ? 'pass2_edited' : 'pass1_edited';
+            await api.savePassImage(characterId, animName, oddFrame.index, editedPass, intermediates[0]);
             const frame = updatedAnim.frames.find((f) => f.index === oddFrame.index);
             if (frame) {
               frame.status = 'generated';
               frame.source = 'ai';
-              frame.pipeline_stage = savePass as any;
+              frame.pipeline_stage = editedPass as any;
             }
             filled++;
           }
