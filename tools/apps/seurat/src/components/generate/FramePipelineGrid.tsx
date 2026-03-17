@@ -53,6 +53,8 @@ interface DisplayFrame {
   displayIndex: number;
   /** Whether this is an interpolated (non-keyframe) slot */
   isInterpolated: boolean;
+  /** Ghost row: shows f0 as fN for looping (read-only, not selectable) */
+  isLoopGhost?: boolean;
 }
 
 /**
@@ -65,11 +67,21 @@ function buildDisplayFrames(anim: CharacterAnimation, interpMultiplier: number):
 
   if (hasKeyframeMarkers || interpMultiplier <= 1) {
     // Already has interpolation structure or no interpolation needed — use as-is
-    return anim.frames.map((f) => ({
+    const frames: DisplayFrame[] = anim.frames.map((f) => ({
       frame: f,
       displayIndex: f.index,
       isInterpolated: f.keyframe === false,
     }));
+    // Add loop ghost for looping animations
+    if (anim.loop && anim.frames.length > 0) {
+      frames.push({
+        frame: anim.frames[0],
+        displayIndex: anim.frames.length,
+        isInterpolated: false,
+        isLoopGhost: true,
+      });
+    }
+    return frames;
   }
 
   // Old manifest without keyframe markers — insert virtual interp slots
@@ -224,41 +236,48 @@ export function FramePipelineGrid({ animName }: Props) {
       {/* Frame rows */}
       <div style={styles.scrollArea}>
         {displayFrames.map((df) => {
-          const { frame, displayIndex, isInterpolated } = df;
-          const isSelected = selectedFrames.has(displayIndex);
+          const { frame, displayIndex, isInterpolated, isLoopGhost } = df;
+          const isSelected = !isLoopGhost && selectedFrames.has(displayIndex);
           const stage = frame?.pipeline_stage;
           const isVirtual = frame === null; // no manifest entry yet
 
           return (
             <div
-              key={displayIndex}
+              key={isLoopGhost ? `ghost-${displayIndex}` : displayIndex}
               data-testid={`pipeline-row-${displayIndex}`}
               style={{
                 ...styles.frameRow,
                 gridTemplateColumns: `60px repeat(${colCount}, 1fr)`,
-                background: isSelected ? '#1a2a3a' : undefined,
+                background: isLoopGhost ? '#0a0a18' : isSelected ? '#1a2a3a' : undefined,
+                opacity: isLoopGhost ? 0.5 : 1,
               }}
             >
               {/* Frame index + selection */}
               <div
                 style={styles.frameIndexCell}
-                onClick={() => toggleFrameSelection(displayIndex)}
+                onClick={() => !isLoopGhost && toggleFrameSelection(displayIndex)}
               >
-                <input
+                {!isLoopGhost && <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggleFrameSelection(displayIndex)}
                   onClick={(e) => e.stopPropagation()}
                   style={{ margin: 0 }}
-                />
-                <span style={styles.frameIndexLabel}>f{displayIndex}</span>
-                <span style={{
-                  ...styles.badge,
-                  borderColor: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
-                  color: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
-                }}>
-                  {isInterpolated ? 'interp' : stageBadgeLabel(stage)}
+                />}
+                <span style={styles.frameIndexLabel}>
+                  {isLoopGhost ? `f${displayIndex} (=f0)` : `f${displayIndex}`}
                 </span>
+                {isLoopGhost ? (
+                  <span style={{ ...styles.badge, borderColor: '#555', color: '#555' }}>loop</span>
+                ) : (
+                  <span style={{
+                    ...styles.badge,
+                    borderColor: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
+                    color: isInterpolated ? '#b080f0' : stageBadgeColor(stage),
+                  }}>
+                    {isInterpolated ? 'interp' : stageBadgeLabel(stage)}
+                  </span>
+                )}
               </div>
 
               {/* Pose cell — all frames are first-class, with visual indicators */}

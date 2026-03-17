@@ -1729,9 +1729,12 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
         let bestPass: PassKey = 'pass1';
 
         async function loadBest(fi: number): Promise<Uint8Array> {
+          // Wrap frame index for looping (e.g., f16 → f0)
+          const totalFrames = anim!.frames.length;
+          const actualFi = fi >= totalFrames ? fi % totalFrames : fi;
           for (const pass of PASS_PRIORITY) {
             try {
-              const bytes = await api.fetchPassImageBytes(characterId, animName, fi, pass);
+              const bytes = await api.fetchPassImageBytes(characterId, animName, actualFi, pass);
               // Track highest pass found (pass2 > pass1)
               const passLevel = pass.startsWith('pass2') ? 2 : 1;
               const bestLevel = bestPass.startsWith('pass2') ? 2 : 1;
@@ -1739,7 +1742,7 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
               return bytes;
             } catch { /* next */ }
           }
-          throw new Error(`No pass image for f${fi}`);
+          throw new Error(`No pass image for f${actualFi}`);
         }
 
         const startBytes = await loadBest(startFrame);

@@ -501,9 +501,10 @@ function InterpCollapsible({ animName, anim, totalFrames, generating, stageCount
                 onChange={(e) => setStartFrame(Math.max(0, Math.min(Number(e.target.value), totalFrames - 1)))}
                 style={{ ...styles.select, width: 50, textAlign: 'center' as const }} />
               <label style={styles.label}>End</label>
-              <input type="number" min={0} max={totalFrames - 1} value={endFrame}
-                onChange={(e) => setEndFrame(Math.max(0, Math.min(Number(e.target.value), totalFrames - 1)))}
+              <input type="number" min={0} max={anim.loop ? totalFrames : totalFrames - 1} value={endFrame}
+                onChange={(e) => setEndFrame(Math.max(0, Math.min(Number(e.target.value), anim.loop ? totalFrames : totalFrames - 1)))}
                 style={{ ...styles.select, width: 50, textAlign: 'center' as const }} />
+              {endFrame >= totalFrames && <span style={{ fontFamily: 'monospace', fontSize: 8, color: '#b080f0' }}>=f0 loop</span>}
             </Row>
             <div style={styles.statusText}>
               {canInterp
