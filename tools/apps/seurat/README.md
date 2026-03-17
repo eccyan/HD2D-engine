@@ -164,28 +164,34 @@ When the derived pose array is shorter than the manifest frame count (e.g., 4 de
 
 ### Frame Interpolation
 
-Generates in-between frames from existing pass 2 (chibi) outputs to create smoother animations. Interpolation sits between Pass 2 and Pass 3 in the pipeline, operating on 512x512 frames before pixelization.
+Generates in-between frames by blending or AI-interpolating between source frames. Collapsed by default in the Pipeline panel (optional fallback for speed over per-frame AI quality).
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | **Method** | Canvas Blend | `Canvas Blend` — instant client-side alpha crossfade. `RIFE (ComfyUI)` — AI-powered optical flow interpolation via RIFE VFI node (requires ComfyUI-Frame-Interpolation). |
-| **Multiplier** | 2x | Number of output frames per original pair: 2x doubles frame count, 3x triples, 4x quadruples. |
+| **Start / End** | 0 / last | Frame range to interpolate. The in-between count is auto-calculated: `end - start - 1`. |
 | **RIFE Model** | `rife47` | RIFE checkpoint to use (only relevant when method is RIFE). |
 
-**Manifest integration**: The interpolation multiplier is stored in `spritesheet.interp_multiplier`. When creating a new character, placeholder frames (`keyframe: false`, `status: "pending"`) are pre-populated between keyframes based on the current multiplier setting. This means the manifest always reflects the intended frame count from the start.
+**Range mode**: Set Start and End frame indices. The system loads the best available image from each (pass2 > pass1), generates the in-between frames, and saves them to the **edit slot** (pass1_edited or pass2_edited) — preserving the original AI-generated images.
 
-**Keyframe tracking**: Original frames are marked `keyframe: true`, interpolated frames `keyframe: false`. The grid shows interpolated frames with an "interp" badge. All frames are first-class — Pass 1 and Pass 2 generate for every selected frame (no automatic keyframe-only filtering). Use **Revert to Keyframes** to discard interpolated frames and restore originals.
+**Fill Odd Frames**: One-click button to interpolate all odd-indexed frames (f1, f3, f5...) from their even neighbors. Useful for generating every other frame via AI and filling gaps via interpolation.
 
-**Workflow** (optional — all frames are AI-generated first-class by default):
-1. Set the interpolation multiplier before creating a character (placeholders are pre-populated)
-2. Generate Pass 1 + Pass 2 on keyframes only (select keyframes via checkboxes)
-3. Click **Interpolate** — in-between frames fill the existing placeholder slots
-4. Run Pass 3 (pixelization) on all frames
-5. Assemble atlas — spritesheet columns already account for the full frame count
+**Loop support**: For looping animations, the pipeline grid shows a ghost row at the bottom (e.g., "f16 (=f0)") and the End frame can be set beyond the last index to wrap to f0. This enables smooth loop interpolation (e.g., f14→f16 fills f15 between f14 and f0).
 
-Interpolation is now an optional fallback (collapsed by default in the Pipeline panel) for users who prefer speed over per-frame AI quality.
+**Canvas Blend** is fast and requires no external dependencies — use it for quick previews. **RIFE** produces higher quality motion-aware interpolation but requires ComfyUI with the Frame-Interpolation custom node.
 
-**Canvas Blend** is fast and requires no external dependencies — use it for quick previews. **RIFE** produces higher quality motion-aware interpolation but requires ComfyUI with the Frame-Interpolation custom node. Seurat auto-detects the available RIFE node variant (`RIFE VFI`, `VFI_RIFE`, or `RIFEInterpolation`) and queries its schema for required inputs.
+### Background Removal (Magic Erase)
+
+The PaintEditor includes a **Magic Erase** tool for manual background removal. Click on a background pixel and all connected similar-colored pixels become transparent — no ComfyUI needed, purely client-side flood-fill.
+
+- Select **Magic Erase** mode (third button in the toolbar)
+- Click background areas to make them transparent
+- Adjust **Tolerance** slider (10–200) for stricter or looser color matching
+- Undo (Ctrl+Z) if it erases too much
+
+### Animation Timeline
+
+The ClipTimeline in the bottom pane shows a square preview canvas on the left and the timeline on the right. Each frame block shows its duration, editable via inline numeric inputs. An **"All:"** input in the header sets the duration for every frame at once.
 
 ## Generation Modes
 
@@ -257,11 +263,12 @@ Each step has a status badge (pending/ready/done) and is disabled until its prer
 ### Sprite Generation
 
 6. **Derive animation poses** — click "Derive Poses" in the Pipeline panel to create character-proportioned skeletons for all animation frames
-7. **Generate sprites** — select an animation, run Pass 1 (pose generation) + Pass 2 (chibi styling) on all frames
-8. **(Optional) Interpolate** — generate in-between frames for smoother animation (blend or RIFE)
-9. **Pixelize** — run Pass 3 on all frames to produce final pixel art
-10. **Review frames** — approve, reject, or regenerate individual frames
-11. **Assemble atlas** — validate and build the final spritesheet PNG
+7. **Generate sprites** — select an animation, run Pass 1 (pose generation) + Pass 2 (chibi styling) on all frames (or generate even frames and fill odds via interpolation)
+8. **Remove backgrounds** — use Magic Erase in the PaintEditor to remove unwanted backgrounds from generated frames
+9. **(Optional) Interpolate** — fill in-between frames by selecting start/end range, or use "Fill Odd Frames" for batch interpolation (saves to edit slot, preserving originals)
+10. **Pixelize** — run Pass 3 on all frames to produce final pixel art
+11. **Review frames** — approve, reject, or regenerate individual frames
+12. **Assemble atlas** — validate and build the final spritesheet PNG
 
 ## Architecture
 

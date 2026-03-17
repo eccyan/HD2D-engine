@@ -57,7 +57,8 @@ tools/
 | `src/lib/pose-templates.ts` | OpenPose skeleton data, interpolation, derivation, canvas renderer |
 | `src/components/layout/` | TreePane, MainPane, RightPane, BottomPane, Toolbar, StatusBar |
 | `src/components/generate/` | FramePipelineGrid, PipelineControls |
-| `src/components/shared/PaintEditor.tsx` | Draw/erase/flip/rotate editor overlay |
+| `src/components/shared/PaintEditor.tsx` | Draw/erase/magic-erase/flip/rotate editor overlay |
+| `src/components/animate/ClipTimeline.tsx` | Timeline with per-frame and set-all duration controls |
 
 ## Build & Type-Check
 
