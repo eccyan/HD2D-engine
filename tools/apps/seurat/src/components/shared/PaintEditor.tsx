@@ -1,11 +1,68 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-type BrushMode = 'erase' | 'draw';
+type BrushMode = 'erase' | 'draw' | 'magic-erase';
 
 const PALETTE_COLORS = [
   '#ffffff', '#000000', '#f5deb3', '#d2b48c', '#8b7355',
   '#ff6b6b', '#4ecdc4', '#45b7d1', '#f0c040', '#888888',
 ];
+
+/** Flood-fill erase: starting from (sx, sy), make all connected pixels
+ *  within `tolerance` of the starting color transparent. */
+function floodFillErase(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  tolerance: number,
+): void {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  const px = Math.floor(sx);
+  const py = Math.floor(sy);
+  if (px < 0 || px >= w || py < 0 || py >= h) return;
+
+  const idx = (py * w + px) * 4;
+  const startR = data[idx];
+  const startG = data[idx + 1];
+  const startB = data[idx + 2];
+  const startA = data[idx + 3];
+
+  const tol2 = tolerance * tolerance;
+  const visited = new Uint8Array(w * h);
+  const stack: number[] = [px, py];
+
+  function matches(i: number): boolean {
+    const dr = data[i] - startR;
+    const dg = data[i + 1] - startG;
+    const db = data[i + 2] - startB;
+    const da = data[i + 3] - startA;
+    return (dr * dr + dg * dg + db * db + da * da) <= tol2;
+  }
+
+  while (stack.length > 0) {
+    const y = stack.pop()!;
+    const x = stack.pop()!;
+    const vi = y * w + x;
+    if (visited[vi]) continue;
+    visited[vi] = 1;
+
+    const i = vi * 4;
+    if (!matches(i)) continue;
+
+    // Make transparent
+    data[i + 3] = 0;
+
+    if (x > 0) stack.push(x - 1, y);
+    if (x < w - 1) stack.push(x + 1, y);
+    if (y > 0) stack.push(x, y - 1);
+    if (y < h - 1) stack.push(x, y + 1);
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
 
 function brushCircle(
   ctx: CanvasRenderingContext2D,
@@ -49,6 +106,7 @@ export function PaintEditor({
   const [brushOpacity, setBrushOpacity] = useState(1.0);
   const [brushMode, setBrushMode] = useState<BrushMode>('erase');
   const [brushColor, setBrushColor] = useState('#ffffff');
+  const [magicTolerance, setMagicTolerance] = useState(50);
   const [saving, setSaving] = useState(false);
 
   // Undo stack (stores ImageData snapshots)
@@ -146,13 +204,20 @@ export function PaintEditor({
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     pushUndo();
-    painting.current = true;
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext('2d')!;
     const pos = getCanvasPos(e);
+
+    if (brushMode === 'magic-erase') {
+      // Flood-fill erase at click position
+      floodFillErase(ctx, pos.x, pos.y, magicTolerance);
+      return;
+    }
+
+    painting.current = true;
     brushCircle(ctx, pos.x, pos.y, getRadius(), brushMode, brushColor, brushOpacity);
     lastPos.current = pos;
-  }, [getCanvasPos, getRadius, pushUndo, brushMode, brushColor, brushOpacity]);
+  }, [getCanvasPos, getRadius, pushUndo, brushMode, brushColor, brushOpacity, magicTolerance]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!painting.current) return;
@@ -263,6 +328,13 @@ export function PaintEditor({
             >
               Draw
             </button>
+            <button
+              onClick={() => setBrushMode('magic-erase')}
+              style={{ ...styles.modeBtn, ...(brushMode === 'magic-erase' ? styles.modeBtnActive : {}) }}
+              title="Click to remove connected similar-colored pixels"
+            >
+              Magic Erase
+            </button>
           </div>
 
           {/* Color picker (only in draw mode) */}
@@ -323,6 +395,22 @@ export function PaintEditor({
             <span style={styles.editorLabel}>{Math.round(brushOpacity * 100)}%</span>
           </div>
 
+          {/* Magic erase tolerance */}
+          {brushMode === 'magic-erase' && (
+            <div style={styles.brushRow}>
+              <span style={styles.editorLabel}>Tolerance</span>
+              <input
+                type="range"
+                min={10}
+                max={200}
+                value={magicTolerance}
+                onChange={(e) => setMagicTolerance(Number(e.target.value))}
+                style={{ width: 100, height: 12 }}
+              />
+              <span style={styles.editorLabel}>{magicTolerance}</span>
+            </div>
+          )}
+
           {/* Flip & Rotate */}
           <div style={styles.modeGroup}>
             <button onClick={handleFlip} style={styles.toolBtn} title="Flip Horizontal">Flip</button>
@@ -342,7 +430,7 @@ export function PaintEditor({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          style={{ ...styles.editorCanvas, cursor: brushCursor }}
+          style={{ ...styles.editorCanvas, cursor: brushMode === 'magic-erase' ? 'crosshair' : brushCursor }}
         />
       </div>
     </div>
