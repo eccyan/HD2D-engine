@@ -13,6 +13,8 @@ export function BottomPane() {
   const selectClip = useSeuratStore((s) => s.selectClip);
 
   const [collapsed, setCollapsed] = useState(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = React.useState(0);
 
   const animName = treeSelection.kind === 'animation' ? treeSelection.animName : null;
 
@@ -20,6 +22,17 @@ export function BottomPane() {
   React.useEffect(() => {
     if (animName) selectClip(animName);
   }, [animName]);
+
+  // Observe content height for square preview
+  React.useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      setContentHeight(Math.floor(entries[0].contentRect.height));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   if (treeSelection.kind !== 'animation' || !manifest) return null;
 
@@ -48,9 +61,13 @@ export function BottomPane() {
       </div>
 
       {!collapsed && (
-        <div style={styles.content}>
-          {/* Preview area */}
-          <div style={styles.preview}>
+        <div ref={contentRef} style={styles.content}>
+          {/* Square preview — width = content height */}
+          <div style={{
+            ...styles.preview,
+            width: contentHeight > 0 ? contentHeight : '50%',
+            minWidth: contentHeight > 0 ? contentHeight : '50%',
+          }}>
             {useFramePreview ? (
               <FramePreviewCanvas
                 characterId={manifest.character_id}
@@ -70,7 +87,7 @@ export function BottomPane() {
             )}
           </div>
 
-          {/* Timeline */}
+          {/* Timeline — fills remaining width */}
           <div style={styles.timeline}>
             <ClipTimeline clip={clip} />
           </div>
@@ -118,14 +135,14 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   preview: {
-    flex: 1,
+    height: '100%',
     overflow: 'hidden',
     display: 'flex',
     borderRight: '1px solid #2a2a3a',
+    flexShrink: 0,
   },
   timeline: {
-    width: 300,
-    flexShrink: 0,
+    flex: 1,
     overflow: 'hidden',
   },
 };
