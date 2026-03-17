@@ -14,9 +14,17 @@ export function ClipTimeline({ clip }: Props) {
   const playbackState = useSeuratStore((s) => s.playbackState);
   const { setPlaybackState, setCurrentTime } = useSeuratStore();
 
+  const saveManifest = useSeuratStore((s) => s.saveManifest);
   const totalDuration = clip.frames.reduce((s, f) => s + f.duration, 0);
   const duration = getClipDuration(clip);
   const pxPerSecond = 400;
+
+  const handleSetAllDuration = (d: number) => {
+    for (const frame of clip.frames) {
+      updateFrameDuration(clip.name, frame.index, d);
+    }
+    saveManifest();
+  };
 
   const handlePlay = () => {
     if (playbackState === 'playing') {
@@ -57,6 +65,15 @@ export function ClipTimeline({ clip }: Props) {
           style={{ width: 120, accentColor: '#f0c040', height: 4 }}
         />
         <span style={styles.timeLabel}>{currentTime.toFixed(3)}s / {duration.toFixed(3)}s</span>
+        <span style={styles.allDurLabel}>All:</span>
+        <NumericInput
+          value={clip.frames[0]?.duration ?? 0.1}
+          step={0.01}
+          min={0.01}
+          onChange={handleSetAllDuration}
+          style={styles.allDurInput}
+          fallback={0.1}
+        />
       </div>
 
       <div style={styles.timeline}>
@@ -179,6 +196,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'monospace',
     fontSize: 10,
     color: '#888',
+  },
+  allDurLabel: {
+    fontFamily: 'monospace',
+    fontSize: 9,
+    color: '#666',
+    marginLeft: 4,
+  },
+  allDurInput: {
+    width: 44,
+    background: '#111',
+    border: '1px solid #444',
+    borderRadius: 2,
+    color: '#f0c040',
+    fontFamily: 'monospace',
+    fontSize: 9,
+    textAlign: 'center' as const,
+    padding: '1px 2px',
+    outline: 'none',
   },
   durationInput: {
     width: 44,
