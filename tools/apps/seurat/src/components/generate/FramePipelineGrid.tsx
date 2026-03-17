@@ -122,6 +122,7 @@ export function FramePipelineGrid({ animName }: Props) {
   const copyFrame = useSeuratStore((s) => s.copyFrame);
   const pasteFrame = useSeuratStore((s) => s.pasteFrame);
   const clipboard = useSeuratStore((s) => s.clipboard);
+  const clearEditedFrames = useSeuratStore((s) => s.clearEditedFrames);
   const interpMultiplier = useSeuratStore((s) => s.aiConfig.interpMultiplier);
   const poseOverrides = useSeuratStore((s) => s.poseOverrides);
   const derivedAnimPoses = useSeuratStore((s) => s.derivedAnimPoses);
@@ -409,6 +410,17 @@ export function FramePipelineGrid({ animName }: Props) {
             >
               Paste {clipboard ? `(from ${clipboard.animName} f${clipboard.frameIndex})` : ''}
             </div>
+            {(contextMenu.pass === 'pass1_edited' || contextMenu.pass === 'pass2_edited') && (
+              <div
+                style={styles.contextItem}
+                onClick={() => {
+                  clearEditedFrames(animName, [contextMenu.frameIndex]);
+                  setContextMenu(null);
+                }}
+              >
+                Delete Edit
+              </div>
+            )}
           </div>
         </>
       )}
