@@ -418,48 +418,14 @@ export function PipelineControls({ animName }: Props) {
       </div>
 
       {/* Export & Actions */}
-      <div style={styles.section}>
-        <div style={styles.subTitle}>Export</div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            onClick={() => exportAnimationStrip(manifest!.character_id, animName, anim)}
-            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
-            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
-          >
-            Export Strip
-          </button>
-          <button
-            onClick={() => exportAnimationAPNG(manifest!.character_id, animName, anim)}
-            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
-            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
-          >
-            APNG
-          </button>
-          <button
-            onClick={() => exportAnimationGIF(manifest!.character_id, animName, anim)}
-            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
-            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
-          >
-            GIF
-          </button>
-          <button
-            onClick={() => exportAnimationFrames(manifest!.character_id, animName, anim)}
-            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
-            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
-          >
-            Frames
-          </button>
-        </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-          <button
-            onClick={() => clearEditedFrames(animName, selectedIndices.length > 0 ? selectedIndices : anim.frames.map((f) => f.index))}
-            disabled={!!generating}
-            style={{ ...styles.passBtn, borderColor: '#886', color: '#aa8', opacity: generating ? 0.5 : 1, flex: 1 }}
-          >
-            Clear Edits ({selectedIndices.length > 0 ? `${selectedIndices.length} sel` : 'all'})
-          </button>
-        </div>
-      </div>
+      <ExportSection
+        characterId={manifest!.character_id}
+        animName={animName}
+        anim={anim}
+        generating={generating}
+        selectedIndices={selectedIndices}
+        clearEditedFrames={clearEditedFrames}
+      />
 
       {/* Background Removal */}
       <div style={styles.section}>
@@ -486,6 +452,73 @@ export function PipelineControls({ animName }: Props) {
         )}
       </div>
 
+    </div>
+  );
+}
+
+type ExportFormat = 'strip' | 'apng' | 'gif' | 'frames';
+
+const EXPORT_OPTIONS: { value: ExportFormat; label: string }[] = [
+  { value: 'strip', label: 'Sprite Strip (PNG)' },
+  { value: 'apng', label: 'Animated PNG (APNG)' },
+  { value: 'gif', label: 'Animated GIF' },
+  { value: 'frames', label: 'Individual Frames' },
+];
+
+function ExportSection({ characterId, animName, anim, generating, selectedIndices, clearEditedFrames }: {
+  characterId: string;
+  animName: string;
+  anim: { frames: Array<{ index: number; status: string; duration: number }> };
+  generating: string | null;
+  selectedIndices: number[];
+  clearEditedFrames: (animName: string, frameIndices: number[]) => Promise<void>;
+}) {
+  const [format, setFormat] = useState<ExportFormat>('apng');
+  const [exporting, setExporting] = useState(false);
+  const hasFrames = anim.frames.some((f) => f.status !== 'pending');
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      switch (format) {
+        case 'strip': await exportAnimationStrip(characterId, animName, anim); break;
+        case 'apng': await exportAnimationAPNG(characterId, animName, anim); break;
+        case 'gif': await exportAnimationGIF(characterId, animName, anim); break;
+        case 'frames': await exportAnimationFrames(characterId, animName, anim); break;
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div style={styles.section}>
+      <div style={styles.subTitle}>Export</div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <select
+          value={format}
+          onChange={(e) => setFormat(e.target.value as ExportFormat)}
+          style={{ ...styles.select, flex: 1 }}
+        >
+          {EXPORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <button
+          onClick={handleExport}
+          disabled={!hasFrames || exporting}
+          style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!hasFrames || exporting) ? 0.5 : 1 }}
+        >
+          {exporting ? 'Exporting...' : 'Export'}
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        <button
+          onClick={() => clearEditedFrames(animName, selectedIndices.length > 0 ? selectedIndices : anim.frames.map((f) => f.index))}
+          disabled={!!generating}
+          style={{ ...styles.passBtn, borderColor: '#886', color: '#aa8', opacity: generating ? 0.5 : 1, flex: 1 }}
+        >
+          Clear Edits ({selectedIndices.length > 0 ? `${selectedIndices.length} sel` : 'all'})
+        </button>
+      </div>
     </div>
   );
 }
