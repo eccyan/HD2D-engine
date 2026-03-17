@@ -777,6 +777,28 @@ app.post('/api/characters/:id/frames/:anim/:frame/pass/:pass', async (req: Reque
   }
 });
 
+// DELETE /api/characters/:id/frames/:anim/:frame/pass/:pass — delete a pass image
+app.delete('/api/characters/:id/frames/:anim/:frame/pass/:pass', async (req: Request, res: Response) => {
+  try {
+    const charDir = safeResolve(getCharactersDir(), req.params['id']!);
+    const pass = req.params['pass']!;
+    if (!VALID_PASSES.includes(pass)) {
+      res.status(400).json({ error: `Invalid pass: ${pass}` });
+      return;
+    }
+    const animName = req.params['anim']!;
+    const frameIdx = req.params['frame']!;
+    const filename = `${animName}_${frameIdx}_${pass}.png`;
+    const filePath = path.join(charDir, animName, filename);
+    await fs.unlink(filePath);
+    console.log(`[REST] Pass image deleted: ${filePath}`);
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(message.includes('ENOENT') ? 404 : 500).json({ error: message });
+  }
+});
+
 // GET /api/characters/:id/frames/:anim/:frame — get a specific frame's status
 app.get('/api/characters/:id/frames/:anim/:frame', async (req: Request, res: Response) => {
   try {

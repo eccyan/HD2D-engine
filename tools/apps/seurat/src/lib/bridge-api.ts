@@ -362,3 +362,16 @@ export async function savePassImage(
   );
   if (!res.ok) throw new Error(`Failed to save pass image: ${res.status}`);
 }
+
+export async function deletePassImage(
+  characterId: string,
+  animName: string,
+  frameIndex: number,
+  pass: PipelineStage,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE}/api/characters/${encodeURIComponent(characterId)}/frames/${encodeURIComponent(animName)}/${frameIndex}/pass/${pass}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete pass image: ${res.status}`);
+}

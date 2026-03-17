@@ -17,6 +17,7 @@ export function PipelineControls({ animName }: Props) {
   const aiConfig = useSeuratStore((s) => s.aiConfig);
   const setAIConfig = useSeuratStore((s) => s.setAIConfig);
   const generatePass = useSeuratStore((s) => s.generatePass);
+  const clearEditedFrames = useSeuratStore((s) => s.clearEditedFrames);
   const cancelGeneration = useSeuratStore((s) => s.cancelGeneration);
   // generationJobs now displayed in StatusBar
   // Jobs are now displayed in the StatusBar
@@ -416,7 +417,7 @@ export function PipelineControls({ animName }: Props) {
         ))}
       </div>
 
-      {/* Export */}
+      {/* Export & Actions */}
       <div style={styles.section}>
         <div style={styles.subTitle}>Export</div>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -433,6 +434,15 @@ export function PipelineControls({ animName }: Props) {
             style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
           >
             Export Frames
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+          <button
+            onClick={() => clearEditedFrames(animName, selectedIndices.length > 0 ? selectedIndices : anim.frames.map((f) => f.index))}
+            disabled={!!generating}
+            style={{ ...styles.passBtn, borderColor: '#886', color: '#aa8', opacity: generating ? 0.5 : 1, flex: 1 }}
+          >
+            Clear Edits ({selectedIndices.length > 0 ? `${selectedIndices.length} sel` : 'all'})
           </button>
         </div>
       </div>

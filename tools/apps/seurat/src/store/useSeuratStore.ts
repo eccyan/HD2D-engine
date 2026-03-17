@@ -187,6 +187,7 @@ export interface SeuratState {
     frameIndices?: number[],
   ) => Promise<void>;
   saveEditedFrame: (animName: string, frameIndex: number, pass: PipelineStage, pngBytes: Uint8Array) => Promise<void>;
+  clearEditedFrames: (animName: string, frameIndices: number[]) => Promise<void>;
 
   // Review
   reviewFilter: ReviewFilter;
@@ -1517,6 +1518,36 @@ export const useSeuratStore = create<SeuratState>((set, get) => ({
     const frame = updated.animations.find((a) => a.name === animName)?.frames.find((f) => f.index === frameIndex);
     if (frame) { frame.pipeline_stage = editedStage as PipelineStage; }
     set({ manifest: updated, frameRevision: get().frameRevision + 1 });
+  },
+
+  clearEditedFrames: async (animName, frameIndices) => {
+    const { manifest } = get();
+    if (!manifest) return;
+
+    const updated = structuredClone(manifest);
+    const updatedAnim = updated.animations.find((a) => a.name === animName);
+    if (!updatedAnim) return;
+
+    for (const fi of frameIndices) {
+      const frame = updatedAnim.frames.find((f) => f.index === fi);
+      if (!frame) continue;
+
+      // Delete edited files and revert pipeline_stage to the base pass
+      if (frame.pipeline_stage === 'pass1_edited' || (frame.pipeline_stage && ['pass2', 'pass2_edited', 'pass3'].includes(frame.pipeline_stage))) {
+        try { await api.deletePassImage(manifest.character_id, animName, fi, 'pass1_edited'); } catch { /* ok */ }
+      }
+      if (frame.pipeline_stage === 'pass2_edited' || frame.pipeline_stage === 'pass3') {
+        try { await api.deletePassImage(manifest.character_id, animName, fi, 'pass2_edited'); } catch { /* ok */ }
+      }
+
+      // Revert stage: find the highest base pass that still exists
+      if (frame.pipeline_stage?.includes('edited')) {
+        frame.pipeline_stage = frame.pipeline_stage.replace('_edited', '') as PipelineStage;
+      }
+    }
+
+    set({ manifest: updated, frameRevision: get().frameRevision + 1 });
+    await api.saveManifest(updated);
   },
 
   generatePass: async (pass, animName, frameIndices) => {
