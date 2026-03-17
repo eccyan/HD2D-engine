@@ -6,6 +6,7 @@ import { DEFAULT_AI_CONFIG } from '../../store/types.js';
 import { SAMPLER_NAMES, buildFramePrompt, buildNegativePrompt } from '../../lib/ai-generate.js';
 import { NumericInput } from '../NumericInput.js';
 import { useSelectedFrameIndices } from './FramePipelineGrid.js';
+import * as api from '../../lib/bridge-api.js';
 
 interface Props {
   animName: string;
@@ -415,6 +416,27 @@ export function PipelineControls({ animName }: Props) {
         ))}
       </div>
 
+      {/* Export */}
+      <div style={styles.section}>
+        <div style={styles.subTitle}>Export</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            onClick={() => exportAnimationStrip(manifest!.character_id, animName, anim)}
+            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
+            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
+          >
+            Export Strip (PNG)
+          </button>
+          <button
+            onClick={() => exportAnimationFrames(manifest!.character_id, animName, anim)}
+            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
+            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
+          >
+            Export Frames
+          </button>
+        </div>
+      </div>
+
       {/* Background Removal */}
       <div style={styles.section}>
         <Row>
@@ -442,6 +464,95 @@ export function PipelineControls({ animName }: Props) {
 
     </div>
   );
+}
+
+/** Download a blob as a file */
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Load the best available pass image for a frame */
+async function loadBestImage(characterId: string, animName: string, fi: number): Promise<HTMLImageElement | null> {
+  const passes = ['pass3', 'pass2_edited', 'pass2', 'pass1_edited', 'pass1'] as const;
+  for (const pass of passes) {
+    try {
+      const url = pass === 'pass3'
+        ? api.frameThumbnailUrl(characterId, animName, fi)
+        : api.passImageUrl(characterId, animName, fi, pass);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject();
+        img.src = url;
+      });
+      return img;
+    } catch { /* next */ }
+  }
+  return null;
+}
+
+/** Export animation as a horizontal sprite strip PNG */
+async function exportAnimationStrip(
+  characterId: string,
+  animName: string,
+  anim: { frames: Array<{ index: number; status: string }> } | undefined,
+) {
+  if (!anim) return;
+  const imgs: (HTMLImageElement | null)[] = [];
+  for (const frame of anim.frames) {
+    imgs.push(await loadBestImage(characterId, animName, frame.index));
+  }
+
+  const validImgs = imgs.filter(Boolean) as HTMLImageElement[];
+  if (validImgs.length === 0) return;
+
+  const fw = validImgs[0].naturalWidth;
+  const fh = validImgs[0].naturalHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = fw * anim.frames.length;
+  canvas.height = fh;
+  const ctx = canvas.getContext('2d')!;
+
+  for (let i = 0; i < anim.frames.length; i++) {
+    const img = imgs[i];
+    if (img) ctx.drawImage(img, i * fw, 0);
+  }
+
+  canvas.toBlob((blob) => {
+    if (blob) downloadBlob(blob, `${animName}_strip.png`);
+  }, 'image/png');
+}
+
+/** Export individual frames as separate PNG downloads */
+async function exportAnimationFrames(
+  characterId: string,
+  animName: string,
+  anim: { frames: Array<{ index: number; status: string }> } | undefined,
+) {
+  if (!anim) return;
+  for (const frame of anim.frames) {
+    const img = await loadBestImage(characterId, animName, frame.index);
+    if (!img) continue;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    await new Promise<void>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (blob) downloadBlob(blob, `${animName}_f${frame.index}.png`);
+        resolve();
+      }, 'image/png');
+    });
+  }
 }
 
 function Row({ children }: { children: React.ReactNode }) {
