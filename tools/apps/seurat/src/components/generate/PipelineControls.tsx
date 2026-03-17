@@ -426,14 +426,21 @@ export function PipelineControls({ animName }: Props) {
             disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
             style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
           >
-            Export Strip (PNG)
+            Export Strip
+          </button>
+          <button
+            onClick={() => exportAnimationAPNG(manifest!.character_id, animName, anim)}
+            disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
+            style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
+          >
+            Export APNG
           </button>
           <button
             onClick={() => exportAnimationFrames(manifest!.character_id, animName, anim)}
             disabled={!anim || anim.frames.every((f) => f.status === 'pending')}
             style={{ ...styles.passBtn, borderColor: '#4ac8c8', color: '#90d8d8', opacity: (!anim || anim.frames.every((f) => f.status === 'pending')) ? 0.5 : 1, flex: 1 }}
           >
-            Export Frames
+            Frames
           </button>
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
@@ -539,6 +546,163 @@ async function exportAnimationStrip(
   canvas.toBlob((blob) => {
     if (blob) downloadBlob(blob, `${animName}_strip.png`);
   }, 'image/png');
+}
+
+/** Export animation as an animated PNG (APNG) */
+async function exportAnimationAPNG(
+  characterId: string,
+  animName: string,
+  anim: { frames: Array<{ index: number; status: string; duration: number }> } | undefined,
+) {
+  if (!anim) return;
+
+  // Collect frame PNGs as blobs
+  const framePngs: { blob: Blob; delayMs: number }[] = [];
+  for (const frame of anim.frames) {
+    const img = await loadBestImage(characterId, animName, frame.index);
+    if (!img) continue;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (blob) framePngs.push({ blob, delayMs: Math.round(frame.duration * 1000) });
+  }
+
+  if (framePngs.length === 0) return;
+
+  // Build APNG from individual PNG frames
+  const apngBlob = await buildAPNG(framePngs);
+  downloadBlob(apngBlob, `${animName}.apng`);
+}
+
+/** Build an APNG from multiple PNG frame blobs */
+async function buildAPNG(frames: { blob: Blob; delayMs: number }[]): Promise<Blob> {
+  // Parse each PNG into chunks
+  const allFrameChunks: { chunks: Map<string, Uint8Array[]>; width: number; height: number; idatData: Uint8Array }[] = [];
+
+  for (const { blob } of frames) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    const { chunks, width, height } = parsePNGChunks(buf);
+    // Combine all IDAT chunks into one
+    const idats = chunks.get('IDAT') ?? [];
+    const totalLen = idats.reduce((s, c) => s + c.length, 0);
+    const combined = new Uint8Array(totalLen);
+    let off = 0;
+    for (const c of idats) { combined.set(c, off); off += c.length; }
+    allFrameChunks.push({ chunks, width, height, idatData: combined });
+  }
+
+  const { width, height } = allFrameChunks[0];
+  const numFrames = frames.length;
+
+  // Build output
+  const parts: Uint8Array[] = [];
+
+  // PNG signature
+  parts.push(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]));
+
+  // IHDR from first frame
+  const ihdr = allFrameChunks[0].chunks.get('IHDR')![0];
+  parts.push(makeChunk('IHDR', ihdr));
+
+  // acTL (animation control)
+  const actl = new Uint8Array(8);
+  new DataView(actl.buffer).setUint32(0, numFrames, false);
+  new DataView(actl.buffer).setUint32(4, 0, false); // num_plays: 0 = infinite
+  parts.push(makeChunk('acTL', actl));
+
+  let seq = 0;
+
+  for (let i = 0; i < numFrames; i++) {
+    const { idatData } = allFrameChunks[i];
+    const delayMs = frames[i].delayMs;
+
+    // fcTL (frame control)
+    const fctl = new Uint8Array(26);
+    const fv = new DataView(fctl.buffer);
+    fv.setUint32(0, seq++, false);   // sequence_number
+    fv.setUint32(4, width, false);   // width
+    fv.setUint32(8, height, false);  // height
+    fv.setUint32(12, 0, false);      // x_offset
+    fv.setUint32(16, 0, false);      // y_offset
+    fv.setUint16(20, delayMs, false); // delay_num
+    fv.setUint16(22, 1000, false);   // delay_den
+    fctl[24] = 0; // dispose_op: none
+    fctl[25] = 0; // blend_op: source
+    parts.push(makeChunk('fcTL', fctl));
+
+    if (i === 0) {
+      // First frame uses IDAT
+      parts.push(makeChunk('IDAT', idatData));
+    } else {
+      // Subsequent frames use fdAT (sequence_number + data)
+      const fdat = new Uint8Array(4 + idatData.length);
+      new DataView(fdat.buffer).setUint32(0, seq++, false);
+      fdat.set(idatData, 4);
+      parts.push(makeChunk('fdAT', fdat));
+    }
+  }
+
+  // IEND
+  parts.push(makeChunk('IEND', new Uint8Array(0)));
+
+  return new Blob(parts as BlobPart[], { type: 'image/apng' });
+}
+
+function makeChunk(type: string, data: Uint8Array): Uint8Array {
+  const len = data.length;
+  const buf = new Uint8Array(12 + len);
+  const view = new DataView(buf.buffer);
+  view.setUint32(0, len, false);
+  buf[4] = type.charCodeAt(0);
+  buf[5] = type.charCodeAt(1);
+  buf[6] = type.charCodeAt(2);
+  buf[7] = type.charCodeAt(3);
+  buf.set(data, 8);
+  // CRC32 over type + data
+  const crc = crc32(buf.subarray(4, 8 + len));
+  view.setUint32(8 + len, crc, false);
+  return buf;
+}
+
+function parsePNGChunks(buf: Uint8Array): { chunks: Map<string, Uint8Array[]>; width: number; height: number } {
+  const chunks = new Map<string, Uint8Array[]>();
+  let pos = 8; // skip signature
+  let width = 0, height = 0;
+  while (pos < buf.length) {
+    const view = new DataView(buf.buffer, buf.byteOffset + pos);
+    const len = view.getUint32(0, false);
+    const type = String.fromCharCode(buf[pos + 4], buf[pos + 5], buf[pos + 6], buf[pos + 7]);
+    const data = buf.slice(pos + 8, pos + 8 + len);
+    if (!chunks.has(type)) chunks.set(type, []);
+    chunks.get(type)!.push(data);
+    if (type === 'IHDR') {
+      const dv = new DataView(data.buffer, data.byteOffset);
+      width = dv.getUint32(0, false);
+      height = dv.getUint32(4, false);
+    }
+    pos += 12 + len; // length(4) + type(4) + data(len) + crc(4)
+  }
+  return { chunks, width, height };
+}
+
+/** CRC32 lookup table */
+const crcTable = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c;
+  }
+  return t;
+})();
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) crc = crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
 /** Export individual frames as separate PNG downloads */
