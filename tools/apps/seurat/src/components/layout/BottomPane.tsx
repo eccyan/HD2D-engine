@@ -13,8 +13,6 @@ export function BottomPane() {
   const selectClip = useSeuratStore((s) => s.selectClip);
 
   const [collapsed, setCollapsed] = useState(false);
-  const contentRef = React.useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = React.useState(0);
 
   const animName = treeSelection.kind === 'animation' ? treeSelection.animName : null;
 
@@ -22,17 +20,6 @@ export function BottomPane() {
   React.useEffect(() => {
     if (animName) selectClip(animName);
   }, [animName]);
-
-  // Observe content height for square preview
-  React.useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      setContentHeight(Math.floor(entries[0].contentRect.height));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   if (treeSelection.kind !== 'animation' || !manifest) return null;
 
@@ -61,13 +48,9 @@ export function BottomPane() {
       </div>
 
       {!collapsed && (
-        <div ref={contentRef} style={styles.content}>
-          {/* Square preview — width = content height */}
-          <div style={{
-            ...styles.preview,
-            width: contentHeight > 0 ? contentHeight : '50%',
-            minWidth: contentHeight > 0 ? contentHeight : '50%',
-          }}>
+        <div style={styles.content}>
+          {/* Square preview — height: 100%, aspect-ratio: 1 makes width = height */}
+          <div style={styles.preview}>
             {useFramePreview ? (
               <FramePreviewCanvas
                 characterId={manifest.character_id}
@@ -136,13 +119,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   preview: {
     height: '100%',
+    aspectRatio: '1',
     overflow: 'hidden',
     display: 'flex',
     borderRight: '1px solid #2a2a3a',
     flexShrink: 0,
+    flexGrow: 0,
   },
   timeline: {
     flex: 1,
     overflow: 'hidden',
+    minWidth: 0,
   },
 };
