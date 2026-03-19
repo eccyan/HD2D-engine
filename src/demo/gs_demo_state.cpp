@@ -16,6 +16,8 @@ void GsDemoState::on_enter(App& app) {
 
     // Disable app-level parallax — demo manages its own camera
     app.set_gs_parallax_active(false);
+    app.renderer().set_gs_skip_chunk_cull(false);
+    app.renderer().gs_renderer().set_skip_sort(false);
 
     // Set initial camera based on loaded cloud AABB
     if (app.renderer().has_gs_cloud()) {
@@ -132,8 +134,16 @@ void GsDemoState::update_shadow_box_camera(App& app, float dt) {
     glm::vec2 player_offset = (mouse - window_center) / window_half;
     player_offset = glm::clamp(player_offset, glm::vec2(-1.0f), glm::vec2(1.0f));
 
-    parallax_cam_.update(player_offset, dt);
-    app.renderer().set_gs_camera(parallax_cam_.view(), parallax_cam_.proj());
+    if (app.renderer().gs_renderer().skip_sort()) {
+        // Cached GS mode: skip compute, shift blit quad for parallax effect
+        constexpr float kParallaxPixels = 30.0f;  // max pixel shift
+        app.renderer().set_gs_blit_offset(
+            player_offset.x * kParallaxPixels,
+            -player_offset.y * kParallaxPixels);  // Y inverted (screen coords)
+    } else {
+        parallax_cam_.update(player_offset, dt);
+        app.renderer().set_gs_camera(parallax_cam_.view(), parallax_cam_.proj());
+    }
 }
 
 void GsDemoState::update(App& app, float dt) {
@@ -146,16 +156,22 @@ void GsDemoState::update(App& app, float dt) {
     // P → toggle shadow box mode
     if (app.input().was_key_pressed(GLFW_KEY_P)) {
         shadow_box_mode_ = !shadow_box_mode_;
+        app.renderer().set_gs_skip_chunk_cull(shadow_box_mode_);
+        app.renderer().gs_renderer().set_skip_sort(shadow_box_mode_);
         std::fprintf(stderr, "Shadow box mode: %s\n", shadow_box_mode_ ? "ON" : "OFF");
     }
 
-    // FPS counter
-    fps_timer_ += dt;
-    fps_frame_count_++;
-    if (fps_timer_ >= 0.5f) {
-        fps_ = static_cast<float>(fps_frame_count_) / fps_timer_;
-        fps_frame_count_ = 0;
-        fps_timer_ = 0.0f;
+    // FPS counter — use wall clock instead of clamped dt for accurate measurement
+    {
+        auto now = std::chrono::steady_clock::now();
+        if (fps_frame_count_ == 0) fps_clock_ = now;
+        fps_frame_count_++;
+        float elapsed = std::chrono::duration<float>(now - fps_clock_).count();
+        if (elapsed >= 0.5f) {
+            fps_ = static_cast<float>(fps_frame_count_) / elapsed;
+            fps_frame_count_ = 0;
+            fps_clock_ = now;
+        }
     }
 
     if (shadow_box_mode_) {

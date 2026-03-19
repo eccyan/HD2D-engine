@@ -21,6 +21,8 @@ public:
     bool has_cloud() const { return gaussian_count_ > 0; }
     uint32_t gaussian_count() const { return gaussian_count_; }
     uint32_t max_gaussian_count() const { return max_gaussian_count_; }
+    uint32_t output_width() const { return output_width_; }
+    uint32_t output_height() const { return output_height_; }
     uint32_t visible_count() const {
         if (visible_count_ssbo_.mapped())
             return *static_cast<const uint32_t*>(visible_count_ssbo_.mapped());
@@ -29,6 +31,9 @@ public:
     void set_shadow_box_params(const glm::vec3& cone_dir, float cone_cos,
                                const glm::vec3& cam_pos, float margin = 32.0f);
     void clear_shadow_box_params();
+    void set_skip_sort(bool skip) { skip_sort_ = skip; }
+    bool skip_sort() const { return skip_sort_; }
+    bool sort_done_once() const { return sort_done_once_; }
     void shutdown(VmaAllocator allocator);
 
 private:
@@ -100,6 +105,8 @@ private:
     bool initialized_ = false;
 
     // Shadow box parameters
+    bool skip_sort_ = false;
+    bool sort_done_once_ = false;  // true after first full sort
     bool shadow_box_active_ = false;
     float shadow_box_margin_ = 128.0f;
     float shadow_box_cone_cos_ = 0.0f;

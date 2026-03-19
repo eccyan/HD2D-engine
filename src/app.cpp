@@ -1052,10 +1052,25 @@ void App::init_scene(const std::string& scene_path) {
                          gs.camera_target.x, gs.camera_target.y, gs.camera_target.z,
                          gs.camera_fov);
 
-            renderer_.init_gs(cloud, gs.render_width, gs.render_height);
+            // Auto-scale render resolution for large Gaussian counts
+            uint32_t gs_w = gs.render_width;
+            uint32_t gs_h = gs.render_height;
+            if (cloud.count() > 100000 && gs_w >= 320) {
+                gs_w = 160;
+                gs_h = 120;
+                std::fprintf(stderr, "GS: Auto-scaled render to %ux%u for %u Gaussians\n",
+                             gs_w, gs_h, cloud.count());
+            } else if (cloud.count() > 50000 && gs_w >= 320) {
+                gs_w = 240;
+                gs_h = 180;
+                std::fprintf(stderr, "GS: Auto-scaled render to %ux%u for %u Gaussians\n",
+                             gs_w, gs_h, cloud.count());
+            }
+
+            renderer_.init_gs(cloud, gs_w, gs_h);
 
             // Set up 3D perspective camera for GS rendering
-            float aspect = static_cast<float>(gs.render_width) / static_cast<float>(gs.render_height);
+            float aspect = static_cast<float>(gs_w) / static_cast<float>(gs_h);
             auto gs_view = glm::lookAt(gs.camera_position, gs.camera_target, glm::vec3(0, 1, 0));
             auto gs_proj = glm::perspective(glm::radians(gs.camera_fov), aspect, 0.1f, 1000.0f);
             gs_proj[1][1] *= -1.0f;  // Vulkan Y-flip
@@ -1073,9 +1088,14 @@ void App::init_scene(const std::string& scene_path) {
         if (gs.parallax) {
             gs_parallax_camera_.configure(
                 gs.camera_position, gs.camera_target,
-                gs.camera_fov, gs.render_width, gs.render_height,
+                gs.camera_fov, renderer_.gs_renderer().output_width(), renderer_.gs_renderer().output_height(),
                 *gs.parallax);
             gs_parallax_active_ = true;
+
+            // Shadow-box maps: skip per-frame chunk culling — all Gaussians
+            // are always visible from every parallax angle, so upload once at load.
+            renderer_.set_gs_skip_chunk_cull(true);
+            renderer_.gs_renderer().set_skip_sort(true);
 
             // Set shadow box shader params: tighter frustum margin, no cone cull
             // (cone cull is not useful for front-facing XY maps)
@@ -1087,6 +1107,7 @@ void App::init_scene(const std::string& scene_path) {
                          gs.parallax->parallax_strength);
         } else {
             gs_parallax_active_ = false;
+            renderer_.set_gs_skip_chunk_cull(false);
             renderer_.gs_renderer().clear_shadow_box_params();
         }
     }
@@ -1190,6 +1211,7 @@ void App::clear_scene() {
     // Clear collision grid and parallax state
     collision_grid_ = {};
     gs_parallax_active_ = false;
+    renderer_.set_gs_skip_chunk_cull(false);
 
     // Reset scene state
     scene_.clear_lights();
@@ -1300,8 +1322,16 @@ void App::update_game(float dt) {
                 glm::vec2 player_xy = {player_pos.x, player_pos.y};
                 glm::vec2 player_offset = (player_xy - map_center) / map_half;
                 player_offset = glm::clamp(player_offset, glm::vec2(-1.0f), glm::vec2(1.0f));
-                gs_parallax_camera_.update(player_offset, dt);
-                renderer_.set_gs_camera(gs_parallax_camera_.view(), gs_parallax_camera_.proj());
+                if (renderer_.gs_renderer().skip_sort()) {
+                    // Cached GS mode: shift blit quad for parallax
+                    constexpr float kParallaxPixels = 30.0f;
+                    renderer_.set_gs_blit_offset(
+                        player_offset.x * kParallaxPixels,
+                        -player_offset.y * kParallaxPixels);
+                } else {
+                    gs_parallax_camera_.update(player_offset, dt);
+                    renderer_.set_gs_camera(gs_parallax_camera_.view(), gs_parallax_camera_.proj());
+                }
             }
         }
 

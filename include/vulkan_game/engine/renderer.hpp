@@ -47,6 +47,8 @@ public:
     GsChunkGrid& gs_chunk_grid() { return gs_chunk_grid_; }
     const GsChunkGrid& gs_chunk_grid() const { return gs_chunk_grid_; }
     bool has_gs_cloud() const { return gs_renderer_.has_cloud(); }
+    void set_gs_skip_chunk_cull(bool skip) { gs_skip_chunk_cull_ = skip; }
+    void set_gs_blit_offset(float x, float y) { gs_blit_offset_x_ = x; gs_blit_offset_y_ = y; }
 
     void draw_scene(Scene& scene,
                     const std::vector<SpriteDrawInfo>& entity_sprites = {},
@@ -146,6 +148,9 @@ private:
     GsChunkGrid gs_chunk_grid_;
     std::vector<Gaussian> gs_active_buffer_;
     std::vector<uint32_t> gs_prev_visible_;
+    bool gs_skip_chunk_cull_ = false;
+    float gs_blit_offset_x_ = 0.0f;
+    float gs_blit_offset_y_ = 0.0f;
 
     // Screenshot capture
     std::string screenshot_path_;

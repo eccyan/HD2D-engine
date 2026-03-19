@@ -4,6 +4,7 @@
 #include "vulkan_game/engine/gs_parallax_camera.hpp"
 
 #include <glm/glm.hpp>
+#include <chrono>
 
 namespace vulkan_game {
 
@@ -33,8 +34,8 @@ private:
     bool shadow_box_mode_ = false;
     GsParallaxCamera parallax_cam_;
 
-    // FPS tracking
-    float fps_timer_ = 0.0f;
+    // FPS tracking (wall clock for accuracy despite dt clamping)
+    std::chrono::steady_clock::time_point fps_clock_{};
     int fps_frame_count_ = 0;
     float fps_ = 0.0f;
 

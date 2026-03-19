@@ -246,7 +246,8 @@ void Renderer::draw_scene(Scene& scene,
     // ===== Pre-pass: Gaussian splatting compute (before render pass) =====
     if (gs_initialized_ && gs_renderer_.has_cloud()) {
         // Frustum-cull chunks and re-upload only visible Gaussians
-        if (!gs_chunk_grid_.empty()) {
+        // (skipped for shadow-box maps where all Gaussians are uploaded once at load)
+        if (!gs_skip_chunk_cull_ && !gs_chunk_grid_.empty()) {
             glm::mat4 gs_vp = gs_proj_ * gs_view_;
             auto visible = gs_chunk_grid_.visible_chunks(gs_vp);
 
@@ -533,9 +534,10 @@ void Renderer::draw_scene(Scene& scene,
         sprite_batch_.begin();
         SpriteDrawInfo gs_blit{};
         // UI ortho projection: (0,0) = top-left, (kWindowWidth, kWindowHeight) = bottom-right
+        // Apply parallax blit offset for shadow-box mode (cached GS image, shift quad)
         gs_blit.position = {
-            static_cast<float>(kWindowWidth) * 0.5f,
-            static_cast<float>(kWindowHeight) * 0.5f,
+            static_cast<float>(kWindowWidth) * 0.5f + gs_blit_offset_x_,
+            static_cast<float>(kWindowHeight) * 0.5f + gs_blit_offset_y_,
             0.0f
         };
         gs_blit.size = {

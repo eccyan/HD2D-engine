@@ -172,6 +172,7 @@ void shadow_collect(World& world, std::vector<SpriteDrawInfo>& out, bool y_sort)
 
 void reflection_collect(World& world, const TileLayer& layer, std::vector<SpriteDrawInfo>& out, bool y_sort) {
     out.clear();
+    if (layer.tiles.empty()) return;
 
     // Build list of water tile center positions (base tile ID 2)
     constexpr uint16_t kWaterBaseTile = 2;

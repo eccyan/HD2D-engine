@@ -299,6 +299,7 @@ void GsRenderer::create_compute_pipelines() {
 void GsRenderer::load_cloud(const GaussianCloud& cloud) {
     if (cloud.empty()) return;
 
+    sort_done_once_ = false;
     gaussian_count_ = cloud.count();
     max_gaussian_count_ = gaussian_count_;
 
@@ -362,6 +363,7 @@ void GsRenderer::load_cloud(const GaussianCloud& cloud) {
 void GsRenderer::update_active_gaussians(const Gaussian* data, uint32_t count) {
     if (count == 0 || count > max_gaussian_count_) return;
 
+    sort_done_once_ = false;
     gaussian_count_ = count;
 
     auto* gpu_data = static_cast<GpuGaussian*>(gaussian_ssbo_.mapped());
@@ -545,6 +547,15 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
     uniforms.cam_pos = glm::vec4(shadow_box_cam_pos_, 0.0f);
     std::memcpy(uniform_buffer_.mapped(), &uniforms, sizeof(uniforms));
 
+    // In skip-sort mode, skip the entire compute pipeline after the first
+    // render.  The cached output image is reused, and parallax is applied by
+    // shifting the blit quad in the composite pass (essentially free).
+    // The image is already in SHADER_READ_ONLY_OPTIMAL from the previous frame's
+    // transition — no layout change needed, just a memory dependency.
+    if (skip_sort_ && sort_done_once_) {
+        return;
+    }
+
     // Transition output image to GENERAL layout for compute write
     {
         VkImageMemoryBarrier barrier{};
@@ -628,6 +639,8 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
         // Barrier before next digit pass (or render)
         insert_compute_barrier(cmd);
     }
+
+    sort_done_once_ = true;
 
     // After even number of passes, result is back in buffer A (sort_keys_ssbo_)
 
