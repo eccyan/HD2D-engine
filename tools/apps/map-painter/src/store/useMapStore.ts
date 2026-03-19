@@ -72,6 +72,9 @@ export interface MapPainterState {
   undo: () => void;
   redo: () => void;
 
+  // Import
+  importImageToLayer: (imageData: ImageData) => void;
+
   // Save/Load
   saveProject: () => string;
   loadProject: (json: string) => void;
@@ -316,6 +319,57 @@ export const useMapStore = create<MapPainterState>((set, get) => ({
       }],
       layers: next.layers,
       heights: next.heights,
+    });
+  },
+
+  importImageToLayer: (imageData: ImageData) => {
+    const state = get();
+    const iw = imageData.width;
+    const ih = imageData.height;
+    const src = imageData.data;
+
+    // Resize map to image dimensions if different
+    const needsResize = iw !== state.width || ih !== state.height;
+    const w = iw;
+    const h = ih;
+    const size = w * h;
+
+    let layers: Record<Layer, Uint8Array>;
+    let heights: Float32Array;
+    let collisionGrid: boolean[];
+
+    if (needsResize) {
+      layers = createEmptyLayers(size);
+      heights = new Float32Array(size);
+      collisionGrid = new Array(size).fill(false);
+    } else {
+      layers = { ...state.layers };
+      heights = state.heights;
+      collisionGrid = state.collisionGrid;
+    }
+
+    // Write image pixels to the active layer
+    const layer = new Uint8Array(layers[state.activeLayer]);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const srcIdx = (y * iw + x) * 4;
+        const dstIdx = (y * w + x) * 4;
+        layer[dstIdx] = src[srcIdx];
+        layer[dstIdx + 1] = src[srcIdx + 1];
+        layer[dstIdx + 2] = src[srcIdx + 2];
+        layer[dstIdx + 3] = src[srcIdx + 3];
+      }
+    }
+    layers[state.activeLayer] = layer;
+
+    set({
+      width: w,
+      height: h,
+      layers,
+      heights,
+      collisionGrid,
+      undoStack: [],
+      redoStack: [],
     });
   },
 

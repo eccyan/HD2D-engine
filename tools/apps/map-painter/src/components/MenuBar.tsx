@@ -47,8 +47,10 @@ export const MenuBar: React.FC = () => {
   const undo = useMapStore(s => s.undo);
   const redo = useMapStore(s => s.redo);
   const autoGenerateCollision = useMapStore(s => s.autoGenerateCollision);
+  const activeLayer = useMapStore(s => s.activeLayer);
   const saveProject = useMapStore(s => s.saveProject);
   const loadProject = useMapStore(s => s.loadProject);
+  const importImageToLayer = useMapStore(s => s.importImageToLayer);
 
   const handleNew = useCallback(() => {
     const w = Number(prompt('Width:', String(width))) || width;
@@ -121,6 +123,29 @@ export const MenuBar: React.FC = () => {
     input.click();
   }, [loadProject]);
 
+  const handleImportImage = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        importImageToLayer(imageData);
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = URL.createObjectURL(file);
+    };
+    input.click();
+  }, [importImageToLayer]);
+
   const handleAutoCollision = useCallback(() => {
     const threshold = Number(prompt('Height threshold for collision:', '0.5')) || 0.5;
     autoGenerateCollision(threshold);
@@ -130,6 +155,7 @@ export const MenuBar: React.FC = () => {
     <div style={styles.bar}>
       <button style={styles.btn} onClick={handleNew}>New</button>
       <button style={styles.btn} onClick={handleResize}>Resize</button>
+      <button style={styles.btn} onClick={handleImportImage}>Import Image</button>
       <div style={styles.separator} />
       <button style={styles.btn} onClick={handleSave}>Save</button>
       <button style={styles.btn} onClick={handleLoad}>Load</button>
