@@ -146,6 +146,7 @@ void GsDemoState::update(App& app, float dt) {
     // P → toggle shadow box mode
     if (app.input().was_key_pressed(GLFW_KEY_P)) {
         shadow_box_mode_ = !shadow_box_mode_;
+        std::fprintf(stderr, "Shadow box mode: %s\n", shadow_box_mode_ ? "ON" : "OFF");
     }
 
     // FPS counter
