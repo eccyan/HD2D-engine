@@ -65,9 +65,8 @@ function buildBinaryPly(
   // SH DC coefficient: color = SH_C0 * f_dc + 0.5 → f_dc = (color - 0.5) / SH_C0
   const SH_C0 = 0.28209479177387814;
 
-  // Default scale (log space): log(0.3) ≈ -1.204
-  // Smaller scale = tighter Gaussians = sharper voxel-like appearance
-  const logScale = Math.log(0.3);
+  // Default scale (log space): log(0.5) ≈ -0.693
+  const logScale = Math.log(0.5);
 
   // Build header
   const header = [
