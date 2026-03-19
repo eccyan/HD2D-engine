@@ -119,7 +119,7 @@ export const useMapStore = create<MapPainterState>((set, get) => ({
   showCollision: false,
   showHeight: true,
   previewCamera: {
-    position: [0, 5, 10],
+    position: [0, 100, 100],  // ~45° diorama angle showing height
     target: [0, 0, 0],
     fov: 45,
   },
