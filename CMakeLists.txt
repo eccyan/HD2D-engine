@@ -157,7 +157,6 @@ add_library(vulkan_game_core OBJECT
     src/engine/text_renderer.cpp
     src/engine/locale_manager.cpp
     src/engine/minimap.cpp
-    src/engine/control_server.cpp
     src/engine/post_process.cpp
     src/engine/resource_manager.cpp
     src/engine/game_state.cpp
@@ -181,6 +180,10 @@ add_library(vulkan_game_core OBJECT
     src/game/pause_state.cpp
     src/game/transition_state.cpp
 )
+
+if(NOT WIN32)
+    target_sources(vulkan_game_core PRIVATE src/engine/control_server.cpp)
+endif()
 
 target_include_directories(vulkan_game_core PUBLIC
     ${PROJECT_SOURCE_DIR}/include

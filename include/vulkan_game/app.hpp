@@ -3,7 +3,9 @@
 #include "vulkan_game/engine/audio_system.hpp"
 #include "vulkan_game/engine/collision_gen.hpp"
 #include "vulkan_game/engine/gaussian_cloud.hpp"
+#ifndef _WIN32
 #include "vulkan_game/engine/control_server.hpp"
+#endif
 #include "vulkan_game/engine/day_night_system.hpp"
 #include "vulkan_game/engine/dialog.hpp"
 #include "vulkan_game/engine/direction.hpp"
@@ -55,7 +57,9 @@ public:
     FontAtlas& font_atlas() { return font_atlas_; }
     TextRenderer& text_renderer() { return text_renderer_; }
     ui::UIContext& ui_ctx() { return ui_ctx_; }
+#ifndef _WIN32
     ControlServer& control_server() { return control_server_; }
+#endif
     GameStateStack& state_stack() { return state_stack_; }
     GLFWwindow* window() { return window_; }
 
@@ -129,12 +133,16 @@ protected:
 
 private:
     void init_window();
+#ifndef _WIN32
     void process_commands();
+#endif
     nlohmann::json build_state_json() const;
     nlohmann::json build_map_json() const;
     nlohmann::json build_scene_json() const;
     nlohmann::json build_tilemap_json() const;
+#ifndef _WIN32
     void emit_event(const std::string& event, const nlohmann::json& data = {});
+#endif
     static void generate_player_sheet();
     static void generate_tileset();
     static void generate_particle_atlas();
@@ -231,7 +239,9 @@ private:
     ScriptSystem script_system_;
 
     // Control server
+#ifndef _WIN32
     ControlServer control_server_;
+#endif
     bool step_mode_ = false;
     int pending_steps_ = 0;
     uint64_t tick_ = 0;

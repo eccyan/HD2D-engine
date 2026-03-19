@@ -878,7 +878,9 @@ void App::init_subsystems() {
 
     ui_ctx_.init(font_atlas_, text_renderer_);
     audio_.init("assets");
+#ifndef _WIN32
     control_server_.start();
+#endif
 
     // Initialize Wren scripting
     wren_vm_.init(this);
@@ -1263,10 +1265,14 @@ void App::update_game(float dt) {
             if (!dialog_state_.advance()) {
                 game_mode_ = GameMode::Explore;
                 audio_.play(SoundId::DialogClose);
+#ifndef _WIN32
                 emit_event("dialog_ended");
+#endif
             } else {
                 audio_.play(SoundId::DialogBlip);
+#ifndef _WIN32
                 emit_event("dialog_advanced", {{"line", dialog_state_.current_line}});
+#endif
             }
         }
 
@@ -1409,7 +1415,9 @@ void App::update_game(float dt) {
                     dialog_state_.start(npc_dialogs_[di]);
                     game_mode_ = GameMode::Dialog;
                     audio_.play(SoundId::DialogOpen);
+#ifndef _WIN32
                     emit_event("dialog_started", {{"npc_index", nearest_npc}});
+#endif
 
                     // Transition player to idle
                     player_anim.state_machine.transition_to(std::string("idle_") + dir_str);
@@ -1558,6 +1566,7 @@ void App::main_loop() {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
 
+#ifndef _WIN32
         // Handle client disconnect → revert to realtime
         if (!control_server_.has_client() && step_mode_) {
             step_mode_ = false;
@@ -1566,6 +1575,7 @@ void App::main_loop() {
         }
 
         process_commands();
+#endif
 
         // Clear draw lists at frame start (states will rebuild them)
         overlay_sprites_.clear();
@@ -1581,7 +1591,9 @@ void App::main_loop() {
                 pending_steps_--;
             }
             if (did_step) {
+#ifndef _WIN32
                 control_server_.send(build_state_json());
+#endif
             }
         } else {
             // Realtime mode
@@ -1647,6 +1659,7 @@ void App::main_loop() {
                              shadow_sprites_, particle_sprites, overlay_sprites_, ui_batches,
                              feature_flags_);
 
+#ifndef _WIN32
         // Send screenshot response after draw completes
         if (!screenshot_response_path_.empty()) {
             if (renderer_.screenshot_write_ok()) {
@@ -1660,9 +1673,11 @@ void App::main_loop() {
             }
             screenshot_response_path_.clear();
         }
+#endif
     }
 }
 
+#ifndef _WIN32
 void App::process_commands() {
     auto commands = control_server_.poll();
     for (const auto& cmd_json : commands) {
@@ -2193,6 +2208,7 @@ void App::process_commands() {
         }
     }
 }
+#endif
 
 nlohmann::json App::build_state_json() const {
     nlohmann::json state;
@@ -2351,6 +2367,7 @@ void App::apply_save_data(const SaveData& data) {
     day_night_system_.set_time_of_day(data.time_of_day);
 }
 
+#ifndef _WIN32
 void App::emit_event(const std::string& event, const nlohmann::json& data) {
     if (!control_server_.has_client()) return;
     if (!control_server_.is_event_subscribed(event)) return;
@@ -2363,6 +2380,7 @@ void App::emit_event(const std::string& event, const nlohmann::json& data) {
     }
     control_server_.send(msg);
 }
+#endif
 
 nlohmann::json App::build_scene_json() const {
     // Reconstruct SceneData from current live state + stored metadata
@@ -2451,7 +2469,9 @@ void App::cleanup() {
         state_stack_.pop(*this);
     }
     wren_vm_.shutdown();
+#ifndef _WIN32
     control_server_.stop();
+#endif
     audio_.shutdown();
     renderer_.shutdown();
     resources_.shutdown();
