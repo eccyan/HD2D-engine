@@ -401,9 +401,27 @@ void GsRenderer::update_descriptors() {
     }
 }
 
-void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::mat4& proj,
-                         uint32_t width, uint32_t height) {
+void GsRenderer::resize_output(uint32_t width, uint32_t height) {
+    if (width == output_width_ && height == output_height_) return;
+
+    // Destroy old image resources
+    if (output_sampler_) { vkDestroySampler(device_, output_sampler_, nullptr); output_sampler_ = VK_NULL_HANDLE; }
+    if (output_view_) { vkDestroyImageView(device_, output_view_, nullptr); output_view_ = VK_NULL_HANDLE; }
+    if (output_image_) { vmaDestroyImage(allocator_, output_image_, output_allocation_); output_image_ = VK_NULL_HANDLE; }
+
+    create_output_image(width, height);
+
+    // Re-update render descriptors with new output image view
+    if (gaussian_count_ > 0) {
+        update_descriptors();
+    }
+}
+
+void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::mat4& proj) {
     if (gaussian_count_ == 0) return;
+
+    uint32_t width = output_width_;
+    uint32_t height = output_height_;
 
     // Round up to next power of 2 for bitonic sort
     uint32_t sort_size = 1;

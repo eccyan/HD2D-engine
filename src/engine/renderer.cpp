@@ -156,6 +156,7 @@ void Renderer::init_gs(const GaussianCloud& cloud, uint32_t width, uint32_t heig
         gs_renderer_.init(context_.device(), context_.allocator(), VK_NULL_HANDLE);
         gs_initialized_ = true;
     }
+    gs_renderer_.resize_output(width, height);
     gs_renderer_.load_cloud(cloud);
     output_width_ = width;
     output_height_ = height;
@@ -247,7 +248,7 @@ void Renderer::draw_scene(Scene& scene,
             }
         }
 
-        gs_renderer_.render(cmd, gs_view_, gs_proj_, output_width_, output_height_);
+        gs_renderer_.render(cmd, gs_view_, gs_proj_);
     }
 
     // ===== Pass 1: Scene render pass (offscreen HDR) =====

@@ -14,8 +14,8 @@ public:
     void init(VkDevice device, VmaAllocator allocator, VkDescriptorPool pool);
     void load_cloud(const GaussianCloud& cloud);
     void update_active_gaussians(const Gaussian* data, uint32_t count);
-    void render(VkCommandBuffer cmd, const glm::mat4& view, const glm::mat4& proj,
-                uint32_t width, uint32_t height);
+    void resize_output(uint32_t width, uint32_t height);
+    void render(VkCommandBuffer cmd, const glm::mat4& view, const glm::mat4& proj);
     VkImageView output_view() const { return output_view_; }
     VkSampler output_sampler() const { return output_sampler_; }
     bool has_cloud() const { return gaussian_count_ > 0; }
