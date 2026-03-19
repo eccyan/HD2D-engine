@@ -28,7 +28,10 @@ layout(set = 0, binding = 1) readonly buffer SortBuffer {
 layout(set = 0, binding = 2) uniform Uniforms {
     mat4 view;
     mat4 proj;
-    uvec4 params;  // x = width, y = height, z = gaussian_count, w = sort_size
+    uvec4 params;       // x = width, y = height, z = gaussian_count, w = sort_size
+    vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = unused
+    vec4 cone_dir;      // xyz = cone direction, w = unused
+    vec4 cam_pos;       // xyz = camera position, w = unused
 };
 
 layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D output_image;

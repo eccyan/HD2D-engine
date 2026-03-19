@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vulkan_game/engine/game_state.hpp"
+#include "vulkan_game/engine/gs_parallax_camera.hpp"
 
 #include <glm/glm.hpp>
 
@@ -15,6 +16,7 @@ public:
 
 private:
     void update_camera(App& app, float dt);
+    void update_shadow_box_camera(App& app, float dt);
     void reset_camera();
 
     // Orbit camera parameters
@@ -26,6 +28,10 @@ private:
     // Mouse drag state
     glm::vec2 last_mouse_{0.0f};
     bool dragging_ = false;
+
+    // Shadow box mode
+    bool shadow_box_mode_ = false;
+    GsParallaxCamera parallax_cam_;
 
     // FPS tracking
     float fps_timer_ = 0.0f;

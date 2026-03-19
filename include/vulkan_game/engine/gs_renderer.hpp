@@ -26,6 +26,9 @@ public:
             return *static_cast<const uint32_t*>(visible_count_ssbo_.mapped());
         return 0;
     }
+    void set_shadow_box_params(const glm::vec3& cone_dir, float cone_cos,
+                               const glm::vec3& cam_pos, float margin = 32.0f);
+    void clear_shadow_box_params();
     void shutdown(VmaAllocator allocator);
 
 private:
@@ -95,6 +98,14 @@ private:
     VkDescriptorSet sort_set_ = VK_NULL_HANDLE;
 
     bool initialized_ = false;
+
+    // Shadow box parameters
+    bool shadow_box_active_ = false;
+    float shadow_box_margin_ = 128.0f;
+    float shadow_box_cone_cos_ = 0.0f;
+    glm::vec3 shadow_box_cone_dir_{0.0f, 0.0f, -1.0f};
+    glm::vec3 shadow_box_cam_pos_{0.0f};
+    uint32_t num_sort_passes_ = 4;
 };
 
 }  // namespace vulkan_game

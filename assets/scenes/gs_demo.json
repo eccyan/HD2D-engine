@@ -8,7 +8,14 @@
       "fov": 60
     },
     "render_width": 320,
-    "render_height": 240
+    "render_height": 240,
+    "parallax": {
+      "azimuth_range": 0.30,
+      "elevation_min": 0.35,
+      "elevation_max": 0.87,
+      "distance_range": 0.20,
+      "parallax_strength": 1.0
+    }
   },
   "collision": {
     "width": 1,

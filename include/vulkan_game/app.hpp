@@ -19,6 +19,7 @@
 #include "vulkan_game/engine/renderer.hpp"
 #include "vulkan_game/engine/resource_manager.hpp"
 #include "vulkan_game/engine/save_system.hpp"
+#include "vulkan_game/engine/gs_parallax_camera.hpp"
 #include "vulkan_game/engine/scene_loader.hpp"
 #include "vulkan_game/engine/scripting/script_system.hpp"
 #include "vulkan_game/engine/scripting/wren_bindings.hpp"
@@ -180,6 +181,10 @@ private:
 
     // Gaussian splatting collision grid (when using GS scenes instead of tilemap)
     CollisionGrid collision_grid_;
+
+    // Parallax camera for shadow-box GS effect
+    GsParallaxCamera gs_parallax_camera_;
+    bool gs_parallax_active_ = false;
 
     // Scene transition
     std::string current_scene_path_ = "assets/scenes/test_scene.json";

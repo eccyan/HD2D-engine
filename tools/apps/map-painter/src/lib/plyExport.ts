@@ -163,6 +163,10 @@ export function exportSceneJson(
   height: number,
   collisionGrid: boolean[],
 ): object {
+  // Auto-derive parallax defaults from map dimensions
+  const maxExtent = Math.max(width, height);
+  const azimuthRange = Math.min(0.30, 0.15 + maxExtent / 1000);
+
   return {
     gaussian_splat: {
       ply_file: plyFileName,
@@ -173,6 +177,13 @@ export function exportSceneJson(
       },
       render_width: renderWidth,
       render_height: renderHeight,
+      parallax: {
+        azimuth_range: parseFloat(azimuthRange.toFixed(3)),
+        elevation_min: 0.35,
+        elevation_max: 0.87,
+        distance_range: 0.20,
+        parallax_strength: 1.0,
+      },
     },
     collision: exportCollision(width, height, collisionGrid),
     ambient_color: [0.4, 0.42, 0.5, 1.0],

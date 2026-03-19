@@ -32,6 +32,9 @@ struct GsUniforms {
     glm::mat4 view;
     glm::mat4 proj;
     glm::uvec4 params;       // x = width, y = height, z = gaussian_count, w = sort_size
+    glm::vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = unused
+    glm::vec4 cone_dir;      // xyz = cone direction, w = unused
+    glm::vec4 cam_pos;       // xyz = camera position, w = unused
 };
 
 // Sort key: depth packed with index
@@ -536,6 +539,10 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
     uniforms.view = view;
     uniforms.proj = proj;
     uniforms.params = glm::uvec4(width, height, gaussian_count_, sort_size_);
+    uniforms.shadow_box = glm::vec4(shadow_box_margin_, shadow_box_cone_cos_,
+                                     static_cast<float>(num_sort_passes_), 0.0f);
+    uniforms.cone_dir = glm::vec4(shadow_box_cone_dir_, 0.0f);
+    uniforms.cam_pos = glm::vec4(shadow_box_cam_pos_, 0.0f);
     std::memcpy(uniform_buffer_.mapped(), &uniforms, sizeof(uniforms));
 
     // Transition output image to GENERAL layout for compute write
@@ -581,9 +588,9 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
     // Barrier: preprocess → radix sort
     insert_compute_barrier(cmd);
 
-    // Pass 2: Radix sort (4 digit passes × 3 dispatches each = 12 dispatches)
+    // Pass 2: Radix sort (num_sort_passes_ digit passes × 3 dispatches each)
     uint32_t histogram_count = 256 * num_sort_workgroups_;
-    for (uint32_t digit = 0; digit < 4; ++digit) {
+    for (uint32_t digit = 0; digit < num_sort_passes_; ++digit) {
         uint32_t digit_shift = digit * 8;
         bool read_from_a = (digit % 2 == 0);
         uint32_t push_data[2] = {sort_size_, digit_shift};
@@ -622,7 +629,7 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
         insert_compute_barrier(cmd);
     }
 
-    // After 4 passes (even count), result is back in buffer A (sort_keys_ssbo_)
+    // After even number of passes, result is back in buffer A (sort_keys_ssbo_)
 
     // Pass 3: Tile-based rasterization
     {
@@ -652,6 +659,23 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
+}
+
+void GsRenderer::set_shadow_box_params(const glm::vec3& cone_dir, float cone_cos,
+                                        const glm::vec3& cam_pos, float margin) {
+    shadow_box_active_ = true;
+    shadow_box_cone_dir_ = cone_dir;
+    shadow_box_cone_cos_ = cone_cos;
+    shadow_box_cam_pos_ = cam_pos;
+    shadow_box_margin_ = margin;
+    // Keep 4 sort passes — render shader reads from buffer A (even pass count required)
+    num_sort_passes_ = 4;
+}
+
+void GsRenderer::clear_shadow_box_params() {
+    shadow_box_active_ = false;
+    shadow_box_margin_ = 128.0f;
+    num_sort_passes_ = 4;
 }
 
 void GsRenderer::shutdown(VmaAllocator allocator) {

@@ -1061,6 +1061,27 @@ void App::init_scene(const std::string& scene_path) {
             gs_proj[1][1] *= -1.0f;  // Vulkan Y-flip
             renderer_.set_gs_camera(gs_view, gs_proj);
         }
+
+        // Configure parallax camera if parallax config present
+        if (gs.parallax) {
+            gs_parallax_camera_.configure(
+                gs.camera_position, gs.camera_target,
+                gs.camera_fov, gs.render_width, gs.render_height,
+                *gs.parallax);
+            gs_parallax_active_ = true;
+
+            // Set shadow box shader params: cone direction (camera forward), tight margin
+            glm::vec3 cam_fwd = glm::normalize(gs.camera_target - gs.camera_position);
+            float cone_half_angle = gs.parallax->azimuth_range + 0.2f;  // some margin
+            renderer_.gs_renderer().set_shadow_box_params(
+                cam_fwd, std::cos(cone_half_angle), gs.camera_position, 32.0f);
+
+            std::fprintf(stderr, "GS: Parallax camera enabled (strength=%.2f)\n",
+                         gs.parallax->parallax_strength);
+        } else {
+            gs_parallax_active_ = false;
+            renderer_.gs_renderer().clear_shadow_box_params();
+        }
     }
 
     // Collision grid from scene data (used in place of tilemap collision)
@@ -1159,8 +1180,9 @@ void App::clear_scene() {
     day_night_system_.reset();
     for (auto& id : torch_emitter_ids_) id = 0;
 
-    // Clear collision grid
+    // Clear collision grid and parallax state
     collision_grid_ = {};
+    gs_parallax_active_ = false;
 
     // Reset scene state
     scene_.clear_lights();
@@ -1254,6 +1276,27 @@ void App::update_game(float dt) {
 
         auto& player_pos = world_.get<ecs::Transform>(player_id_).position;
         renderer_.camera().set_follow_target(player_pos);
+
+        // Update parallax camera from player position
+        if (gs_parallax_active_ && renderer_.has_gs_cloud()) {
+            auto& grid = renderer_.gs_chunk_grid();
+            if (!grid.empty()) {
+                auto aabb = grid.cloud_bounds();
+                glm::vec2 map_center = {
+                    (aabb.min.x + aabb.max.x) * 0.5f,
+                    (aabb.min.z + aabb.max.z) * 0.5f
+                };
+                glm::vec2 map_half = {
+                    std::max((aabb.max.x - aabb.min.x) * 0.5f, 1.0f),
+                    std::max((aabb.max.z - aabb.min.z) * 0.5f, 1.0f)
+                };
+                glm::vec2 player_xz = {player_pos.x, player_pos.z};
+                glm::vec2 player_offset = (player_xz - map_center) / map_half;
+                player_offset = glm::clamp(player_offset, glm::vec2(-1.0f), glm::vec2(1.0f));
+                gs_parallax_camera_.update(player_offset, dt);
+                renderer_.set_gs_camera(gs_parallax_camera_.view(), gs_parallax_camera_.proj());
+            }
+        }
 
         auto& player_facing = world_.get<ecs::Facing>(player_id_);
         const char* dir_str = direction_suffix(player_facing.dir);

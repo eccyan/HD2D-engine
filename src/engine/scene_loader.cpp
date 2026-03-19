@@ -82,6 +82,16 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         gsd.render_width = gs.value("render_width", 320u);
         gsd.render_height = gs.value("render_height", 240u);
         gsd.scale_multiplier = gs.value("scale_multiplier", 1.0f);
+        if (gs.contains("parallax")) {
+            const auto& px = gs["parallax"];
+            GsParallaxConfig pcfg;
+            pcfg.azimuth_range = px.value("azimuth_range", 0.30f);
+            pcfg.elevation_min = px.value("elevation_min", 0.35f);
+            pcfg.elevation_max = px.value("elevation_max", 0.87f);
+            pcfg.distance_range = px.value("distance_range", 0.20f);
+            pcfg.parallax_strength = px.value("parallax_strength", 1.0f);
+            gsd.parallax = pcfg;
+        }
         data.gaussian_splat = std::move(gsd);
     }
 
@@ -383,6 +393,16 @@ nlohmann::json SceneLoader::to_json(const SceneData& data) {
         gs_j["render_height"] = gs.render_height;
         if (gs.scale_multiplier != 1.0f) {
             gs_j["scale_multiplier"] = gs.scale_multiplier;
+        }
+        if (gs.parallax) {
+            const auto& px = *gs.parallax;
+            gs_j["parallax"] = {
+                {"azimuth_range", px.azimuth_range},
+                {"elevation_min", px.elevation_min},
+                {"elevation_max", px.elevation_max},
+                {"distance_range", px.distance_range},
+                {"parallax_strength", px.parallax_strength}
+            };
         }
         j["gaussian_splat"] = gs_j;
     }

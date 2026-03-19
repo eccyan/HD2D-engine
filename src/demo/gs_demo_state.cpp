@@ -36,6 +36,15 @@ void GsDemoState::on_enter(App& app) {
             distance_ = max_extent * 0.35f;
             elevation_ = 0.25f;  // ~14 degrees — near-horizontal perspective
             azimuth_ = 0.0f;
+
+            // Configure parallax camera for shadow box mode
+            glm::vec3 eye = target_ + glm::vec3(
+                distance_ * std::cos(elevation_) * std::sin(azimuth_),
+                distance_ * std::sin(elevation_),
+                distance_ * std::cos(elevation_) * std::cos(azimuth_)
+            );
+            GsParallaxConfig parallax_config;
+            parallax_cam_.configure(eye, target_, 60.0f, 320, 240, parallax_config);
         }
     } else {
         reset_camera();
@@ -115,11 +124,30 @@ void GsDemoState::update_camera(App& app, float dt) {
     app.renderer().set_gs_camera(view, proj);
 }
 
+void GsDemoState::update_shadow_box_camera(App& app, float dt) {
+    auto& input = app.input();
+
+    // Map mouse position relative to window center → player_offset [-1,1]
+    glm::vec2 mouse = input.mouse_pos();
+    glm::vec2 window_center{1280.0f * 0.5f, 720.0f * 0.5f};
+    glm::vec2 window_half{1280.0f * 0.5f, 720.0f * 0.5f};
+    glm::vec2 player_offset = (mouse - window_center) / window_half;
+    player_offset = glm::clamp(player_offset, glm::vec2(-1.0f), glm::vec2(1.0f));
+
+    parallax_cam_.update(player_offset, dt);
+    app.renderer().set_gs_camera(parallax_cam_.view(), parallax_cam_.proj());
+}
+
 void GsDemoState::update(App& app, float dt) {
     // Escape → quit
     if (app.input().was_key_pressed(GLFW_KEY_ESCAPE)) {
         glfwSetWindowShouldClose(app.window(), GLFW_TRUE);
         return;
+    }
+
+    // P → toggle shadow box mode
+    if (app.input().was_key_pressed(GLFW_KEY_P)) {
+        shadow_box_mode_ = !shadow_box_mode_;
     }
 
     // FPS counter
@@ -131,7 +159,11 @@ void GsDemoState::update(App& app, float dt) {
         fps_timer_ = 0.0f;
     }
 
-    update_camera(app, dt);
+    if (shadow_box_mode_) {
+        update_shadow_box_camera(app, dt);
+    } else {
+        update_camera(app, dt);
+    }
     app.update_game(dt);
 }
 
@@ -141,7 +173,7 @@ void GsDemoState::build_draw_lists(App& app) {
     // Semi-transparent HUD panel (top-left in Y-UP coords)
     constexpr float panel_x = 10.0f;
     constexpr float panel_w = 280.0f;
-    constexpr float panel_h = 148.0f;
+    constexpr float panel_h = 168.0f;
     constexpr float panel_top = 720.0f - 10.0f;  // 10px from screen top
     constexpr float panel_cy = panel_top - panel_h * 0.5f;
 
@@ -161,7 +193,11 @@ void GsDemoState::build_draw_lists(App& app) {
         return std::string(buf);
     };
 
-    ui.label("GS DEMO", lx, y, 0.6f, title_color);
+    if (shadow_box_mode_) {
+        ui.label("SHADOW BOX", lx, y, 0.6f, {1.0f, 0.6f, 0.2f, 1.0f});
+    } else {
+        ui.label("GS DEMO", lx, y, 0.6f, title_color);
+    }
 
     // FPS in top-right of panel
     glm::vec4 fps_color = fps_ >= 30.0f ? glm::vec4{0.2f, 1.0f, 0.3f, 1.0f}
@@ -184,7 +220,11 @@ void GsDemoState::build_draw_lists(App& app) {
              fmt(target_.y) + ", " + fmt(target_.z), lx, y, scale, white);
     y -= 22.0f;
 
-    ui.label("Drag:Orbit  Scroll:Zoom  WASD:Pan  R:Reset", lx, y, 0.35f, dim);
+    if (shadow_box_mode_) {
+        ui.label("Mouse:Parallax  P:Exit shadow box  R:Reset", lx, y, 0.35f, dim);
+    } else {
+        ui.label("Drag:Orbit  Scroll:Zoom  WASD:Pan  P:ShadowBox  R:Reset", lx, y, 0.35f, dim);
+    }
 }
 
 }  // namespace vulkan_game

@@ -61,6 +61,14 @@ struct WeatherData {
     float transition_speed = 1.0f;
 };
 
+struct GsParallaxConfig {
+    float azimuth_range = 0.30f;       // ±radians horizontal shift (~±17°)
+    float elevation_min = 0.35f;       // minimum elevation (~20°)
+    float elevation_max = 0.87f;       // maximum elevation (~50°)
+    float distance_range = 0.20f;      // ±fraction of home distance
+    float parallax_strength = 1.0f;    // mapping multiplier (0 = disabled)
+};
+
 struct GaussianSplatData {
     std::string ply_file;
     glm::vec3 camera_position{0.0f, 5.0f, 10.0f};
@@ -69,6 +77,7 @@ struct GaussianSplatData {
     uint32_t render_width = 320;
     uint32_t render_height = 240;
     float scale_multiplier = 1.0f;   // Applied to Gaussian scales at load time
+    std::optional<GsParallaxConfig> parallax;  // Shadow-box parallax camera config
 };
 
 struct PortalData {
