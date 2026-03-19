@@ -1062,6 +1062,13 @@ void App::init_scene(const std::string& scene_path) {
             renderer_.set_gs_camera(gs_view, gs_proj);
         }
 
+        // Load background image if specified
+        if (!gs.background_image.empty()) {
+            auto bg_tex = resources_.load_texture(gs.background_image);
+            renderer_.set_gs_background(bg_tex);
+            std::fprintf(stderr, "GS: Background loaded: %s\n", gs.background_image.c_str());
+        }
+
         // Configure parallax camera if parallax config present
         if (gs.parallax) {
             gs_parallax_camera_.configure(

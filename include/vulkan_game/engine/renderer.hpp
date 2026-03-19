@@ -39,6 +39,7 @@ public:
     void init_shadows(ResourceManager& resources);
     void draw_frame();
     void init_gs(const GaussianCloud& cloud, uint32_t width = 320, uint32_t height = 240);
+    void set_gs_background(const ResourceHandle<Texture>& texture);
     void set_gs_camera(const glm::mat4& view, const glm::mat4& proj) {
         gs_view_ = view; gs_proj_ = proj;
     }
@@ -132,6 +133,8 @@ private:
     std::array<VkDescriptorSet, kMaxFramesInFlight> gs_descriptor_sets_{};    // scene UBO (unused now)
     std::array<VkDescriptorSet, kMaxFramesInFlight> gs_ui_descriptor_sets_{}; // UI orthographic UBO
     bool gs_initialized_ = false;
+    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_bg_descriptor_sets_{};
+    bool gs_bg_initialized_ = false;
 
     // GS camera (3D perspective, independent of sprite camera)
     glm::mat4 gs_view_{1.0f};

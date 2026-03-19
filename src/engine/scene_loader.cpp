@@ -82,6 +82,7 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         gsd.render_width = gs.value("render_width", 320u);
         gsd.render_height = gs.value("render_height", 240u);
         gsd.scale_multiplier = gs.value("scale_multiplier", 1.0f);
+        gsd.background_image = gs.value("background_image", "");
         if (gs.contains("parallax")) {
             const auto& px = gs["parallax"];
             GsParallaxConfig pcfg;
@@ -393,6 +394,9 @@ nlohmann::json SceneLoader::to_json(const SceneData& data) {
         gs_j["render_height"] = gs.render_height;
         if (gs.scale_multiplier != 1.0f) {
             gs_j["scale_multiplier"] = gs.scale_multiplier;
+        }
+        if (!gs.background_image.empty()) {
+            gs_j["background_image"] = gs.background_image;
         }
         if (gs.parallax) {
             const auto& px = *gs.parallax;

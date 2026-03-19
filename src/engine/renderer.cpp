@@ -188,6 +188,20 @@ void Renderer::init_gs(const GaussianCloud& cloud, uint32_t width, uint32_t heig
     }
 }
 
+void Renderer::set_gs_background(const ResourceHandle<Texture>& texture) {
+    if (!font_initialized_) return;  // need UI UBOs
+
+    std::array<VkBuffer, kMaxFramesInFlight> ui_ubo_buffers;
+    for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
+        ui_ubo_buffers[i] = ui_uniform_buffers_[i].buffer();
+    }
+    gs_bg_descriptor_sets_ = descriptors_.allocate_sprite_sets(
+        context_.device(), ui_ubo_buffers, sizeof(UniformBufferObject),
+        texture->image_view(), texture->sampler(),
+        flat_normal_texture_->image_view(), flat_normal_texture_->sampler());
+    gs_bg_initialized_ = true;
+}
+
 void Renderer::draw_scene(Scene& scene,
                            const std::vector<SpriteDrawInfo>& entity_sprites,
                            const std::vector<SpriteDrawInfo>& outline_sprites,
@@ -479,7 +493,7 @@ void Renderer::draw_scene(Scene& scene,
 
     post_process_.record_post_process(cmd, image_index, pp_params);
 
-    // ===== GS fullscreen blit (in composite pass, screen-space, before UI) =====
+    // ===== GS background + fullscreen blit (in composite pass, screen-space, before UI) =====
     if (gs_initialized_ && gs_renderer_.has_cloud() && font_initialized_) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ui_pipeline_);
         sprite_batch_.bind(cmd, current_frame_);
@@ -489,6 +503,33 @@ void Renderer::draw_scene(Scene& scene,
         full_scissor.extent = swapchain_.extent();
         vkCmdSetScissor(cmd, 0, 1, &full_scissor);
 
+        // Background behind GS (sky, mountains, etc.)
+        if (gs_bg_initialized_) {
+            sprite_batch_.begin();
+            SpriteDrawInfo bg_blit{};
+            bg_blit.position = {
+                static_cast<float>(kWindowWidth) * 0.5f,
+                static_cast<float>(kWindowHeight) * 0.5f,
+                0.0f
+            };
+            bg_blit.size = {
+                static_cast<float>(kWindowWidth),
+                static_cast<float>(kWindowHeight)
+            };
+            bg_blit.uv_min = {0.0f, 0.0f};
+            bg_blit.uv_max = {1.0f, 1.0f};
+            bg_blit.color = {1.0f, 1.0f, 1.0f, 1.0f};
+            sprite_batch_.draw(bg_blit);
+            auto bg_flush = sprite_batch_.flush(current_frame_);
+            if (bg_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &gs_bg_descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, bg_flush.index_count, 1, 0, bg_flush.vertex_offset, 0);
+            }
+        }
+
+        // GS output on top (alpha-composited over background)
         sprite_batch_.begin();
         SpriteDrawInfo gs_blit{};
         // UI ortho projection: (0,0) = top-left, (kWindowWidth, kWindowHeight) = bottom-right

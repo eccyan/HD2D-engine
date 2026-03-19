@@ -78,6 +78,7 @@ struct GaussianSplatData {
     uint32_t render_height = 240;
     float scale_multiplier = 1.0f;   // Applied to Gaussian scales at load time
     std::optional<GsParallaxConfig> parallax;  // Shadow-box parallax camera config
+    std::string background_image;  // Optional background behind GS (sky, mountains, etc.)
 };
 
 struct PortalData {
