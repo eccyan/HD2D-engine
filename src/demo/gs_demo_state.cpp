@@ -24,15 +24,13 @@ void GsDemoState::on_enter(App& app) {
                 0.0f,
                 (aabb.min.z + aabb.max.z) * 0.5f
             );
-            // Distance sized to fill screen with near-top-down view
-            // At elevation ~75° with 60° vFOV, ground coverage ≈ 2*d*tan(hfov/2)
-            // where hfov ≈ 92° for 16:9 aspect → tan(46°) ≈ 1.04
-            // So to cover extent E: d ≈ E / (2 * tan(46°)) ≈ E * 0.48
+            // Distance: close enough to fill the screen and cull off-screen chunks
+            // Elevation: ~40° to show terrain height while still seeing the map
             float extent_x = aabb.max.x - aabb.min.x;
             float extent_z = aabb.max.z - aabb.min.z;
             float max_extent = std::max(extent_x, extent_z);
-            distance_ = max_extent * 0.5f;
-            elevation_ = 1.3f;  // ~74.5 degrees — near top-down
+            distance_ = max_extent * 0.45f;
+            elevation_ = 0.7f;   // ~40 degrees — shows terrain height clearly
             azimuth_ = 0.0f;
         }
     } else {
