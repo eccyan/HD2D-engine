@@ -1070,11 +1070,11 @@ void App::init_scene(const std::string& scene_path) {
                 *gs.parallax);
             gs_parallax_active_ = true;
 
-            // Set shadow box shader params: cone direction (camera forward), tight margin
+            // Set shadow box shader params: tighter frustum margin, no cone cull
+            // (cone cull is not useful for front-facing XY maps)
             glm::vec3 cam_fwd = glm::normalize(gs.camera_target - gs.camera_position);
-            float cone_half_angle = gs.parallax->azimuth_range + 0.2f;  // some margin
             renderer_.gs_renderer().set_shadow_box_params(
-                cam_fwd, std::cos(cone_half_angle), gs.camera_position, 32.0f);
+                cam_fwd, 0.0f, gs.camera_position, 32.0f);
 
             std::fprintf(stderr, "GS: Parallax camera enabled (strength=%.2f)\n",
                          gs.parallax->parallax_strength);
