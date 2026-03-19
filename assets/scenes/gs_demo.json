@@ -1,6 +1,7 @@
 {
   "gaussian_splat": {
     "ply_file": "assets/maps/map.ply",
+    "scale_multiplier": 0.3,
     "camera": {
       "position": [0, 200, 200],
       "target": [0, 0, 0],
