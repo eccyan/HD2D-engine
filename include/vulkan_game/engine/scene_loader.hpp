@@ -68,6 +68,7 @@ struct GaussianSplatData {
     float camera_fov = 45.0f;
     uint32_t render_width = 320;
     uint32_t render_height = 240;
+    float scale_multiplier = 1.0f;   // Applied to Gaussian scales at load time
 };
 
 struct PortalData {

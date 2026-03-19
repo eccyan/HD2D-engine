@@ -7,7 +7,8 @@
       "fov": 60
     },
     "render_width": 1280,
-    "render_height": 720
+    "render_height": 720,
+    "scale_multiplier": 0.6
   },
   "collision": {
     "width": 1,

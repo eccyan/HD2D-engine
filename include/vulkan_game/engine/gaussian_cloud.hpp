@@ -38,6 +38,13 @@ public:
     uint32_t count() const { return static_cast<uint32_t>(gaussians_.size()); }
     bool empty() const { return gaussians_.empty(); }
 
+    // Multiply all Gaussian scales by the given factor
+    void scale_all(float factor) {
+        for (auto& g : gaussians_) {
+            g.scale *= factor;
+        }
+    }
+
 private:
     std::vector<Gaussian> gaussians_;
     AABB bounds_;
