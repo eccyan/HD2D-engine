@@ -35,12 +35,12 @@ export function exportPly(
         const h = heights[gy * width + gx];
         const maxY = Math.max(1, Math.ceil(h));
 
-        // Create a column of Gaussians
+        // Create a column of Gaussians (map on XY plane, depth on -Z)
         for (let yi = 0; yi < maxY; yi++) {
           gaussians.push({
-            x: gx - width / 2, // Center the map
-            y: yi,
-            z: gy - height / 2,
+            x: gx - width / 2,       // horizontal
+            y: height / 2 - gy,      // vertical (flip so canvas top = +Y)
+            z: -yi,                  // depth into screen
             r: r / 255,
             g: g / 255,
             b: b / 255,
@@ -179,9 +179,9 @@ export function exportSceneJson(
       render_height: renderHeight,
       parallax: {
         azimuth_range: parseFloat(azimuthRange.toFixed(3)),
-        elevation_min: 0.35,
-        elevation_max: 0.87,
-        distance_range: 0.20,
+        elevation_min: -0.15,
+        elevation_max: 0.15,
+        distance_range: 0.10,
         parallax_strength: 1.0,
       },
     },

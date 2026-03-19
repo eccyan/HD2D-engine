@@ -62,10 +62,10 @@ struct WeatherData {
 };
 
 struct GsParallaxConfig {
-    float azimuth_range = 0.30f;       // ±radians horizontal shift (~±17°)
-    float elevation_min = 0.35f;       // minimum elevation (~20°)
-    float elevation_max = 0.87f;       // maximum elevation (~50°)
-    float distance_range = 0.20f;      // ±fraction of home distance
+    float azimuth_range = 0.15f;       // ±radians horizontal shift (~±8.5°)
+    float elevation_min = -0.15f;      // minimum elevation (slight down)
+    float elevation_max = 0.15f;       // maximum elevation (slight up)
+    float distance_range = 0.10f;      // ±fraction of home distance
     float parallax_strength = 1.0f;    // mapping multiplier (0 = disabled)
 };
 

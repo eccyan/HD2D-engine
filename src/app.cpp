@@ -1284,14 +1284,14 @@ void App::update_game(float dt) {
                 auto aabb = grid.cloud_bounds();
                 glm::vec2 map_center = {
                     (aabb.min.x + aabb.max.x) * 0.5f,
-                    (aabb.min.z + aabb.max.z) * 0.5f
+                    (aabb.min.y + aabb.max.y) * 0.5f
                 };
                 glm::vec2 map_half = {
                     std::max((aabb.max.x - aabb.min.x) * 0.5f, 1.0f),
-                    std::max((aabb.max.z - aabb.min.z) * 0.5f, 1.0f)
+                    std::max((aabb.max.y - aabb.min.y) * 0.5f, 1.0f)
                 };
-                glm::vec2 player_xz = {player_pos.x, player_pos.z};
-                glm::vec2 player_offset = (player_xz - map_center) / map_half;
+                glm::vec2 player_xy = {player_pos.x, player_pos.y};
+                glm::vec2 player_offset = (player_xy - map_center) / map_half;
                 player_offset = glm::clamp(player_offset, glm::vec2(-1.0f), glm::vec2(1.0f));
                 gs_parallax_camera_.update(player_offset, dt);
                 renderer_.set_gs_camera(gs_parallax_camera_.view(), gs_parallax_camera_.proj());

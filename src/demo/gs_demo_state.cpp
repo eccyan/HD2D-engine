@@ -23,17 +23,16 @@ void GsDemoState::on_enter(App& app) {
         if (!grid.empty()) {
             auto aabb = grid.cloud_bounds();
             float extent_x = aabb.max.x - aabb.min.x;
-            float extent_z = aabb.max.z - aabb.min.z;
+            float extent_y = aabb.max.y - aabb.min.y;
             float center_x = (aabb.min.x + aabb.max.x) * 0.5f;
-            float center_z = (aabb.min.z + aabb.max.z) * 0.5f;
-
-            // Center target on the map
             float center_y = (aabb.min.y + aabb.max.y) * 0.5f;
-            target_ = glm::vec3(center_x, center_y, center_z);
 
-            float max_extent = std::max(extent_x, extent_z);
+            // Center target on the map face (XY plane)
+            target_ = glm::vec3(center_x, center_y, 0.0f);
+
+            float max_extent = std::max(extent_x, extent_y);
             distance_ = max_extent * 0.7f;
-            elevation_ = 0.75f;  // ~43 degrees — diorama angle showing height
+            elevation_ = 0.0f;   // horizontal — looking straight at the XY map
             azimuth_ = 0.0f;
 
             // Configure parallax camera for shadow box mode
@@ -86,10 +85,10 @@ void GsDemoState::update_camera(App& app, float dt) {
         distance_ = std::clamp(distance_, kMinDistance, kMaxDistance);
     }
 
-    // WASD → pan target
+    // WASD → pan target (XY plane)
     float pan = kPanSpeed * dt;
-    if (input.is_key_down(GLFW_KEY_W)) target_.z -= pan;
-    if (input.is_key_down(GLFW_KEY_S)) target_.z += pan;
+    if (input.is_key_down(GLFW_KEY_W)) target_.y += pan;
+    if (input.is_key_down(GLFW_KEY_S)) target_.y -= pan;
     if (input.is_key_down(GLFW_KEY_A)) target_.x -= pan;
     if (input.is_key_down(GLFW_KEY_D)) target_.x += pan;
 

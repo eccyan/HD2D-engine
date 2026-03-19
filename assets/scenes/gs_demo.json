@@ -3,17 +3,17 @@
     "ply_file": "assets/maps/map.ply",
     "scale_multiplier": 0.3,
     "camera": {
-      "position": [0, 200, 200],
+      "position": [0, 0, 200],
       "target": [0, 0, 0],
       "fov": 60
     },
     "render_width": 320,
     "render_height": 240,
     "parallax": {
-      "azimuth_range": 0.30,
-      "elevation_min": 0.35,
-      "elevation_max": 0.87,
-      "distance_range": 0.20,
+      "azimuth_range": 0.15,
+      "elevation_min": -0.15,
+      "elevation_max": 0.15,
+      "distance_range": 0.10,
       "parallax_strength": 1.0
     }
   },
