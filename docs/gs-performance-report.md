@@ -6,12 +6,15 @@
 
 ## Results
 
-| Build   | Before | After  | Speedup |
-|---------|--------|--------|---------|
-| Debug   | 7 FPS  | 7 FPS  | ~1x (validation-layer bound) |
-| Release | 7 FPS* | 122 FPS | **17x** |
+| Build   | Before | Real-time (no cache) | Cached | Speedup |
+|---------|--------|----------------------|--------|---------|
+| Debug   | 7 FPS  | 7 FPS                | 7 FPS  | ~1x (validation-layer bound) |
+| Release | 7 FPS* | **19 FPS**           | **122 FPS** | **2.7x / 17x** |
 
 \* Estimated — release previously crashed due to a tile layer bug (now fixed).
+
+"Real-time" = chunk-cull skip + auto-scale (160x120), but full GS compute every frame.
+"Cached" = all optimizations active (skip_sort + blit offset parallax).
 
 ## Root Cause Analysis
 
@@ -196,8 +199,10 @@ while still improving performance:
    depth error). For slow mouse movement, most frames stay cached.
 
 3. **Full real-time at lower resolution** — Disable skip_sort entirely, rely
-   only on chunk-cull skip + auto-scale (160×120). Needs benchmarking on the
-   release build to verify whether 30+ FPS is achievable with 210K Gaussians.
+   only on chunk-cull skip + auto-scale (160×120). **Benchmarked at 19 FPS**
+   on release build with 210K Gaussians — below 30 FPS target. Would need
+   further GPU-side optimization (per-tile Gaussian lists, reduced sort passes)
+   to reach 30 FPS without caching.
 
 4. **Hybrid approach** — Use cached mode only when Gaussian count exceeds a
    threshold (e.g., 150K). Smaller maps (50K-100K) may achieve 30+ FPS with
