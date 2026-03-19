@@ -34,11 +34,22 @@ struct GsUniforms {
     glm::uvec4 params;       // x = width, y = height, z = gaussian_count, w = sort_size
 };
 
-// Sort key: depth (upper 32 bits for sort) packed with index
+// Sort key: depth packed with index
 struct SortEntry {
-    uint32_t key;   // depth as uint (for bitonic sort)
+    uint32_t key;   // depth as uint
     uint32_t index; // original Gaussian index
 };
+
+void insert_compute_barrier(VkCommandBuffer cmd) {
+    VkMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 1, &barrier, 0, nullptr, 0, nullptr);
+}
 
 }  // namespace
 
@@ -57,7 +68,6 @@ void GsRenderer::create_output_image(uint32_t width, uint32_t height) {
     output_width_ = width;
     output_height_ = height;
 
-    // Create storage image
     VkImageCreateInfo image_info{};
     image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     image_info.imageType = VK_IMAGE_TYPE_2D;
@@ -88,7 +98,6 @@ void GsRenderer::create_output_image(uint32_t width, uint32_t height) {
         throw std::runtime_error("Failed to create GS output image view");
     }
 
-    // Create NEAREST sampler for pixel-art upscale
     VkSamplerCreateInfo sampler_info{};
     sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     sampler_info.magFilter = VK_FILTER_NEAREST;
@@ -103,16 +112,16 @@ void GsRenderer::create_output_image(uint32_t width, uint32_t height) {
 }
 
 void GsRenderer::create_descriptor_resources() {
-    // Create dedicated descriptor pool for GS compute
+    // Descriptor pool — enough for all sets
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 14},  // +2 for visible_count in preprocess & render
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 30},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
     };
 
     VkDescriptorPoolCreateInfo pool_info{};
     pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool_info.maxSets = 3;
+    pool_info.maxSets = 10;
     pool_info.poolSizeCount = 3;
     pool_info.pPoolSizes = pool_sizes;
 
@@ -120,7 +129,7 @@ void GsRenderer::create_descriptor_resources() {
         throw std::runtime_error("Failed to create GS descriptor pool");
     }
 
-    // Preprocess layout: set 0 = { gaussians SSBO, projected SSBO, sort_keys SSBO, uniforms UBO, visible_count SSBO }
+    // Preprocess layout: { gaussians, projected, sort_keys, uniforms, visible_count }
     {
         VkDescriptorSetLayoutBinding bindings[] = {
             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -129,27 +138,27 @@ void GsRenderer::create_descriptor_resources() {
             {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         };
-        VkDescriptorSetLayoutCreateInfo layout_info{};
-        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layout_info.bindingCount = 5;
-        layout_info.pBindings = bindings;
-        vkCreateDescriptorSetLayout(device_, &layout_info, nullptr, &preprocess_layout_);
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = 5;
+        ci.pBindings = bindings;
+        vkCreateDescriptorSetLayout(device_, &ci, nullptr, &preprocess_layout_);
     }
 
-    // Sort layout: { sort_keys SSBO, uniforms UBO }
+    // Sort layout (legacy, kept for compatibility)
     {
         VkDescriptorSetLayoutBinding bindings[] = {
             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         };
-        VkDescriptorSetLayoutCreateInfo layout_info{};
-        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layout_info.bindingCount = 2;
-        layout_info.pBindings = bindings;
-        vkCreateDescriptorSetLayout(device_, &layout_info, nullptr, &sort_layout_);
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = 2;
+        ci.pBindings = bindings;
+        vkCreateDescriptorSetLayout(device_, &ci, nullptr, &sort_layout_);
     }
 
-    // Render layout: { projected SSBO, sort_keys SSBO, uniforms UBO, output image, visible_count SSBO }
+    // Render layout: { projected, sort_keys, uniforms, output_image, visible_count }
     {
         VkDescriptorSetLayoutBinding bindings[] = {
             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -158,106 +167,130 @@ void GsRenderer::create_descriptor_resources() {
             {3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         };
-        VkDescriptorSetLayoutCreateInfo layout_info{};
-        layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layout_info.bindingCount = 5;
-        layout_info.pBindings = bindings;
-        vkCreateDescriptorSetLayout(device_, &layout_info, nullptr, &render_layout_);
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = 5;
+        ci.pBindings = bindings;
+        vkCreateDescriptorSetLayout(device_, &ci, nullptr, &render_layout_);
     }
 
-    // Allocate descriptor sets
-    VkDescriptorSetLayout layouts[] = {preprocess_layout_, sort_layout_, render_layout_};
-    VkDescriptorSet sets[3];
+    // Radix histogram layout: { input_entries, histogram }
+    {
+        VkDescriptorSetLayoutBinding bindings[] = {
+            {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        };
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = 2;
+        ci.pBindings = bindings;
+        vkCreateDescriptorSetLayout(device_, &ci, nullptr, &radix_histogram_layout_);
+    }
+
+    // Radix scan layout: { histogram }
+    {
+        VkDescriptorSetLayoutBinding bindings[] = {
+            {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        };
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = 1;
+        ci.pBindings = bindings;
+        vkCreateDescriptorSetLayout(device_, &ci, nullptr, &radix_scan_layout_);
+    }
+
+    // Radix scatter layout: { input, output, histogram }
+    {
+        VkDescriptorSetLayoutBinding bindings[] = {
+            {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+        };
+        VkDescriptorSetLayoutCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        ci.bindingCount = 3;
+        ci.pBindings = bindings;
+        vkCreateDescriptorSetLayout(device_, &ci, nullptr, &radix_scatter_layout_);
+    }
+
+    // Allocate all descriptor sets
+    VkDescriptorSetLayout layouts[] = {
+        preprocess_layout_, sort_layout_, render_layout_,
+        radix_histogram_layout_, radix_histogram_layout_,  // A and B
+        radix_scan_layout_,
+        radix_scatter_layout_, radix_scatter_layout_,      // AB and BA
+    };
+    VkDescriptorSet sets[8];
     VkDescriptorSetAllocateInfo alloc_info{};
     alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     alloc_info.descriptorPool = gs_pool_;
-    alloc_info.descriptorSetCount = 3;
+    alloc_info.descriptorSetCount = 8;
     alloc_info.pSetLayouts = layouts;
     vkAllocateDescriptorSets(device_, &alloc_info, sets);
+
     preprocess_set_ = sets[0];
     sort_set_ = sets[1];
     render_set_ = sets[2];
+    radix_histogram_set_a_ = sets[3];
+    radix_histogram_set_b_ = sets[4];
+    radix_scan_set_ = sets[5];
+    radix_scatter_set_ab_ = sets[6];
+    radix_scatter_set_ba_ = sets[7];
 }
 
 void GsRenderer::create_compute_pipelines() {
-    // Preprocess pipeline
-    {
-        auto module = load_shader_module(device_, "shaders/gs_preprocess.comp.spv");
+    // Helper to create a compute pipeline with push constants
+    auto create_pipeline = [&](const char* spv_path,
+                               VkDescriptorSetLayout layout,
+                               uint32_t push_size,
+                               VkPipelineLayout& out_layout,
+                               VkPipeline& out_pipeline) {
+        auto module = load_shader_module(device_, spv_path);
+
         VkPipelineLayoutCreateInfo layout_info{};
         layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         layout_info.setLayoutCount = 1;
-        layout_info.pSetLayouts = &preprocess_layout_;
-        vkCreatePipelineLayout(device_, &layout_info, nullptr, &preprocess_pipeline_layout_);
+        layout_info.pSetLayouts = &layout;
 
-        VkComputePipelineCreateInfo pipeline_info{};
-        pipeline_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipeline_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        pipeline_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        pipeline_info.stage.module = module;
-        pipeline_info.stage.pName = "main";
-        pipeline_info.layout = preprocess_pipeline_layout_;
-
-        if (vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &pipeline_info,
-                                     nullptr, &preprocess_pipeline_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create GS preprocess pipeline");
-        }
-        vkDestroyShaderModule(device_, module, nullptr);
-    }
-
-    // Sort pipeline
-    {
-        auto module = load_shader_module(device_, "shaders/gs_sort.comp.spv");
         VkPushConstantRange push_range{};
-        push_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-        push_range.offset = 0;
-        push_range.size = 8;  // sort step params (k, j)
+        if (push_size > 0) {
+            push_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+            push_range.size = push_size;
+            layout_info.pushConstantRangeCount = 1;
+            layout_info.pPushConstantRanges = &push_range;
+        }
 
-        VkPipelineLayoutCreateInfo layout_info{};
-        layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layout_info.setLayoutCount = 1;
-        layout_info.pSetLayouts = &sort_layout_;
-        layout_info.pushConstantRangeCount = 1;
-        layout_info.pPushConstantRanges = &push_range;
-        vkCreatePipelineLayout(device_, &layout_info, nullptr, &sort_pipeline_layout_);
+        vkCreatePipelineLayout(device_, &layout_info, nullptr, &out_layout);
 
-        VkComputePipelineCreateInfo pipeline_info{};
-        pipeline_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipeline_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        pipeline_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        pipeline_info.stage.module = module;
-        pipeline_info.stage.pName = "main";
-        pipeline_info.layout = sort_pipeline_layout_;
+        VkComputePipelineCreateInfo pi{};
+        pi.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pi.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        pi.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        pi.stage.module = module;
+        pi.stage.pName = "main";
+        pi.layout = out_layout;
 
-        if (vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &pipeline_info,
-                                     nullptr, &sort_pipeline_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create GS sort pipeline");
+        if (vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &pi,
+                                     nullptr, &out_pipeline) != VK_SUCCESS) {
+            throw std::runtime_error(std::string("Failed to create pipeline: ") + spv_path);
         }
         vkDestroyShaderModule(device_, module, nullptr);
-    }
+    };
 
-    // Render pipeline
-    {
-        auto module = load_shader_module(device_, "shaders/gs_render.comp.spv");
-        VkPipelineLayoutCreateInfo layout_info{};
-        layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layout_info.setLayoutCount = 1;
-        layout_info.pSetLayouts = &render_layout_;
-        vkCreatePipelineLayout(device_, &layout_info, nullptr, &render_pipeline_layout_);
+    create_pipeline("shaders/gs_preprocess.comp.spv", preprocess_layout_, 0,
+                    preprocess_pipeline_layout_, preprocess_pipeline_);
+    create_pipeline("shaders/gs_sort.comp.spv", sort_layout_, 8,
+                    sort_pipeline_layout_, sort_pipeline_);
+    create_pipeline("shaders/gs_render.comp.spv", render_layout_, 0,
+                    render_pipeline_layout_, render_pipeline_);
 
-        VkComputePipelineCreateInfo pipeline_info{};
-        pipeline_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        pipeline_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        pipeline_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        pipeline_info.stage.module = module;
-        pipeline_info.stage.pName = "main";
-        pipeline_info.layout = render_pipeline_layout_;
-
-        if (vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &pipeline_info,
-                                     nullptr, &render_pipeline_) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create GS render pipeline");
-        }
-        vkDestroyShaderModule(device_, module, nullptr);
-    }
+    // Radix sort pipelines
+    create_pipeline("shaders/gs_radix_histogram.comp.spv", radix_histogram_layout_, 8,
+                    radix_histogram_pipeline_layout_, radix_histogram_pipeline_);
+    create_pipeline("shaders/gs_radix_scan.comp.spv", radix_scan_layout_, 4,
+                    radix_scan_pipeline_layout_, radix_scan_pipeline_);
+    create_pipeline("shaders/gs_radix_scatter.comp.spv", radix_scatter_layout_, 8,
+                    radix_scatter_pipeline_layout_, radix_scatter_pipeline_);
 }
 
 void GsRenderer::load_cloud(const GaussianCloud& cloud) {
@@ -266,27 +299,35 @@ void GsRenderer::load_cloud(const GaussianCloud& cloud) {
     gaussian_count_ = cloud.count();
     max_gaussian_count_ = gaussian_count_;
 
-    // Round up to next power of 2 for bitonic sort
-    uint32_t sort_size = 1;
-    while (sort_size < gaussian_count_) sort_size <<= 1;
+    // Round up to next multiple of 1024 for radix sort workgroups (256 threads × 4 elements)
+    sort_size_ = ((gaussian_count_ + 1023) / 1024) * 1024;
+    if (sort_size_ < gaussian_count_) sort_size_ = gaussian_count_;  // safety
+    num_sort_workgroups_ = sort_size_ / 1024;
+    if (num_sort_workgroups_ == 0) num_sort_workgroups_ = 1;
+    // Ensure sort_size_ is at least num_sort_workgroups_ * 1024
+    sort_size_ = num_sort_workgroups_ * 1024;
 
     VkDeviceSize gaussian_buf_size = static_cast<VkDeviceSize>(gaussian_count_) * sizeof(GpuGaussian);
     VkDeviceSize projected_buf_size = static_cast<VkDeviceSize>(gaussian_count_) * sizeof(ProjectedSplat);
-    VkDeviceSize sort_buf_size = static_cast<VkDeviceSize>(sort_size) * sizeof(SortEntry);
+    VkDeviceSize sort_buf_size = static_cast<VkDeviceSize>(sort_size_) * sizeof(SortEntry);
+    VkDeviceSize histogram_buf_size = static_cast<VkDeviceSize>(256) * num_sort_workgroups_ * sizeof(uint32_t);
 
     // Destroy existing buffers
     gaussian_ssbo_.destroy(allocator_);
     projected_ssbo_.destroy(allocator_);
     sort_keys_ssbo_.destroy(allocator_);
+    sort_b_ssbo_.destroy(allocator_);
+    histogram_ssbo_.destroy(allocator_);
     uniform_buffer_.destroy(allocator_);
     visible_count_ssbo_.destroy(allocator_);
 
-    // Create GPU storage buffers (host-visible for upload)
+    // Create GPU storage buffers
     gaussian_ssbo_ = Buffer::create_storage(allocator_, gaussian_buf_size);
     projected_ssbo_ = Buffer::create_storage(allocator_, projected_buf_size);
     sort_keys_ssbo_ = Buffer::create_storage(allocator_, sort_buf_size);
+    sort_b_ssbo_ = Buffer::create_storage(allocator_, sort_buf_size);
+    histogram_ssbo_ = Buffer::create_storage(allocator_, histogram_buf_size);
     uniform_buffer_ = Buffer::create_uniform(allocator_, sizeof(GsUniforms));
-    // Visible count buffer: TRANSFER_DST for vkCmdFillBuffer, host-readable for HUD readback
     visible_count_ssbo_ = Buffer::create_storage_readback(allocator_, sizeof(uint32_t));
 
     // Upload Gaussian data
@@ -301,14 +342,16 @@ void GsRenderer::load_cloud(const GaussianCloud& cloud) {
         }
     }
 
-    // Initialize sort keys to max depth (for padding elements beyond gaussian_count)
-    {
-        auto* sort = static_cast<SortEntry*>(sort_keys_ssbo_.mapped());
-        for (uint32_t i = 0; i < sort_size; ++i) {
-            sort[i].key = 0xFFFFFFFF;  // max depth = sorted to end
+    // Initialize both sort buffers with sentinel keys
+    auto init_sort_buf = [&](Buffer& buf) {
+        auto* sort = static_cast<SortEntry*>(buf.mapped());
+        for (uint32_t i = 0; i < sort_size_; ++i) {
+            sort[i].key = 0xFFFFFFFF;
             sort[i].index = i < gaussian_count_ ? i : 0;
         }
-    }
+    };
+    init_sort_buf(sort_keys_ssbo_);
+    init_sort_buf(sort_b_ssbo_);
 
     update_descriptors();
 }
@@ -318,7 +361,6 @@ void GsRenderer::update_active_gaussians(const Gaussian* data, uint32_t count) {
 
     gaussian_count_ = count;
 
-    // Upload Gaussian data
     auto* gpu_data = static_cast<GpuGaussian*>(gaussian_ssbo_.mapped());
     for (uint32_t i = 0; i < count; ++i) {
         gpu_data[i].pos_opacity = glm::vec4(data[i].position, data[i].opacity);
@@ -328,19 +370,20 @@ void GsRenderer::update_active_gaussians(const Gaussian* data, uint32_t count) {
         gpu_data[i].color_pad = glm::vec4(data[i].color, 1.0f);
     }
 
-    // Reinitialize sort keys — round up to power of 2
-    uint32_t sort_size = 1;
-    while (sort_size < gaussian_count_) sort_size <<= 1;
-
-    auto* sort = static_cast<SortEntry*>(sort_keys_ssbo_.mapped());
-    for (uint32_t i = 0; i < sort_size; ++i) {
-        sort[i].key = 0xFFFFFFFF;
-        sort[i].index = i < gaussian_count_ ? i : 0;
-    }
+    // Reinitialize both sort buffers
+    auto init_sort_buf = [&](Buffer& buf) {
+        auto* sort = static_cast<SortEntry*>(buf.mapped());
+        for (uint32_t i = 0; i < sort_size_; ++i) {
+            sort[i].key = 0xFFFFFFFF;
+            sort[i].index = i < gaussian_count_ ? i : 0;
+        }
+    };
+    init_sort_buf(sort_keys_ssbo_);
+    init_sort_buf(sort_b_ssbo_);
 }
 
 void GsRenderer::update_descriptors() {
-    // Preprocess set: gaussians(0), projected(1), sort_keys(2), uniforms(3), visible_count(4)
+    // Preprocess set: gaussians(0), projected(1), sort_keys_A(2), uniforms(3), visible_count(4)
     {
         VkDescriptorBufferInfo gaussian_info{gaussian_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
         VkDescriptorBufferInfo projected_info{projected_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
@@ -363,11 +406,10 @@ void GsRenderer::update_descriptors() {
         vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
     }
 
-    // Sort set: sort_keys(0), uniforms(1)
+    // Legacy sort set
     {
         VkDescriptorBufferInfo sort_info{sort_keys_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
         VkDescriptorBufferInfo uniform_info{uniform_buffer_.buffer(), 0, sizeof(GsUniforms)};
-
         VkWriteDescriptorSet writes[] = {
             {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, sort_set_, 0, 0, 1,
              VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &sort_info, nullptr},
@@ -377,7 +419,7 @@ void GsRenderer::update_descriptors() {
         vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
     }
 
-    // Render set: projected(0), sort_keys(1), uniforms(2), output_image(3), visible_count(4)
+    // Render set: projected(0), sort_keys_A(1), uniforms(2), output_image(3), visible_count(4)
     {
         VkDescriptorBufferInfo projected_info{projected_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
         VkDescriptorBufferInfo sort_info{sort_keys_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
@@ -399,19 +441,85 @@ void GsRenderer::update_descriptors() {
         };
         vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
     }
+
+    // Radix histogram set A: reads sort_keys_ssbo_ (A), writes histogram
+    {
+        VkDescriptorBufferInfo input_info{sort_keys_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo hist_info{histogram_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[] = {
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_histogram_set_a_, 0, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &input_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_histogram_set_a_, 1, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &hist_info, nullptr},
+        };
+        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+    }
+
+    // Radix histogram set B: reads sort_b_ssbo_ (B), writes histogram
+    {
+        VkDescriptorBufferInfo input_info{sort_b_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo hist_info{histogram_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[] = {
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_histogram_set_b_, 0, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &input_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_histogram_set_b_, 1, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &hist_info, nullptr},
+        };
+        vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+    }
+
+    // Radix scan set: histogram (read/write)
+    {
+        VkDescriptorBufferInfo hist_info{histogram_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[] = {
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scan_set_, 0, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &hist_info, nullptr},
+        };
+        vkUpdateDescriptorSets(device_, 1, writes, 0, nullptr);
+    }
+
+    // Radix scatter AB: reads A, writes B, reads histogram
+    {
+        VkDescriptorBufferInfo in_info{sort_keys_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo out_info{sort_b_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo hist_info{histogram_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[] = {
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scatter_set_ab_, 0, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &in_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scatter_set_ab_, 1, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &out_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scatter_set_ab_, 2, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &hist_info, nullptr},
+        };
+        vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
+    }
+
+    // Radix scatter BA: reads B, writes A, reads histogram
+    {
+        VkDescriptorBufferInfo in_info{sort_b_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo out_info{sort_keys_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkDescriptorBufferInfo hist_info{histogram_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
+        VkWriteDescriptorSet writes[] = {
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scatter_set_ba_, 0, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &in_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scatter_set_ba_, 1, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &out_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, radix_scatter_set_ba_, 2, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &hist_info, nullptr},
+        };
+        vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
+    }
 }
 
 void GsRenderer::resize_output(uint32_t width, uint32_t height) {
     if (width == output_width_ && height == output_height_) return;
 
-    // Destroy old image resources
     if (output_sampler_) { vkDestroySampler(device_, output_sampler_, nullptr); output_sampler_ = VK_NULL_HANDLE; }
     if (output_view_) { vkDestroyImageView(device_, output_view_, nullptr); output_view_ = VK_NULL_HANDLE; }
     if (output_image_) { vmaDestroyImage(allocator_, output_image_, output_allocation_); output_image_ = VK_NULL_HANDLE; }
 
     create_output_image(width, height);
 
-    // Re-update render descriptors with new output image view
     if (gaussian_count_ > 0) {
         update_descriptors();
     }
@@ -423,15 +531,11 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
     uint32_t width = output_width_;
     uint32_t height = output_height_;
 
-    // Round up to next power of 2 for bitonic sort
-    uint32_t sort_size = 1;
-    while (sort_size < gaussian_count_) sort_size <<= 1;
-
     // Update uniforms
     GsUniforms uniforms{};
     uniforms.view = view;
     uniforms.proj = proj;
-    uniforms.params = glm::uvec4(width, height, gaussian_count_, sort_size);
+    uniforms.params = glm::uvec4(width, height, gaussian_count_, sort_size_);
     std::memcpy(uniform_buffer_.mapped(), &uniforms, sizeof(uniforms));
 
     // Transition output image to GENERAL layout for compute write
@@ -453,7 +557,7 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
             0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 
-    // Reset visible count to 0 on GPU timeline (host write isn't coherent with device)
+    // Reset visible count to 0 on GPU timeline
     vkCmdFillBuffer(cmd, visible_count_ssbo_.buffer(), 0, sizeof(uint32_t), 0);
     {
         VkMemoryBarrier fill_barrier{};
@@ -466,7 +570,7 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
             0, 1, &fill_barrier, 0, nullptr, 0, nullptr);
     }
 
-    // Pass 1: Preprocess — project Gaussians to 2D, frustum cull, compute covariance
+    // Pass 1: Preprocess — project Gaussians to 2D, frustum cull
     {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, preprocess_pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -474,58 +578,53 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
         vkCmdDispatch(cmd, (gaussian_count_ + 255) / 256, 1, 1);
     }
 
-    // Barrier: preprocess writes → sort reads
-    {
-        VkMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 1, &barrier, 0, nullptr, 0, nullptr);
-    }
+    // Barrier: preprocess → radix sort
+    insert_compute_barrier(cmd);
 
-    // Pass 2: Bitonic sort by depth
-    {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, sort_pipeline_);
+    // Pass 2: Radix sort (4 digit passes × 3 dispatches each = 12 dispatches)
+    uint32_t histogram_count = 256 * num_sort_workgroups_;
+    for (uint32_t digit = 0; digit < 4; ++digit) {
+        uint32_t digit_shift = digit * 8;
+        bool read_from_a = (digit % 2 == 0);
+        uint32_t push_data[2] = {sort_size_, digit_shift};
+
+        // Histogram
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, radix_histogram_pipeline_);
+        auto hist_set = read_from_a ? radix_histogram_set_a_ : radix_histogram_set_b_;
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                sort_pipeline_layout_, 0, 1, &sort_set_, 0, nullptr);
+                                radix_histogram_pipeline_layout_, 0, 1, &hist_set, 0, nullptr);
+        vkCmdPushConstants(cmd, radix_histogram_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT,
+                           0, 8, push_data);
+        vkCmdDispatch(cmd, num_sort_workgroups_, 1, 1);
 
-        // Bitonic sort: outer loop k = 2,4,8,...,sort_size; inner loop j = k/2,...,1
-        for (uint32_t k = 2; k <= sort_size; k <<= 1) {
-            for (uint32_t j = k >> 1; j > 0; j >>= 1) {
-                uint32_t push_data[2] = {k, j};
-                vkCmdPushConstants(cmd, sort_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT,
-                                   0, 8, push_data);
-                vkCmdDispatch(cmd, (sort_size + 255) / 256, 1, 1);
+        insert_compute_barrier(cmd);
 
-                // Barrier between sort passes
-                VkMemoryBarrier barrier{};
-                barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-                barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-                vkCmdPipelineBarrier(cmd,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    0, 1, &barrier, 0, nullptr, 0, nullptr);
-            }
-        }
+        // Prefix scan (single workgroup)
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, radix_scan_pipeline_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                radix_scan_pipeline_layout_, 0, 1, &radix_scan_set_, 0, nullptr);
+        vkCmdPushConstants(cmd, radix_scan_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT,
+                           0, 4, &histogram_count);
+        vkCmdDispatch(cmd, 1, 1, 1);
+
+        insert_compute_barrier(cmd);
+
+        // Scatter
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, radix_scatter_pipeline_);
+        auto scatter_set = read_from_a ? radix_scatter_set_ab_ : radix_scatter_set_ba_;
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                radix_scatter_pipeline_layout_, 0, 1, &scatter_set, 0, nullptr);
+        vkCmdPushConstants(cmd, radix_scatter_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT,
+                           0, 8, push_data);
+        vkCmdDispatch(cmd, num_sort_workgroups_, 1, 1);
+
+        // Barrier before next digit pass (or render)
+        insert_compute_barrier(cmd);
     }
 
-    // Barrier: sort writes → render reads
-    {
-        VkMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0, 1, &barrier, 0, nullptr, 0, nullptr);
-    }
+    // After 4 passes (even count), result is back in buffer A (sort_keys_ssbo_)
 
-    // Pass 3: Tile-based rasterization (16x16 tiles)
+    // Pass 3: Tile-based rasterization
     {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, render_pipeline_);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
@@ -535,7 +634,7 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
         vkCmdDispatch(cmd, tiles_x, tiles_y, 1);
     }
 
-    // Transition output image from GENERAL → SHADER_READ_ONLY for fragment sampling
+    // Transition output image → SHADER_READ_ONLY for fragment sampling
     {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -561,6 +660,8 @@ void GsRenderer::shutdown(VmaAllocator allocator) {
     gaussian_ssbo_.destroy(allocator);
     projected_ssbo_.destroy(allocator);
     sort_keys_ssbo_.destroy(allocator);
+    sort_b_ssbo_.destroy(allocator);
+    histogram_ssbo_.destroy(allocator);
     uniform_buffer_.destroy(allocator);
     visible_count_ssbo_.destroy(allocator);
 
@@ -568,17 +669,30 @@ void GsRenderer::shutdown(VmaAllocator allocator) {
     if (output_view_) vkDestroyImageView(device_, output_view_, nullptr);
     if (output_image_) vmaDestroyImage(allocator, output_image_, output_allocation_);
 
-    if (preprocess_pipeline_) vkDestroyPipeline(device_, preprocess_pipeline_, nullptr);
-    if (sort_pipeline_) vkDestroyPipeline(device_, sort_pipeline_, nullptr);
-    if (render_pipeline_) vkDestroyPipeline(device_, render_pipeline_, nullptr);
+    auto destroy_pipeline = [&](VkPipeline& p) { if (p) { vkDestroyPipeline(device_, p, nullptr); p = VK_NULL_HANDLE; } };
+    auto destroy_layout = [&](VkPipelineLayout& l) { if (l) { vkDestroyPipelineLayout(device_, l, nullptr); l = VK_NULL_HANDLE; } };
+    auto destroy_set_layout = [&](VkDescriptorSetLayout& l) { if (l) { vkDestroyDescriptorSetLayout(device_, l, nullptr); l = VK_NULL_HANDLE; } };
 
-    if (preprocess_pipeline_layout_) vkDestroyPipelineLayout(device_, preprocess_pipeline_layout_, nullptr);
-    if (sort_pipeline_layout_) vkDestroyPipelineLayout(device_, sort_pipeline_layout_, nullptr);
-    if (render_pipeline_layout_) vkDestroyPipelineLayout(device_, render_pipeline_layout_, nullptr);
+    destroy_pipeline(preprocess_pipeline_);
+    destroy_pipeline(sort_pipeline_);
+    destroy_pipeline(render_pipeline_);
+    destroy_pipeline(radix_histogram_pipeline_);
+    destroy_pipeline(radix_scan_pipeline_);
+    destroy_pipeline(radix_scatter_pipeline_);
 
-    if (preprocess_layout_) vkDestroyDescriptorSetLayout(device_, preprocess_layout_, nullptr);
-    if (sort_layout_) vkDestroyDescriptorSetLayout(device_, sort_layout_, nullptr);
-    if (render_layout_) vkDestroyDescriptorSetLayout(device_, render_layout_, nullptr);
+    destroy_layout(preprocess_pipeline_layout_);
+    destroy_layout(sort_pipeline_layout_);
+    destroy_layout(render_pipeline_layout_);
+    destroy_layout(radix_histogram_pipeline_layout_);
+    destroy_layout(radix_scan_pipeline_layout_);
+    destroy_layout(radix_scatter_pipeline_layout_);
+
+    destroy_set_layout(preprocess_layout_);
+    destroy_set_layout(sort_layout_);
+    destroy_set_layout(render_layout_);
+    destroy_set_layout(radix_histogram_layout_);
+    destroy_set_layout(radix_scan_layout_);
+    destroy_set_layout(radix_scatter_layout_);
 
     if (gs_pool_) vkDestroyDescriptorPool(device_, gs_pool_, nullptr);
 
