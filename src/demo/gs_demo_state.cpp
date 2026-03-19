@@ -80,7 +80,7 @@ void GsDemoState::update_camera(App& app, float dt) {
     glm::mat4 view = glm::lookAt(eye, target_, glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 proj = glm::perspective(
         glm::radians(60.0f),
-        320.0f / 240.0f,
+        1280.0f / 720.0f,
         0.1f, 200.0f
     );
     // Vulkan Y-flip

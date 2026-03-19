@@ -6,8 +6,8 @@
       "target": [0, 0, 0],
       "fov": 60
     },
-    "render_width": 320,
-    "render_height": 240
+    "render_width": 1280,
+    "render_height": 720
   },
   "collision": {
     "width": 1,
