@@ -39,13 +39,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libvulkan-dev \
+            libvulkan-dev glslc \
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             libwayland-dev libxkbcommon-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install vulkan-headers vulkan-loader molten-vk
+        run: brew install vulkan-headers vulkan-loader molten-vk shaderc
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5

@@ -1,6 +1,7 @@
 #include "vulkan_game/engine/gs_chunk_grid.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <unordered_map>
 
