@@ -33,6 +33,34 @@ function rectCells(x0: number, y0: number, x1: number, y1: number): [number, num
   return cells;
 }
 
+/** Expand cells by brush radius (filled circle stamp). Returns unique cells. */
+function expandByBrush(
+  cells: [number, number][],
+  brushSize: number,
+  mapWidth: number,
+  mapHeight: number,
+): [number, number][] {
+  if (brushSize <= 1) return cells;
+  const r = Math.floor(brushSize / 2);
+  const seen = new Set<number>();
+  const result: [number, number][] = [];
+  for (const [cx, cy] of cells) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        // Circle check: only include cells within radius
+        if (dx * dx + dy * dy > r * r) continue;
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || nx >= mapWidth || ny < 0 || ny >= mapHeight) continue;
+        const key = ny * mapWidth + nx;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push([nx, ny]);
+      }
+    }
+  }
+  return result;
+}
+
 export const PixelCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPainting = useRef(false);
@@ -47,6 +75,7 @@ export const PixelCanvas: React.FC = () => {
   const activeTool = useMapStore(s => s.activeTool);
   const activeColor = useMapStore(s => s.activeColor);
   const heightBrushValue = useMapStore(s => s.heightBrushValue);
+  const brushSize = useMapStore(s => s.brushSize);
   const zoom = useMapStore(s => s.zoom);
   const panX = useMapStore(s => s.panX);
   const panY = useMapStore(s => s.panY);
@@ -150,23 +179,22 @@ export const PixelCanvas: React.FC = () => {
     if (dragStart.current && dragEnd.current) {
       const [r, g, b, a] = activeColor;
       const previewColor = `rgba(${r},${g},${b},${(a / 255) * 0.6})`;
-      const cells = activeTool === 'line'
+      const baseCells = activeTool === 'line'
         ? lineCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1])
         : rectCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1]);
+      const cells = expandByBrush(baseCells, brushSize, width, height);
 
       ctx.fillStyle = previewColor;
       for (const [cx, cy] of cells) {
-        if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
-          const px = (cx - width / 2) * zoom;
-          const py = (cy - height / 2) * zoom;
-          ctx.fillRect(px, py, zoom, zoom);
-        }
+        const px = (cx - width / 2) * zoom;
+        const py = (cy - height / 2) * zoom;
+        ctx.fillRect(px, py, zoom, zoom);
       }
     }
 
     ctx.restore();
   }, [width, height, layers, heights, zoom, panX, panY, collisionGrid, showCollision,
-      activeColor, activeTool]);
+      activeColor, activeTool, brushSize]);
 
   // Convert mouse position to grid cell
   const mouseToCell = useCallback((e: React.MouseEvent): [number, number] | null => {
@@ -181,41 +209,45 @@ export const PixelCanvas: React.FC = () => {
     return [x, y];
   }, [width, height, zoom, panX, panY]);
 
+  /** Apply the current tool at (x,y) with brush size expansion. */
   const applyTool = useCallback((x: number, y: number) => {
     const [r, g, b, a] = activeColor;
+    const cells = expandByBrush([[x, y]], brushSize, width, height);
+
     switch (activeTool) {
       case 'pencil':
-        setPixel(x, y, r, g, b, a);
+        for (const [cx, cy] of cells) setPixel(cx, cy, r, g, b, a);
         break;
       case 'eraser':
-        erasePixel(x, y);
+        for (const [cx, cy] of cells) erasePixel(cx, cy);
         break;
       case 'fill':
+        // Fill ignores brush size — it flood-fills from the clicked cell
         fillArea(x, y, r, g, b, a);
         break;
       case 'height':
-        setHeight(x, y, heightBrushValue);
+        for (const [cx, cy] of cells) setHeight(cx, cy, heightBrushValue);
         break;
       case 'select':
-        toggleCollision(x, y);
+        for (const [cx, cy] of cells) toggleCollision(cx, cy);
         break;
     }
-  }, [activeTool, activeColor, heightBrushValue, setPixel, erasePixel, fillArea, setHeight, toggleCollision]);
+  }, [activeTool, activeColor, brushSize, width, height, heightBrushValue,
+      setPixel, erasePixel, fillArea, setHeight, toggleCollision]);
 
-  /** Commit line or rectangle: apply color to all cells. */
+  /** Commit line or rectangle: apply color to all cells with brush expansion. */
   const commitDragShape = useCallback(() => {
     if (!dragStart.current || !dragEnd.current) return;
     const [r, g, b, a] = activeColor;
-    const cells = activeTool === 'line'
+    const baseCells = activeTool === 'line'
       ? lineCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1])
       : rectCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1]);
+    const cells = expandByBrush(baseCells, brushSize, width, height);
 
     for (const [cx, cy] of cells) {
-      if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
-        setPixel(cx, cy, r, g, b, a);
-      }
+      setPixel(cx, cy, r, g, b, a);
     }
-  }, [activeTool, activeColor, width, height, setPixel]);
+  }, [activeTool, activeColor, brushSize, width, height, setPixel]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 1) return; // Middle button for pan
@@ -241,13 +273,6 @@ export const PixelCanvas: React.FC = () => {
 
     if (isDragTool) {
       dragEnd.current = cell;
-      // Force re-render for preview by touching a store value
-      // We use a minimal state update to trigger the useEffect
-      const canvas = canvasRef.current;
-      if (canvas) {
-        // Manually trigger re-render by dispatching a custom event
-        canvas.dispatchEvent(new Event('drag-update'));
-      }
       // Force re-render for preview
       useMapStore.setState({});
     } else {

@@ -96,12 +96,14 @@ export const ToolBar: React.FC = () => {
   const activeLayer = useMapStore(s => s.activeLayer);
   const activeColor = useMapStore(s => s.activeColor);
   const heightBrushValue = useMapStore(s => s.heightBrushValue);
+  const brushSize = useMapStore(s => s.brushSize);
   const showCollision = useMapStore(s => s.showCollision);
 
   const setTool = useMapStore(s => s.setTool);
   const setActiveLayer = useMapStore(s => s.setActiveLayer);
   const setColor = useMapStore(s => s.setColor);
   const setHeightBrushValue = useMapStore(s => s.setHeightBrushValue);
+  const setBrushSize = useMapStore(s => s.setBrushSize);
   const setShowCollision = useMapStore(s => s.setShowCollision);
 
   const colorHex = `#${activeColor.slice(0, 3).map(c => c.toString(16).padStart(2, '0')).join('')}`;
@@ -123,6 +125,25 @@ export const ToolBar: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {activeTool !== 'fill' && (
+        <div style={styles.section}>
+          <div style={styles.sectionTitle}>Brush Size</div>
+          <div style={styles.label}>
+            <span>Size</span>
+            <span>{brushSize}px</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={32}
+            step={1}
+            value={brushSize}
+            onChange={e => setBrushSize(Number(e.target.value))}
+            style={styles.slider}
+          />
+        </div>
+      )}
 
       <div style={styles.section}>
         <div style={styles.sectionTitle}>Layers</div>

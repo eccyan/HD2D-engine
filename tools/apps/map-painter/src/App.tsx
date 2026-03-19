@@ -26,6 +26,7 @@ const styles = {
 
 export const App: React.FC = () => {
   const setTool = useMapStore(s => s.setTool);
+  const setBrushSize = useMapStore(s => s.setBrushSize);
   const undo = useMapStore(s => s.undo);
   const redo = useMapStore(s => s.redo);
 
@@ -38,6 +39,16 @@ export const App: React.FC = () => {
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
+        return;
+      }
+
+      // Bracket keys: adjust brush size
+      if (e.key === '[') {
+        setBrushSize(useMapStore.getState().brushSize - 1);
+        return;
+      }
+      if (e.key === ']') {
+        setBrushSize(useMapStore.getState().brushSize + 1);
         return;
       }
 
@@ -54,7 +65,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setTool, undo, redo]);
+  }, [setTool, setBrushSize, undo, redo]);
 
   return (
     <div style={styles.root}>

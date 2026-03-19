@@ -17,6 +17,7 @@ export interface MapPainterState {
   activeLayer: Layer;
   activeColor: [number, number, number, number];
   heightBrushValue: number;
+  brushSize: number;
 
   // Zoom/pan
   zoom: number;
@@ -49,6 +50,7 @@ export interface MapPainterState {
   setActiveLayer: (layer: Layer) => void;
   setColor: (color: [number, number, number, number]) => void;
   setHeightBrushValue: (value: number) => void;
+  setBrushSize: (size: number) => void;
   setZoom: (zoom: number) => void;
   setPan: (x: number, y: number) => void;
   setShowCollision: (show: boolean) => void;
@@ -105,6 +107,7 @@ export const useMapStore = create<MapPainterState>((set, get) => ({
   activeLayer: 'ground',
   activeColor: [76, 153, 76, 255],
   heightBrushValue: 1,
+  brushSize: 1,
   zoom: 4,
   panX: 0,
   panY: 0,
@@ -170,6 +173,7 @@ export const useMapStore = create<MapPainterState>((set, get) => ({
   setActiveLayer: (layer) => set({ activeLayer: layer }),
   setColor: (color) => set({ activeColor: color }),
   setHeightBrushValue: (value) => set({ heightBrushValue: value }),
+  setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(32, size)) }),
   setZoom: (zoom) => set({ zoom: Math.max(1, Math.min(64, zoom)) }),
   setPan: (x, y) => set({ panX: x, panY: y }),
   setShowCollision: (show) => set({ showCollision: show }),
