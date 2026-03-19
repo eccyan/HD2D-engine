@@ -16,6 +16,7 @@ export const Preview3D: React.FC = () => {
 
   const cameraAngle = useRef(0);
   const cameraElevation = useRef(35);
+  const cameraZoom = useRef(1.0);
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
 
@@ -43,7 +44,7 @@ export const Preview3D: React.FC = () => {
     const sampledW = Math.ceil(width / step);
     const sampledH = Math.ceil(height / step);
 
-    const scale = Math.min(cw, ch) / Math.max(sampledW, sampledH) * 0.4;
+    const scale = Math.min(cw, ch) / Math.max(sampledW, sampledH) * 0.4 * cameraZoom.current;
     const cx = cw / 2;
     const cy = ch / 2;
 
@@ -143,6 +144,13 @@ export const Preview3D: React.FC = () => {
     isDragging.current = false;
   }, []);
 
+  const onWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    cameraZoom.current = Math.max(0.2, Math.min(5.0, cameraZoom.current * factor));
+    render();
+  }, [render]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid #333' }}>
       <div style={{ fontSize: '11px', color: '#888', padding: '4px 8px', background: '#16213e' }}>
@@ -157,6 +165,7 @@ export const Preview3D: React.FC = () => {
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onWheel={onWheel}
       />
     </div>
   );
