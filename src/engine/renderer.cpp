@@ -157,6 +157,8 @@ void Renderer::init_gs(const GaussianCloud& cloud, uint32_t width, uint32_t heig
         gs_initialized_ = true;
     }
     gs_renderer_.load_cloud(cloud);
+    output_width_ = width;
+    output_height_ = height;
 
     // Create descriptor sets for sampling the GS output as a sprite texture
     std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
@@ -293,10 +295,11 @@ void Renderer::draw_scene(Scene& scene,
             sprite_batch_.begin();
             SpriteDrawInfo gs_blit{};
             gs_blit.position = {camera_.target().x, camera_.target().y, -20.0f};
-            // Size the quad to fill the camera view (estimate from projection matrix)
-            float proj_11 = camera_.projection()[1][1];  // 1/tan(fov/2)
+            // Size the quad to fill the camera view
+            // proj[1][1] is negative in Vulkan (Y-flip), so use abs
+            float proj_11 = std::abs(camera_.projection()[1][1]);
             float cam_dist = glm::length(camera_.position() - camera_.target());
-            float view_h = 2.0f * cam_dist / (proj_11 > 0.0f ? proj_11 : 1.0f);
+            float view_h = 2.0f * cam_dist / std::max(proj_11, 0.01f);
             float aspect = static_cast<float>(kWindowWidth) / static_cast<float>(kWindowHeight);
             float view_w = view_h * aspect;
             gs_blit.size = {view_w, view_h};

@@ -12,9 +12,9 @@ struct GpuGaussian {
 
 // Output projected splat
 struct ProjectedSplat {
-    vec2 center;         // screen-space center
-    float depth;         // view-space depth
-    float radius;        // bounding circle radius
+    vec2 center;         // screen-space center (pixels)
+    float depth;         // view-space depth (positive = in front)
+    float radius;        // bounding circle radius (pixels)
     vec4 conic_opacity;  // conic matrix (a, b, c) + opacity
     vec4 color;          // rgba
 };
@@ -62,22 +62,33 @@ void main() {
     // Transform to view space
     vec4 view_pos = view * vec4(g.pos_opacity.xyz, 1.0);
 
-    // Frustum cull: discard if behind camera
+    // Frustum cull: discard if behind near plane (view space z is negative for visible objects)
     if (view_pos.z > -0.1) {
         sort_entries[idx].key = 0xFFFFFFFF;
         sort_entries[idx].index = idx;
         return;
     }
 
-    // Project to screen space
+    // Project to clip space
     vec4 clip_pos = proj * view_pos;
-    vec2 ndc = clip_pos.xy / clip_pos.w;
-    vec2 screen = (ndc * 0.5 + 0.5) * vec2(float(params.x), float(params.y));
+    if (clip_pos.w <= 0.0) {
+        sort_entries[idx].key = 0xFFFFFFFF;
+        sort_entries[idx].index = idx;
+        return;
+    }
 
-    // Frustum cull: discard if outside screen (with margin)
-    float margin = 64.0;
-    if (screen.x < -margin || screen.x > float(params.x) + margin ||
-        screen.y < -margin || screen.y > float(params.y) + margin) {
+    // NDC: Vulkan NDC is [-1,1] X, [-1,1] Y (with Y-flip already in proj), [0,1] Z
+    vec3 ndc = clip_pos.xyz / clip_pos.w;
+
+    // Screen space: map NDC to pixel coordinates
+    // With Vulkan Y-flip in projection, ndc.y is already correct orientation
+    float screen_x = (ndc.x * 0.5 + 0.5) * float(params.x);
+    float screen_y = (ndc.y * 0.5 + 0.5) * float(params.y);
+
+    // Frustum cull: discard if outside screen (with generous margin)
+    float margin = 128.0;
+    if (screen_x < -margin || screen_x > float(params.x) + margin ||
+        screen_y < -margin || screen_y > float(params.y) + margin) {
         sort_entries[idx].key = 0xFFFFFFFF;
         sort_entries[idx].index = idx;
         return;
@@ -94,39 +105,36 @@ void main() {
     mat3 M = R * S;
     mat3 Sigma = M * transpose(M);
 
-    // Project covariance to 2D: Sigma' = J * W * Sigma * W^T * J^T
-    // W = upper-left 3x3 of view matrix
-    mat3 W = mat3(view);
-    // J = Jacobian of perspective projection
-    float fx = proj[0][0];  // focal_x in NDC
-    float fy = proj[1][1];  // focal_y in NDC
-    float tz = view_pos.z;  // negative depth
+    // Project covariance to 2D using the EWA splatting approach
+    // Use absolute focal lengths (Vulkan Y-flip makes fy negative)
+    float fx = abs(proj[0][0]);  // focal_x in NDC
+    float fy = abs(proj[1][1]);  // focal_y in NDC (abs to handle Y-flip)
+    float tz = view_pos.z;       // negative depth
     float tz2 = tz * tz;
 
+    // Jacobian of perspective projection in view space
     mat3 J = mat3(
         fx / tz, 0, 0,
         0, fy / tz, 0,
         -fx * view_pos.x / tz2, -fy * view_pos.y / tz2, 0
     );
 
+    // Transform covariance: W is upper-left 3x3 of view matrix
+    mat3 W = mat3(view);
     mat3 T = J * W;
     mat3 cov2d_full = T * Sigma * transpose(T);
 
-    // Extract 2x2 covariance + low-pass filter (min eigenvalue)
-    float a = cov2d_full[0][0] + 0.3;  // add small value for numerical stability
-    float b = cov2d_full[0][1];
-    float c = cov2d_full[1][1] + 0.3;
-
-    // Scale from NDC to pixel space
+    // Extract 2x2 covariance in pixel space
     float half_w = float(params.x) * 0.5;
     float half_h = float(params.y) * 0.5;
-    a *= half_w * half_w;
-    b *= half_w * half_h;
-    c *= half_h * half_h;
+
+    float a = cov2d_full[0][0] * half_w * half_w + 0.3;
+    float b = cov2d_full[0][1] * half_w * half_h;
+    float c = cov2d_full[1][1] * half_h * half_h + 0.3;
 
     // Compute inverse of 2D covariance for conic representation
     float det = a * c - b * b;
-    if (det <= 0.0) {
+    if (det <= 1e-6) {
         sort_entries[idx].key = 0xFFFFFFFF;
         sort_entries[idx].index = idx;
         return;
@@ -142,9 +150,12 @@ void main() {
     float lambda_max = mid + sqrt(disc);
     float radius_px = ceil(3.0 * sqrt(lambda_max));
 
+    // Clamp radius to reasonable bounds
+    radius_px = min(radius_px, float(max(params.x, params.y)));
+
     // Write projected splat
     ProjectedSplat splat;
-    splat.center = screen;
+    splat.center = vec2(screen_x, screen_y);
     splat.depth = -view_pos.z;
     splat.radius = radius_px;
     splat.conic_opacity = vec4(conic_a, conic_b, conic_c, g.pos_opacity.w);

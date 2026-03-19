@@ -1,159 +1,96 @@
 [
   {
-    "tool": "level-designer",
-    "port": 6173,
-    "results": []
-  },
-  {
-    "tool": "seurat",
-    "port": 6179,
+    "tool": "map-painter",
+    "port": 6180,
     "results": [
       {
         "name": "Store is accessible",
         "passed": true
       },
       {
-        "name": "Default section is dashboard",
+        "name": "Default map dimensions are 32x32",
         "passed": true
       },
       {
-        "name": "Section navigation works",
+        "name": "initMap creates new map with correct dimensions",
         "passed": true
       },
       {
-        "name": "No character selected by default",
+        "name": "setPixel updates pixel data",
         "passed": true
       },
       {
-        "name": "AI config has defaults",
-        "passed": false,
-        "error": "Default steps = 20: expected 20, got 30"
-      },
-      {
-        "name": "AI config has pixel pass defaults",
+        "name": "erasePixel clears pixel data",
         "passed": true
       },
       {
-        "name": "Pixel pass config can be updated",
+        "name": "setHeight updates height data",
         "passed": true
       },
       {
-        "name": "Approval actions do not exist",
+        "name": "Tool selection works",
         "passed": true
       },
       {
-        "name": "AI config can be updated",
+        "name": "Layer selection works",
         "passed": true
       },
       {
-        "name": "Playback state transitions",
-        "passed": false,
-        "error": "Playback state: playing: expected \"playing\", got \"stopped\""
-      },
-      {
-        "name": "Current time updates",
+        "name": "Color selection works",
         "passed": true
       },
       {
-        "name": "Review filter works",
+        "name": "Height brush value updates",
         "passed": true
       },
       {
-        "name": "Select clip updates state",
+        "name": "Zoom clamps to valid range",
         "passed": true
       },
       {
-        "name": "Generation jobs lifecycle",
+        "name": "Collision toggle works",
         "passed": true
       },
       {
-        "name": "Assembly result starts null",
+        "name": "Auto-generate collision from heights",
         "passed": true
       },
       {
-        "name": "Sprite sheet URL starts null",
+        "name": "Undo/redo works for pixel operations",
         "passed": true
       },
       {
-        "name": "Pipeline editingFrame starts null",
+        "name": "resizeMap preserves existing data",
         "passed": true
       },
       {
-        "name": "Pipeline clipboard starts null",
+        "name": "fillArea floods connected region",
         "passed": true
       },
       {
-        "name": "Pipeline actions are callable",
+        "name": "Preview camera updates",
         "passed": true
       },
       {
-        "name": "setEditingFrame updates state",
+        "name": "showCollision toggle works",
         "passed": true
       },
       {
-        "name": "Generation job with pass field",
+        "name": "Multiple layers are independent",
         "passed": true
       },
       {
-        "name": "[Scenario] Full section navigation workflow",
+        "name": "[Scenario] Create a village map with terrain and walls",
         "passed": true
       },
       {
-        "name": "[Scenario] AI config modification and restore",
+        "name": "[Scenario] Undo/redo across layers and tools",
         "passed": true
       },
       {
-        "name": "[Scenario] Playback lifecycle",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] Generation job queue workflow",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] Review filter cycling",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] Pixel pass config modification and restore",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] No approval gating on pipeline",
-        "passed": false,
-        "error": "Assertion failed: saveConcept exists"
-      },
-      {
-        "name": "[Scenario] Pipeline editing frame lifecycle",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] Generation jobs with pass tracking",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] Pipeline-related AI config settings",
-        "passed": true
-      },
-      {
-        "name": "[Scenario] Clip selection resets playback",
+        "name": "[Scenario] Manual collision refinement",
         "passed": true
       }
     ]
-  },
-  {
-    "tool": "particle-designer",
-    "port": 6176,
-    "results": []
-  },
-  {
-    "tool": "audio-composer",
-    "port": 6177,
-    "results": []
-  },
-  {
-    "tool": "sfx-designer",
-    "port": 6178,
-    "results": []
   }
 ]

@@ -1039,6 +1039,16 @@ void App::init_scene(const std::string& scene_path) {
             std::fprintf(stderr, "Warning: %s (skipping GS rendering)\n", e.what());
         }
         if (!cloud.empty()) {
+            std::fprintf(stderr, "GS: Loaded %u Gaussians from %s\n",
+                         cloud.count(), gs.ply_file.c_str());
+            std::fprintf(stderr, "GS: AABB min=(%.1f,%.1f,%.1f) max=(%.1f,%.1f,%.1f)\n",
+                         cloud.bounds().min.x, cloud.bounds().min.y, cloud.bounds().min.z,
+                         cloud.bounds().max.x, cloud.bounds().max.y, cloud.bounds().max.z);
+            std::fprintf(stderr, "GS: Camera pos=(%.1f,%.1f,%.1f) target=(%.1f,%.1f,%.1f) fov=%.1f\n",
+                         gs.camera_position.x, gs.camera_position.y, gs.camera_position.z,
+                         gs.camera_target.x, gs.camera_target.y, gs.camera_target.z,
+                         gs.camera_fov);
+
             renderer_.init_gs(cloud, gs.render_width, gs.render_height);
 
             // Set up 3D perspective camera for GS rendering
