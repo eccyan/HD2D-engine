@@ -3,10 +3,42 @@ import { useMapStore, type Layer } from '../store/useMapStore.js';
 
 const LAYER_ORDER: Layer[] = ['ground', 'walls', 'decorations'];
 
+/** Bresenham line: returns all cells between (x0,y0) and (x1,y1). */
+function lineCells(x0: number, y0: number, x1: number, y1: number): [number, number][] {
+  const cells: [number, number][] = [];
+  let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  let cx = x0, cy = y0;
+  for (;;) {
+    cells.push([cx, cy]);
+    if (cx === x1 && cy === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; cx += sx; }
+    if (e2 < dx) { err += dx; cy += sy; }
+  }
+  return cells;
+}
+
+/** All cells inside the rectangle defined by two corners. */
+function rectCells(x0: number, y0: number, x1: number, y1: number): [number, number][] {
+  const cells: [number, number][] = [];
+  const minX = Math.min(x0, x1), maxX = Math.max(x0, x1);
+  const minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      cells.push([x, y]);
+    }
+  }
+  return cells;
+}
+
 export const PixelCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isPainting = useRef(false);
   const lastCell = useRef<[number, number] | null>(null);
+  const dragStart = useRef<[number, number] | null>(null);
+  const dragEnd = useRef<[number, number] | null>(null);
 
   const width = useMapStore(s => s.width);
   const height = useMapStore(s => s.height);
@@ -29,6 +61,8 @@ export const PixelCanvas: React.FC = () => {
   const setZoom = useMapStore(s => s.setZoom);
   const setPan = useMapStore(s => s.setPan);
   const pushUndo = useMapStore(s => s.pushUndo);
+
+  const isDragTool = activeTool === 'line' || activeTool === 'rectangle';
 
   // Render the canvas
   useEffect(() => {
@@ -112,8 +146,27 @@ export const PixelCanvas: React.FC = () => {
       }
     }
 
+    // Draw drag preview for line/rectangle tools
+    if (dragStart.current && dragEnd.current) {
+      const [r, g, b, a] = activeColor;
+      const previewColor = `rgba(${r},${g},${b},${(a / 255) * 0.6})`;
+      const cells = activeTool === 'line'
+        ? lineCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1])
+        : rectCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1]);
+
+      ctx.fillStyle = previewColor;
+      for (const [cx, cy] of cells) {
+        if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+          const px = (cx - width / 2) * zoom;
+          const py = (cy - height / 2) * zoom;
+          ctx.fillRect(px, py, zoom, zoom);
+        }
+      }
+    }
+
     ctx.restore();
-  }, [width, height, layers, heights, zoom, panX, panY, collisionGrid, showCollision]);
+  }, [width, height, layers, heights, zoom, panX, panY, collisionGrid, showCollision,
+      activeColor, activeTool]);
 
   // Convert mouse position to grid cell
   const mouseToCell = useCallback((e: React.MouseEvent): [number, number] | null => {
@@ -149,29 +202,70 @@ export const PixelCanvas: React.FC = () => {
     }
   }, [activeTool, activeColor, heightBrushValue, setPixel, erasePixel, fillArea, setHeight, toggleCollision]);
 
+  /** Commit line or rectangle: apply color to all cells. */
+  const commitDragShape = useCallback(() => {
+    if (!dragStart.current || !dragEnd.current) return;
+    const [r, g, b, a] = activeColor;
+    const cells = activeTool === 'line'
+      ? lineCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1])
+      : rectCells(dragStart.current[0], dragStart.current[1], dragEnd.current[0], dragEnd.current[1]);
+
+    for (const [cx, cy] of cells) {
+      if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+        setPixel(cx, cy, r, g, b, a);
+      }
+    }
+  }, [activeTool, activeColor, width, height, setPixel]);
+
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 1) return; // Middle button for pan
     const cell = mouseToCell(e);
     if (!cell) return;
-    isPainting.current = true;
-    lastCell.current = cell;
     pushUndo();
-    applyTool(cell[0], cell[1]);
-  }, [mouseToCell, applyTool, pushUndo]);
+
+    if (isDragTool) {
+      dragStart.current = cell;
+      dragEnd.current = cell;
+      isPainting.current = true;
+    } else {
+      isPainting.current = true;
+      lastCell.current = cell;
+      applyTool(cell[0], cell[1]);
+    }
+  }, [mouseToCell, applyTool, pushUndo, isDragTool]);
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isPainting.current) return;
     const cell = mouseToCell(e);
     if (!cell) return;
-    if (lastCell.current && cell[0] === lastCell.current[0] && cell[1] === lastCell.current[1]) return;
-    lastCell.current = cell;
-    applyTool(cell[0], cell[1]);
-  }, [mouseToCell, applyTool]);
+
+    if (isDragTool) {
+      dragEnd.current = cell;
+      // Force re-render for preview by touching a store value
+      // We use a minimal state update to trigger the useEffect
+      const canvas = canvasRef.current;
+      if (canvas) {
+        // Manually trigger re-render by dispatching a custom event
+        canvas.dispatchEvent(new Event('drag-update'));
+      }
+      // Force re-render for preview
+      useMapStore.setState({});
+    } else {
+      if (lastCell.current && cell[0] === lastCell.current[0] && cell[1] === lastCell.current[1]) return;
+      lastCell.current = cell;
+      applyTool(cell[0], cell[1]);
+    }
+  }, [mouseToCell, applyTool, isDragTool]);
 
   const onMouseUp = useCallback(() => {
+    if (isDragTool && dragStart.current && dragEnd.current) {
+      commitDragShape();
+      dragStart.current = null;
+      dragEnd.current = null;
+    }
     isPainting.current = false;
     lastCell.current = null;
-  }, []);
+  }, [isDragTool, commitDragShape]);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
