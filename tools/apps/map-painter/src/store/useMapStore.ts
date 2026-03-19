@@ -375,8 +375,12 @@ export const useMapStore = create<MapPainterState>((set, get) => ({
 
   saveProject: () => {
     const state = get();
-    const encode = (arr: Uint8Array | Float32Array) =>
-      btoa(String.fromCharCode(...new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength)));
+    const encode = (arr: Uint8Array | Float32Array) => {
+      const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    };
     return JSON.stringify({
       version: 1,
       width: state.width,
