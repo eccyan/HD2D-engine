@@ -43,6 +43,10 @@ layout(set = 0, binding = 3) uniform Uniforms {
     uvec4 params;  // x = width, y = height, z = gaussian_count, w = sort_size
 };
 
+layout(set = 0, binding = 4) buffer VisibleCountBuffer {
+    uint visible_count;
+};
+
 // Build rotation matrix from quaternion
 mat3 quat_to_mat(vec4 q) {
     float x = q.x, y = q.y, z = q.z, w = q.w;
@@ -165,4 +169,7 @@ void main() {
     // Write sort entry (depth as uint for bitonic sort — closer = smaller key)
     sort_entries[idx].key = floatBitsToUint(splat.depth);
     sort_entries[idx].index = idx;
+
+    // Count visible (non-culled) Gaussians
+    atomicAdd(visible_count, 1u);
 }

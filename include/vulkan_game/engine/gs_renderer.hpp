@@ -13,12 +13,14 @@ class GsRenderer {
 public:
     void init(VkDevice device, VmaAllocator allocator, VkDescriptorPool pool);
     void load_cloud(const GaussianCloud& cloud);
+    void update_active_gaussians(const Gaussian* data, uint32_t count);
     void render(VkCommandBuffer cmd, const glm::mat4& view, const glm::mat4& proj,
                 uint32_t width, uint32_t height);
     VkImageView output_view() const { return output_view_; }
     VkSampler output_sampler() const { return output_sampler_; }
     bool has_cloud() const { return gaussian_count_ > 0; }
     uint32_t gaussian_count() const { return gaussian_count_; }
+    uint32_t max_gaussian_count() const { return max_gaussian_count_; }
     void shutdown(VmaAllocator allocator);
 
 private:
@@ -44,8 +46,10 @@ private:
     Buffer sort_keys_ssbo_;          // Sort keys (depth | index)
     Buffer sort_indices_ssbo_;       // Sort value (original index)
     Buffer uniform_buffer_;          // Camera + resolution
+    Buffer visible_count_ssbo_;      // Atomic counter: visible Gaussians after frustum cull
     Buffer tile_count_ssbo_;         // Per-tile Gaussian counts
     uint32_t gaussian_count_ = 0;
+    uint32_t max_gaussian_count_ = 0;  // Upper bound (allocated SSBO capacity)
 
     // Descriptor resources
     VkDescriptorPool pool_ = VK_NULL_HANDLE;

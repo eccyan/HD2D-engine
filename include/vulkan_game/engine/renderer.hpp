@@ -2,6 +2,7 @@
 
 #include "vulkan_game/engine/buffer.hpp"
 #include "vulkan_game/engine/camera.hpp"
+#include "vulkan_game/engine/gs_chunk_grid.hpp"
 #include "vulkan_game/engine/gs_renderer.hpp"
 #include "vulkan_game/engine/command_pool.hpp"
 #include "vulkan_game/engine/descriptor.hpp"
@@ -126,7 +127,8 @@ private:
 
     // Gaussian splatting
     GsRenderer gs_renderer_;
-    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_descriptor_sets_{};
+    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_descriptor_sets_{};    // scene UBO (unused now)
+    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_ui_descriptor_sets_{}; // UI orthographic UBO
     bool gs_initialized_ = false;
 
     // GS camera (3D perspective, independent of sprite camera)
@@ -134,6 +136,11 @@ private:
     glm::mat4 gs_proj_{1.0f};
     uint32_t output_width_ = 320;
     uint32_t output_height_ = 240;
+
+    // Spatial chunk grid for GS frustum culling
+    GsChunkGrid gs_chunk_grid_;
+    std::vector<Gaussian> gs_active_buffer_;
+    std::vector<uint32_t> gs_prev_visible_;
 
     // Screenshot capture
     std::string screenshot_path_;

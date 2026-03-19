@@ -218,6 +218,51 @@ cd tools/apps/level-designer && pnpm dev
 
 See [tools/README.md](tools/README.md) for full documentation.
 
+## 3D Gaussian Splatting
+
+The engine supports 3D Gaussian Splatting (3DGS) as an alternative to traditional tilemaps for rendering environments. A scene can use a `.ply` file containing Gaussians instead of (or alongside) a tilemap.
+
+### Pipeline
+
+```
+PLY file → GaussianCloud → GsRenderer (compute) → Storage Image → Fullscreen Blit
+```
+
+The GS compute pipeline runs three passes before the main render pass:
+
+1. **Preprocess** — project 3D Gaussians to 2D screen space, frustum cull, compute 2D covariance
+2. **Bitonic Sort** — depth-sort projected splats front-to-back
+3. **Tile Rasterizer** — 16x16 tile-based splatting into a 320x240 HDR storage image
+
+The output is sampled with nearest-neighbor filtering for pixel-art upscale and composited as a fullscreen quad.
+
+### Performance Optimization
+
+For large maps (open-world scale), the renderer uses a multi-layered optimization strategy:
+
+- **Render early termination** — the render shader `break`s on the first culled Gaussian instead of skipping one-by-one, since bitonic sort places all culled entries at the end
+- **Visible count via atomic counter** — the preprocess shader atomically counts non-culled Gaussians; the render shader uses this count as its loop bound instead of the total Gaussian count
+- **Spatial chunk grid** (`GsChunkGrid`) — partitions the cloud into a 2D grid on the XZ ground plane (default 32-unit chunks). Each frame, the CPU determines which chunks intersect the camera frustum and uploads only those Gaussians. A dirty-check skips re-upload when the visible chunk set hasn't changed
+
+This caps GPU work to approximately one screen's worth of Gaussians (~57K) regardless of total map size.
+
+### Scene Format
+
+```json
+{
+  "gaussian_splat": {
+    "ply_file": "maps/map.ply",
+    "camera": { "position": [0, 5, 10], "target": [0, 0, 0] },
+    "render_width": 320,
+    "render_height": 240
+  }
+}
+```
+
+### Map Painter
+
+The **Map Painter** tool (port 5180) provides a browser-based editor for creating 3DGS maps: paint a 2D pixel canvas with height brush, then export as voxel-to-Gaussian PLY.
+
 ## Project Structure
 
 ```

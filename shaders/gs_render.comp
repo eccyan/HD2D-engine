@@ -33,6 +33,10 @@ layout(set = 0, binding = 2) uniform Uniforms {
 
 layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D output_image;
 
+layout(set = 0, binding = 4) readonly buffer VisibleCountBuffer {
+    uint visible_count;
+};
+
 void main() {
     uvec2 tile_id = gl_WorkGroupID.xy;
     uvec2 local_id = gl_LocalInvocationID.xy;
@@ -40,7 +44,7 @@ void main() {
 
     uint width = params.x;
     uint height = params.y;
-    uint count = params.z;
+    uint count = visible_count;
 
     if (pixel.x >= width || pixel.y >= height) return;
 
@@ -54,8 +58,8 @@ void main() {
     for (uint s = 0; s < count; ++s) {
         uint idx = sort_entries[s].index;
 
-        // Skip culled Gaussians (key == max)
-        if (sort_entries[s].key == 0xFFFFFFFF) continue;
+        // Culled Gaussians (key == max) are sorted to the end — stop immediately
+        if (sort_entries[s].key == 0xFFFFFFFF) break;
 
         ProjectedSplat splat = projected[idx];
 
