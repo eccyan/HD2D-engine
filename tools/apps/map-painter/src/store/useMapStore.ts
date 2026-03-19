@@ -72,6 +72,10 @@ export interface MapPainterState {
   undo: () => void;
   redo: () => void;
 
+  // Save/Load
+  saveProject: () => string;
+  loadProject: (json: string) => void;
+
   // Export
   setPreviewCamera: (camera: MapPainterState['previewCamera']) => void;
 }
@@ -312,6 +316,59 @@ export const useMapStore = create<MapPainterState>((set, get) => ({
       }],
       layers: next.layers,
       heights: next.heights,
+    });
+  },
+
+  saveProject: () => {
+    const state = get();
+    const encode = (arr: Uint8Array | Float32Array) =>
+      btoa(String.fromCharCode(...new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength)));
+    return JSON.stringify({
+      version: 1,
+      width: state.width,
+      height: state.height,
+      layers: {
+        ground: encode(state.layers.ground),
+        walls: encode(state.layers.walls),
+        decorations: encode(state.layers.decorations),
+      },
+      heights: encode(state.heights),
+      collisionGrid: state.collisionGrid,
+      previewCamera: state.previewCamera,
+    });
+  },
+
+  loadProject: (json: string) => {
+    const data = JSON.parse(json);
+    if (!data.version || !data.width || !data.height) {
+      throw new Error('Invalid project file');
+    }
+    const decode = (b64: string) => {
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return arr;
+    };
+    const size = data.width * data.height;
+    const layers: Record<Layer, Uint8Array> = {
+      ground: new Uint8Array(decode(data.layers.ground).buffer),
+      walls: new Uint8Array(decode(data.layers.walls).buffer),
+      decorations: new Uint8Array(decode(data.layers.decorations).buffer),
+    };
+    const heightsRaw = decode(data.heights);
+    const heights = new Float32Array(heightsRaw.buffer);
+    const collisionGrid: boolean[] = data.collisionGrid || new Array(size).fill(false);
+    const previewCamera = data.previewCamera || { position: [0, 0, 200] as [number, number, number], target: [0, 0, 0] as [number, number, number], fov: 45 };
+
+    set({
+      width: data.width,
+      height: data.height,
+      layers,
+      heights,
+      collisionGrid,
+      previewCamera,
+      undoStack: [],
+      redoStack: [],
     });
   },
 

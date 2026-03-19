@@ -47,6 +47,8 @@ export const MenuBar: React.FC = () => {
   const undo = useMapStore(s => s.undo);
   const redo = useMapStore(s => s.redo);
   const autoGenerateCollision = useMapStore(s => s.autoGenerateCollision);
+  const saveProject = useMapStore(s => s.saveProject);
+  const loadProject = useMapStore(s => s.loadProject);
 
   const handleNew = useCallback(() => {
     const w = Number(prompt('Width:', String(width))) || width;
@@ -88,6 +90,37 @@ export const MenuBar: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [width, height, collisionGrid, previewCamera]);
 
+  const handleSave = useCallback(() => {
+    const json = saveProject();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'map.mapdata';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [saveProject]);
+
+  const handleLoad = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mapdata,.json';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          loadProject(reader.result as string);
+        } catch (e) {
+          alert('Failed to load project: ' + (e as Error).message);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [loadProject]);
+
   const handleAutoCollision = useCallback(() => {
     const threshold = Number(prompt('Height threshold for collision:', '0.5')) || 0.5;
     autoGenerateCollision(threshold);
@@ -97,6 +130,9 @@ export const MenuBar: React.FC = () => {
     <div style={styles.bar}>
       <button style={styles.btn} onClick={handleNew}>New</button>
       <button style={styles.btn} onClick={handleResize}>Resize</button>
+      <div style={styles.separator} />
+      <button style={styles.btn} onClick={handleSave}>Save</button>
+      <button style={styles.btn} onClick={handleLoad}>Load</button>
       <div style={styles.separator} />
       <button style={styles.btn} onClick={undo}>Undo</button>
       <button style={styles.btn} onClick={redo}>Redo</button>
