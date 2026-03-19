@@ -131,7 +131,6 @@ add_subdirectory(shaders)
 # --- Core OBJECT library (shared by main + demo) ---------------------------
 
 add_library(vulkan_game_core OBJECT
-    src/app.cpp
     src/engine/vk_context.cpp
     src/engine/swapchain.cpp
     src/engine/render_pass.cpp
@@ -158,7 +157,6 @@ add_library(vulkan_game_core OBJECT
     src/engine/text_renderer.cpp
     src/engine/locale_manager.cpp
     src/engine/minimap.cpp
-    src/engine/control_server.cpp
     src/engine/post_process.cpp
     src/engine/resource_manager.cpp
     src/engine/game_state.cpp
@@ -167,6 +165,11 @@ add_library(vulkan_game_core OBJECT
     src/engine/day_night_system.cpp
     src/engine/weather_system.cpp
     src/engine/ui/ui_context.cpp
+    src/engine/gaussian_cloud.cpp
+    src/engine/gs_renderer.cpp
+    src/engine/gs_chunk_grid.cpp
+    src/engine/gs_parallax_camera.cpp
+    src/engine/collision_gen.cpp
     src/engine/save_system.cpp
     src/engine/scripting/wren_vm.cpp
     src/engine/scripting/wren_bindings.cpp
@@ -177,6 +180,10 @@ add_library(vulkan_game_core OBJECT
     src/game/pause_state.cpp
     src/game/transition_state.cpp
 )
+
+if(NOT WIN32)
+    target_sources(vulkan_game_core PRIVATE src/engine/control_server.cpp)
+endif()
 
 target_include_directories(vulkan_game_core PUBLIC
     ${PROJECT_SOURCE_DIR}/include
@@ -208,7 +215,8 @@ endif()
 
 # --- Main executable --------------------------------------------------------
 
-add_executable(vulkan_game src/main.cpp)
+add_executable(vulkan_game src/main.cpp src/app.cpp)
+target_compile_definitions(vulkan_game PRIVATE VG_BUILD_PROFILE=0)
 target_link_libraries(vulkan_game PRIVATE vulkan_game_core)
 add_dependencies(vulkan_game shaders)
 
@@ -218,7 +226,9 @@ add_executable(vulkan_game_demo
     src/demo_main.cpp
     src/demo/demo_app.cpp
     src/demo/demo_gameplay_state.cpp
+    src/app.cpp
 )
+target_compile_definitions(vulkan_game_demo PRIVATE VG_BUILD_PROFILE=0)
 target_link_libraries(vulkan_game_demo PRIVATE vulkan_game_core)
 add_dependencies(vulkan_game_demo shaders)
 
@@ -236,4 +246,23 @@ add_custom_command(TARGET vulkan_game_demo POST_BUILD
         ${PROJECT_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:vulkan_game_demo>/assets
     COMMENT "Copying assets to demo build directory"
+)
+
+# --- GS Demo executable ----------------------------------------------------
+
+add_executable(vulkan_game_gs_demo
+    src/gs_demo_main.cpp
+    src/demo/gs_demo_app.cpp
+    src/demo/gs_demo_state.cpp
+    src/app.cpp
+)
+target_compile_definitions(vulkan_game_gs_demo PRIVATE VG_BUILD_PROFILE=1)
+target_link_libraries(vulkan_game_gs_demo PRIVATE vulkan_game_core)
+add_dependencies(vulkan_game_gs_demo shaders)
+
+add_custom_command(TARGET vulkan_game_gs_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${PROJECT_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:vulkan_game_gs_demo>/assets
+    COMMENT "Copying assets to GS demo build directory"
 )

@@ -2,6 +2,8 @@
 
 #include "vulkan_game/engine/buffer.hpp"
 #include "vulkan_game/engine/camera.hpp"
+#include "vulkan_game/engine/gs_chunk_grid.hpp"
+#include "vulkan_game/engine/gs_renderer.hpp"
 #include "vulkan_game/engine/command_pool.hpp"
 #include "vulkan_game/engine/descriptor.hpp"
 #include "vulkan_game/engine/font_atlas.hpp"
@@ -36,6 +38,18 @@ public:
     void init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_textures);
     void init_shadows(ResourceManager& resources);
     void draw_frame();
+    void init_gs(const GaussianCloud& cloud, uint32_t width = 320, uint32_t height = 240);
+    void set_gs_background(const ResourceHandle<Texture>& texture);
+    void set_gs_camera(const glm::mat4& view, const glm::mat4& proj) {
+        gs_view_ = view; gs_proj_ = proj;
+    }
+    GsRenderer& gs_renderer() { return gs_renderer_; }
+    GsChunkGrid& gs_chunk_grid() { return gs_chunk_grid_; }
+    const GsChunkGrid& gs_chunk_grid() const { return gs_chunk_grid_; }
+    bool has_gs_cloud() const { return gs_renderer_.has_cloud(); }
+    void set_gs_skip_chunk_cull(bool skip) { gs_skip_chunk_cull_ = skip; }
+    void set_gs_blit_offset(float x, float y) { gs_blit_offset_x_ = x; gs_blit_offset_y_ = y; }
+
     void draw_scene(Scene& scene,
                     const std::vector<SpriteDrawInfo>& entity_sprites = {},
                     const std::vector<SpriteDrawInfo>& outline_sprites = {},
@@ -115,6 +129,28 @@ private:
     uint32_t acquire_semaphore_index_ = 0;
     float last_time_ = 0.0f;
     bool font_initialized_ = false;
+
+    // Gaussian splatting
+    GsRenderer gs_renderer_;
+    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_descriptor_sets_{};    // scene UBO (unused now)
+    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_ui_descriptor_sets_{}; // UI orthographic UBO
+    bool gs_initialized_ = false;
+    std::array<VkDescriptorSet, kMaxFramesInFlight> gs_bg_descriptor_sets_{};
+    bool gs_bg_initialized_ = false;
+
+    // GS camera (3D perspective, independent of sprite camera)
+    glm::mat4 gs_view_{1.0f};
+    glm::mat4 gs_proj_{1.0f};
+    uint32_t output_width_ = 320;
+    uint32_t output_height_ = 240;
+
+    // Spatial chunk grid for GS frustum culling
+    GsChunkGrid gs_chunk_grid_;
+    std::vector<Gaussian> gs_active_buffer_;
+    std::vector<uint32_t> gs_prev_visible_;
+    bool gs_skip_chunk_cull_ = false;
+    float gs_blit_offset_x_ = 0.0f;
+    float gs_blit_offset_y_ = 0.0f;
 
     // Screenshot capture
     std::string screenshot_path_;

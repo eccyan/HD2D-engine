@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vulkan_game/engine/collision_gen.hpp"
 #include "vulkan_game/engine/day_night_system.hpp"
 #include "vulkan_game/engine/dialog.hpp"
 #include "vulkan_game/engine/direction.hpp"
@@ -60,6 +61,26 @@ struct WeatherData {
     float transition_speed = 1.0f;
 };
 
+struct GsParallaxConfig {
+    float azimuth_range = 0.15f;       // ±radians horizontal shift (~±8.5°)
+    float elevation_min = -0.15f;      // minimum elevation (slight down)
+    float elevation_max = 0.15f;       // maximum elevation (slight up)
+    float distance_range = 0.10f;      // ±fraction of home distance
+    float parallax_strength = 1.0f;    // mapping multiplier (0 = disabled)
+};
+
+struct GaussianSplatData {
+    std::string ply_file;
+    glm::vec3 camera_position{0.0f, 5.0f, 10.0f};
+    glm::vec3 camera_target{0.0f, 0.0f, 0.0f};
+    float camera_fov = 45.0f;
+    uint32_t render_width = 320;
+    uint32_t render_height = 240;
+    float scale_multiplier = 1.0f;   // Applied to Gaussian scales at load time
+    std::optional<GsParallaxConfig> parallax;  // Shadow-box parallax camera config
+    std::string background_image;  // Optional background behind GS (sky, mountains, etc.)
+};
+
 struct PortalData {
     glm::vec2 position{0.0f};
     glm::vec2 size{1.0f};
@@ -69,6 +90,10 @@ struct PortalData {
 };
 
 struct SceneData {
+    // Gaussian splatting (optional — when present, tilemap is optional)
+    std::optional<GaussianSplatData> gaussian_splat;
+    std::optional<CollisionGrid> collision;
+
     TileLayer tilemap;
     std::vector<TileAnimationDef> tile_animations;
     glm::vec4 ambient_color{0.25f, 0.28f, 0.45f, 1.0f};

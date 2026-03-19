@@ -15,6 +15,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -876,7 +878,9 @@ void App::init_subsystems() {
 
     ui_ctx_.init(font_atlas_, text_renderer_);
     audio_.init("assets");
+#ifndef _WIN32
     control_server_.start();
+#endif
 
     // Initialize Wren scripting
     wren_vm_.init(this);
@@ -1027,6 +1031,95 @@ void App::init_scene(const std::string& scene_path) {
         npc_ids_.push_back(npc);
     }
 
+    // Gaussian splatting from scene data
+    if (scene_data.gaussian_splat) {
+        const auto& gs = *scene_data.gaussian_splat;
+        GaussianCloud cloud;
+        try {
+            cloud = GaussianCloud::load_ply(gs.ply_file);
+        } catch (const std::runtime_error& e) {
+            std::fprintf(stderr, "Warning: %s (skipping GS rendering)\n", e.what());
+        }
+        if (!cloud.empty()) {
+            if (gs.scale_multiplier != 1.0f) {
+                cloud.scale_all(gs.scale_multiplier);
+            }
+            std::fprintf(stderr, "GS: Loaded %u Gaussians from %s\n",
+                         cloud.count(), gs.ply_file.c_str());
+            std::fprintf(stderr, "GS: AABB min=(%.1f,%.1f,%.1f) max=(%.1f,%.1f,%.1f)\n",
+                         cloud.bounds().min.x, cloud.bounds().min.y, cloud.bounds().min.z,
+                         cloud.bounds().max.x, cloud.bounds().max.y, cloud.bounds().max.z);
+            std::fprintf(stderr, "GS: Camera pos=(%.1f,%.1f,%.1f) target=(%.1f,%.1f,%.1f) fov=%.1f\n",
+                         gs.camera_position.x, gs.camera_position.y, gs.camera_position.z,
+                         gs.camera_target.x, gs.camera_target.y, gs.camera_target.z,
+                         gs.camera_fov);
+
+            // Auto-scale render resolution for large Gaussian counts
+            uint32_t gs_w = gs.render_width;
+            uint32_t gs_h = gs.render_height;
+            if (cloud.count() > 100000 && gs_w >= 320) {
+                gs_w = 160;
+                gs_h = 120;
+                std::fprintf(stderr, "GS: Auto-scaled render to %ux%u for %u Gaussians\n",
+                             gs_w, gs_h, cloud.count());
+            } else if (cloud.count() > 50000 && gs_w >= 320) {
+                gs_w = 240;
+                gs_h = 180;
+                std::fprintf(stderr, "GS: Auto-scaled render to %ux%u for %u Gaussians\n",
+                             gs_w, gs_h, cloud.count());
+            }
+
+            renderer_.init_gs(cloud, gs_w, gs_h);
+
+            // Set up 3D perspective camera for GS rendering
+            float aspect = static_cast<float>(gs_w) / static_cast<float>(gs_h);
+            auto gs_view = glm::lookAt(gs.camera_position, gs.camera_target, glm::vec3(0, 1, 0));
+            auto gs_proj = glm::perspective(glm::radians(gs.camera_fov), aspect, 0.1f, 1000.0f);
+            gs_proj[1][1] *= -1.0f;  // Vulkan Y-flip
+            renderer_.set_gs_camera(gs_view, gs_proj);
+        }
+
+        // Load background image if specified
+        if (!gs.background_image.empty()) {
+            auto bg_tex = resources_.load_texture(gs.background_image);
+            renderer_.set_gs_background(bg_tex);
+            std::fprintf(stderr, "GS: Background loaded: %s\n", gs.background_image.c_str());
+        }
+
+        // Configure parallax camera if parallax config present
+        if (gs.parallax) {
+            gs_parallax_camera_.configure(
+                gs.camera_position, gs.camera_target,
+                gs.camera_fov, renderer_.gs_renderer().output_width(), renderer_.gs_renderer().output_height(),
+                *gs.parallax);
+            gs_parallax_active_ = true;
+            gs_frame_counter_ = 0;  // first frame does full compute
+
+            // Shadow-box maps: skip per-frame chunk culling — all Gaussians
+            // are always visible from every parallax angle, so upload once at load.
+            renderer_.set_gs_skip_chunk_cull(true);
+            renderer_.gs_renderer().set_skip_sort(false);  // first frame: full compute
+
+            // Set shadow box shader params: tighter frustum margin, no cone cull
+            // (cone cull is not useful for front-facing XY maps)
+            glm::vec3 cam_fwd = glm::normalize(gs.camera_target - gs.camera_position);
+            renderer_.gs_renderer().set_shadow_box_params(
+                cam_fwd, 0.0f, gs.camera_position, 32.0f);
+
+            std::fprintf(stderr, "GS: Parallax camera enabled (strength=%.2f)\n",
+                         gs.parallax->parallax_strength);
+        } else {
+            gs_parallax_active_ = false;
+            renderer_.set_gs_skip_chunk_cull(false);
+            renderer_.gs_renderer().clear_shadow_box_params();
+        }
+    }
+
+    // Collision grid from scene data (used in place of tilemap collision)
+    if (scene_data.collision) {
+        collision_grid_ = *scene_data.collision;
+    }
+
     // Tilemap from scene data
     scene_.set_tile_layer(std::move(scene_data.tilemap));
     scene_.set_ambient_color(scene_data.ambient_color);
@@ -1118,6 +1211,13 @@ void App::clear_scene() {
     day_night_system_.reset();
     for (auto& id : torch_emitter_ids_) id = 0;
 
+    // Clear collision grid and parallax state
+    collision_grid_ = {};
+    gs_parallax_active_ = false;
+    gs_frame_counter_ = 0;
+    gs_last_compute_offset_ = glm::vec2(0.0f);
+    renderer_.set_gs_skip_chunk_cull(false);
+
     // Reset scene state
     scene_.clear_lights();
     scene_.set_fog_density(0.0f);
@@ -1158,16 +1258,21 @@ void App::check_portals() {
 void App::update_game(float dt) {
     if (transitioning_) return;
 
+    if constexpr (!kIsGsViewer) {
     if (game_mode_ == GameMode::Dialog) {
         // Dialog mode: freeze movement, handle advance
         if (input_.was_key_pressed(GLFW_KEY_E) || input_.was_key_pressed(GLFW_KEY_SPACE)) {
             if (!dialog_state_.advance()) {
                 game_mode_ = GameMode::Explore;
                 audio_.play(SoundId::DialogClose);
+#ifndef _WIN32
                 emit_event("dialog_ended");
+#endif
             } else {
                 audio_.play(SoundId::DialogBlip);
+#ifndef _WIN32
                 emit_event("dialog_advanced", {{"line", dialog_state_.current_line}});
+#endif
             }
         }
 
@@ -1210,6 +1315,47 @@ void App::update_game(float dt) {
 
         auto& player_pos = world_.get<ecs::Transform>(player_id_).position;
         renderer_.camera().set_follow_target(player_pos);
+
+        // Update parallax camera from player position
+        if (gs_parallax_active_ && renderer_.has_gs_cloud()) {
+            auto& grid = renderer_.gs_chunk_grid();
+            if (!grid.empty()) {
+                auto aabb = grid.cloud_bounds();
+                glm::vec2 map_center = {
+                    (aabb.min.x + aabb.max.x) * 0.5f,
+                    (aabb.min.y + aabb.max.y) * 0.5f
+                };
+                glm::vec2 map_half = {
+                    std::max((aabb.max.x - aabb.min.x) * 0.5f, 1.0f),
+                    std::max((aabb.max.y - aabb.min.y) * 0.5f, 1.0f)
+                };
+                glm::vec2 player_xy = {player_pos.x, player_pos.y};
+                glm::vec2 player_offset = (player_xy - map_center) / map_half;
+                player_offset = glm::clamp(player_offset, glm::vec2(-1.0f), glm::vec2(1.0f));
+                // Always update parallax camera for smooth tracking
+                gs_parallax_camera_.update(player_offset, dt);
+
+                // Hybrid re-render: full GS compute every N frames, blit offset in between
+                bool is_compute_frame = (gs_frame_counter_ % gs_render_interval_) == 0;
+                gs_frame_counter_++;
+
+                if (is_compute_frame) {
+                    // Full 3D parallax via GS compute pipeline
+                    renderer_.gs_renderer().set_skip_sort(false);
+                    renderer_.set_gs_camera(gs_parallax_camera_.view(), gs_parallax_camera_.proj());
+                    renderer_.set_gs_blit_offset(0.0f, 0.0f);
+                    gs_last_compute_offset_ = player_offset;
+                } else {
+                    // Cached frame: use delta from last compute for blit offset
+                    renderer_.gs_renderer().set_skip_sort(true);
+                    glm::vec2 delta = player_offset - gs_last_compute_offset_;
+                    constexpr float kParallaxPixels = 30.0f;
+                    renderer_.set_gs_blit_offset(
+                        delta.x * kParallaxPixels,
+                        -delta.y * kParallaxPixels);
+                }
+            }
+        }
 
         auto& player_facing = world_.get<ecs::Facing>(player_id_);
         const char* dir_str = direction_suffix(player_facing.dir);
@@ -1269,7 +1415,9 @@ void App::update_game(float dt) {
                     dialog_state_.start(npc_dialogs_[di]);
                     game_mode_ = GameMode::Dialog;
                     audio_.play(SoundId::DialogOpen);
+#ifndef _WIN32
                     emit_event("dialog_started", {{"npc_index", nearest_npc}});
+#endif
 
                     // Transition player to idle
                     player_anim.state_machine.transition_to(std::string("idle_") + dir_str);
@@ -1277,7 +1425,9 @@ void App::update_game(float dt) {
             }
         }
     }
+    } // if constexpr (!kIsGsViewer) — game mode logic
 
+    if constexpr (!kIsGsViewer) {
     // Animated tiles (runs in both explore and dialog modes so water keeps flowing)
     if (feature_flags_.animated_tiles && scene_.tile_animator()) {
         scene_.tile_animator()->update(dt);
@@ -1345,6 +1495,7 @@ void App::update_game(float dt) {
     }
 
     update_audio(dt);
+    } // if constexpr (!kIsGsViewer) — per-frame systems
 }
 
 void App::update_audio(float dt) {
@@ -1415,6 +1566,7 @@ void App::main_loop() {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
 
+#ifndef _WIN32
         // Handle client disconnect → revert to realtime
         if (!control_server_.has_client() && step_mode_) {
             step_mode_ = false;
@@ -1423,6 +1575,7 @@ void App::main_loop() {
         }
 
         process_commands();
+#endif
 
         // Clear draw lists at frame start (states will rebuild them)
         overlay_sprites_.clear();
@@ -1438,7 +1591,9 @@ void App::main_loop() {
                 pending_steps_--;
             }
             if (did_step) {
+#ifndef _WIN32
                 control_server_.send(build_state_json());
+#endif
             }
         } else {
             // Realtime mode
@@ -1504,6 +1659,7 @@ void App::main_loop() {
                              shadow_sprites_, particle_sprites, overlay_sprites_, ui_batches,
                              feature_flags_);
 
+#ifndef _WIN32
         // Send screenshot response after draw completes
         if (!screenshot_response_path_.empty()) {
             if (renderer_.screenshot_write_ok()) {
@@ -1517,9 +1673,11 @@ void App::main_loop() {
             }
             screenshot_response_path_.clear();
         }
+#endif
     }
 }
 
+#ifndef _WIN32
 void App::process_commands() {
     auto commands = control_server_.poll();
     for (const auto& cmd_json : commands) {
@@ -2050,6 +2208,7 @@ void App::process_commands() {
         }
     }
 }
+#endif
 
 nlohmann::json App::build_state_json() const {
     nlohmann::json state;
@@ -2208,6 +2367,7 @@ void App::apply_save_data(const SaveData& data) {
     day_night_system_.set_time_of_day(data.time_of_day);
 }
 
+#ifndef _WIN32
 void App::emit_event(const std::string& event, const nlohmann::json& data) {
     if (!control_server_.has_client()) return;
     if (!control_server_.is_event_subscribed(event)) return;
@@ -2220,6 +2380,7 @@ void App::emit_event(const std::string& event, const nlohmann::json& data) {
     }
     control_server_.send(msg);
 }
+#endif
 
 nlohmann::json App::build_scene_json() const {
     // Reconstruct SceneData from current live state + stored metadata
@@ -2308,7 +2469,9 @@ void App::cleanup() {
         state_stack_.pop(*this);
     }
     wren_vm_.shutdown();
+#ifndef _WIN32
     control_server_.stop();
+#endif
     audio_.shutdown();
     renderer_.shutdown();
     resources_.shutdown();

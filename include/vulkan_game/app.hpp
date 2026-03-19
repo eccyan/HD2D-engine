@@ -1,7 +1,11 @@
 #pragma once
 
 #include "vulkan_game/engine/audio_system.hpp"
+#include "vulkan_game/engine/collision_gen.hpp"
+#include "vulkan_game/engine/gaussian_cloud.hpp"
+#ifndef _WIN32
 #include "vulkan_game/engine/control_server.hpp"
+#endif
 #include "vulkan_game/engine/day_night_system.hpp"
 #include "vulkan_game/engine/dialog.hpp"
 #include "vulkan_game/engine/direction.hpp"
@@ -17,6 +21,7 @@
 #include "vulkan_game/engine/renderer.hpp"
 #include "vulkan_game/engine/resource_manager.hpp"
 #include "vulkan_game/engine/save_system.hpp"
+#include "vulkan_game/engine/gs_parallax_camera.hpp"
 #include "vulkan_game/engine/scene_loader.hpp"
 #include "vulkan_game/engine/scripting/script_system.hpp"
 #include "vulkan_game/engine/scripting/wren_bindings.hpp"
@@ -52,7 +57,9 @@ public:
     FontAtlas& font_atlas() { return font_atlas_; }
     TextRenderer& text_renderer() { return text_renderer_; }
     ui::UIContext& ui_ctx() { return ui_ctx_; }
+#ifndef _WIN32
     ControlServer& control_server() { return control_server_; }
+#endif
     GameStateStack& state_stack() { return state_stack_; }
     GLFWwindow* window() { return window_; }
 
@@ -126,12 +133,16 @@ protected:
 
 private:
     void init_window();
+#ifndef _WIN32
     void process_commands();
+#endif
     nlohmann::json build_state_json() const;
     nlohmann::json build_map_json() const;
     nlohmann::json build_scene_json() const;
     nlohmann::json build_tilemap_json() const;
+#ifndef _WIN32
     void emit_event(const std::string& event, const nlohmann::json& data = {});
+#endif
     static void generate_player_sheet();
     static void generate_tileset();
     static void generate_particle_atlas();
@@ -176,6 +187,20 @@ private:
     DialogState dialog_state_;
     std::vector<DialogScript> npc_dialogs_;
 
+    // Gaussian splatting collision grid (when using GS scenes instead of tilemap)
+    CollisionGrid collision_grid_;
+
+    // Parallax camera for shadow-box GS effect
+    GsParallaxCamera gs_parallax_camera_;
+    bool gs_parallax_active_ = false;
+    uint32_t gs_frame_counter_ = 0;
+    uint32_t gs_render_interval_ = 4;
+    glm::vec2 gs_last_compute_offset_{0.0f};
+public:
+    void set_gs_parallax_active(bool active) { gs_parallax_active_ = active; }
+    GsParallaxCamera& gs_parallax_camera() { return gs_parallax_camera_; }
+private:
+
     // Scene transition
     std::string current_scene_path_ = "assets/scenes/test_scene.json";
     std::vector<PortalData> portals_;
@@ -214,7 +239,9 @@ private:
     ScriptSystem script_system_;
 
     // Control server
+#ifndef _WIN32
     ControlServer control_server_;
+#endif
     bool step_mode_ = false;
     int pending_steps_ = 0;
     uint64_t tick_ = 0;

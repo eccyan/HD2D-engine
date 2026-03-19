@@ -1,0 +1,32 @@
+{
+  "gaussian_splat": {
+    "ply_file": "assets/maps/map.ply",
+    "scale_multiplier": 0.3,
+    "camera": {
+      "position": [0, 0, 200],
+      "target": [0, 0, 0],
+      "fov": 60
+    },
+    "render_width": 320,
+    "render_height": 240,
+    "parallax": {
+      "azimuth_range": 0.15,
+      "elevation_min": -0.15,
+      "elevation_max": 0.15,
+      "distance_range": 0.10,
+      "parallax_strength": 1.0
+    }
+  },
+  "collision": {
+    "width": 1,
+    "height": 1,
+    "cell_size": 1.0,
+    "solid": [false]
+  },
+  "ambient_color": [1.0, 1.0, 1.0, 1.0],
+  "player": {
+    "position": [0, 0, 0],
+    "tint": [1, 1, 1, 0],
+    "facing": "down"
+  }
+}

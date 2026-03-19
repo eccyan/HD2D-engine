@@ -1,0 +1,188 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+// Input Gaussian data
+struct GpuGaussian {
+    vec4 pos_opacity;    // xyz = position, w = opacity
+    vec4 scale_pad;      // xyz = scale, w = unused
+    vec4 rot;            // xyzw = quaternion (x,y,z,w)
+    vec4 color_pad;      // rgb = color, w = unused
+};
+
+// Output projected splat
+struct ProjectedSplat {
+    vec2 center;         // screen-space center (pixels)
+    float depth;         // view-space depth (positive = in front)
+    float radius;        // bounding circle radius (pixels)
+    vec4 conic_opacity;  // conic matrix (a, b, c) + opacity
+    vec4 color;          // rgba
+};
+
+// Sort entry
+struct SortEntry {
+    uint key;            // depth as uint
+    uint index;          // original index
+};
+
+layout(set = 0, binding = 0) readonly buffer GaussianBuffer {
+    GpuGaussian gaussians[];
+};
+
+layout(set = 0, binding = 1) writeonly buffer ProjectedBuffer {
+    ProjectedSplat projected[];
+};
+
+layout(set = 0, binding = 2) buffer SortBuffer {
+    SortEntry sort_entries[];
+};
+
+layout(set = 0, binding = 3) uniform Uniforms {
+    mat4 view;
+    mat4 proj;
+    uvec4 params;       // x = width, y = height, z = gaussian_count, w = sort_size
+    vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = unused
+    vec4 cone_dir;      // xyz = cone direction, w = unused
+    vec4 cam_pos;       // xyz = camera position, w = unused
+};
+
+layout(set = 0, binding = 4) buffer VisibleCountBuffer {
+    uint visible_count;
+};
+
+// Build rotation matrix from quaternion
+mat3 quat_to_mat(vec4 q) {
+    float x = q.x, y = q.y, z = q.z, w = q.w;
+    return mat3(
+        1.0 - 2.0*(y*y + z*z), 2.0*(x*y + w*z),       2.0*(x*z - w*y),
+        2.0*(x*y - w*z),       1.0 - 2.0*(x*x + z*z), 2.0*(y*z + w*x),
+        2.0*(x*z + w*y),       2.0*(y*z - w*x),       1.0 - 2.0*(x*x + y*y)
+    );
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= params.z) return;
+
+    GpuGaussian g = gaussians[idx];
+
+    // Transform to view space
+    vec4 view_pos = view * vec4(g.pos_opacity.xyz, 1.0);
+
+    // Frustum cull: discard if behind near plane (view space z is negative for visible objects)
+    if (view_pos.z > -0.1) {
+        sort_entries[idx].key = 0xFFFFFFFF;
+        sort_entries[idx].index = idx;
+        return;
+    }
+
+    // Project to clip space
+    vec4 clip_pos = proj * view_pos;
+    if (clip_pos.w <= 0.0) {
+        sort_entries[idx].key = 0xFFFFFFFF;
+        sort_entries[idx].index = idx;
+        return;
+    }
+
+    // NDC: Vulkan NDC is [-1,1] X, [-1,1] Y (with Y-flip already in proj), [0,1] Z
+    vec3 ndc = clip_pos.xyz / clip_pos.w;
+
+    // Screen space: map NDC to pixel coordinates
+    // With Vulkan Y-flip in projection, ndc.y is already correct orientation
+    float screen_x = (ndc.x * 0.5 + 0.5) * float(params.x);
+    float screen_y = (ndc.y * 0.5 + 0.5) * float(params.y);
+
+    // Frustum cull: discard if outside screen (margin from shadow_box.x, default 128)
+    float margin = shadow_box.x;
+    if (screen_x < -margin || screen_x > float(params.x) + margin ||
+        screen_y < -margin || screen_y > float(params.y) + margin) {
+        sort_entries[idx].key = 0xFFFFFFFF;
+        sort_entries[idx].index = idx;
+        return;
+    }
+
+    // Viewing cone backface cull (shadow box mode): cull Gaussians outside viewing cone
+    if (shadow_box.y > 0.0) {
+        vec3 to_gaussian = normalize(g.pos_opacity.xyz - cam_pos.xyz);
+        if (dot(to_gaussian, cone_dir.xyz) < shadow_box.y) {
+            sort_entries[idx].key = 0xFFFFFFFF;
+            sort_entries[idx].index = idx;
+            return;
+        }
+    }
+
+    // Compute 3D covariance matrix Sigma = R * S * S^T * R^T
+    mat3 R = quat_to_mat(g.rot);
+    vec3 s = g.scale_pad.xyz;
+    mat3 S = mat3(
+        s.x, 0, 0,
+        0, s.y, 0,
+        0, 0, s.z
+    );
+    mat3 M = R * S;
+    mat3 Sigma = M * transpose(M);
+
+    // Project covariance to 2D using the EWA splatting approach
+    // Use absolute focal lengths (Vulkan Y-flip makes fy negative)
+    float fx = abs(proj[0][0]);  // focal_x in NDC
+    float fy = abs(proj[1][1]);  // focal_y in NDC (abs to handle Y-flip)
+    float tz = view_pos.z;       // negative depth
+    float tz2 = tz * tz;
+
+    // Jacobian of perspective projection in view space
+    mat3 J = mat3(
+        fx / tz, 0, 0,
+        0, fy / tz, 0,
+        -fx * view_pos.x / tz2, -fy * view_pos.y / tz2, 0
+    );
+
+    // Transform covariance: W is upper-left 3x3 of view matrix
+    mat3 W = mat3(view);
+    mat3 T = J * W;
+    mat3 cov2d_full = T * Sigma * transpose(T);
+
+    // Extract 2x2 covariance in pixel space
+    float half_w = float(params.x) * 0.5;
+    float half_h = float(params.y) * 0.5;
+
+    float a = cov2d_full[0][0] * half_w * half_w + 0.3;
+    float b = cov2d_full[0][1] * half_w * half_h;
+    float c = cov2d_full[1][1] * half_h * half_h + 0.3;
+
+    // Compute inverse of 2D covariance for conic representation
+    float det = a * c - b * b;
+    if (det <= 1e-6) {
+        sort_entries[idx].key = 0xFFFFFFFF;
+        sort_entries[idx].index = idx;
+        return;
+    }
+    float inv_det = 1.0 / det;
+    float conic_a = c * inv_det;
+    float conic_b = -b * inv_det;
+    float conic_c = a * inv_det;
+
+    // Compute bounding radius (3 sigma)
+    float mid = 0.5 * (a + c);
+    float disc = max(0.1, mid * mid - det);
+    float lambda_max = mid + sqrt(disc);
+    float radius_px = ceil(3.0 * sqrt(lambda_max));
+
+    // Clamp radius to reasonable bounds
+    radius_px = min(radius_px, float(max(params.x, params.y)));
+
+    // Write projected splat
+    ProjectedSplat splat;
+    splat.center = vec2(screen_x, screen_y);
+    splat.depth = -view_pos.z;
+    splat.radius = radius_px;
+    splat.conic_opacity = vec4(conic_a, conic_b, conic_c, g.pos_opacity.w);
+    splat.color = vec4(g.color_pad.rgb, 1.0);
+    projected[idx] = splat;
+
+    // Write sort entry (depth as uint for bitonic sort — closer = smaller key)
+    sort_entries[idx].key = floatBitsToUint(splat.depth);
+    sort_entries[idx].index = idx;
+
+    // Count visible (non-culled) Gaussians
+    atomicAdd(visible_count, 1u);
+}

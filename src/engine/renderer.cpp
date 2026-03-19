@@ -151,6 +151,57 @@ void Renderer::init_backgrounds(const std::vector<ResourceHandle<Texture>>& bg_t
     }
 }
 
+void Renderer::init_gs(const GaussianCloud& cloud, uint32_t width, uint32_t height) {
+    if (!gs_initialized_) {
+        gs_renderer_.init(context_.device(), context_.allocator(), VK_NULL_HANDLE);
+        gs_initialized_ = true;
+    }
+    gs_renderer_.resize_output(width, height);
+    gs_renderer_.load_cloud(cloud);
+    output_width_ = width;
+    output_height_ = height;
+
+    // Build spatial chunk grid for frustum-based streaming
+    gs_chunk_grid_.build(cloud, 32.0f);
+    gs_prev_visible_.clear();
+
+    // Create descriptor sets for sampling the GS output as a sprite texture
+    std::array<VkBuffer, kMaxFramesInFlight> ubo_buffers;
+    for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
+        ubo_buffers[i] = uniform_buffers_[i].buffer();
+    }
+    gs_descriptor_sets_ = descriptors_.allocate_sprite_sets(
+        context_.device(), ubo_buffers, sizeof(UniformBufferObject),
+        gs_renderer_.output_view(), gs_renderer_.output_sampler(),
+        flat_normal_texture_->image_view(), flat_normal_texture_->sampler());
+
+    // Also create UI-space descriptor sets (orthographic projection for fullscreen blit)
+    if (font_initialized_) {
+        std::array<VkBuffer, kMaxFramesInFlight> ui_ubo_buffers;
+        for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
+            ui_ubo_buffers[i] = ui_uniform_buffers_[i].buffer();
+        }
+        gs_ui_descriptor_sets_ = descriptors_.allocate_sprite_sets(
+            context_.device(), ui_ubo_buffers, sizeof(UniformBufferObject),
+            gs_renderer_.output_view(), gs_renderer_.output_sampler(),
+            flat_normal_texture_->image_view(), flat_normal_texture_->sampler());
+    }
+}
+
+void Renderer::set_gs_background(const ResourceHandle<Texture>& texture) {
+    if (!font_initialized_) return;  // need UI UBOs
+
+    std::array<VkBuffer, kMaxFramesInFlight> ui_ubo_buffers;
+    for (uint32_t i = 0; i < kMaxFramesInFlight; i++) {
+        ui_ubo_buffers[i] = ui_uniform_buffers_[i].buffer();
+    }
+    gs_bg_descriptor_sets_ = descriptors_.allocate_sprite_sets(
+        context_.device(), ui_ubo_buffers, sizeof(UniformBufferObject),
+        texture->image_view(), texture->sampler(),
+        flat_normal_texture_->image_view(), flat_normal_texture_->sampler());
+    gs_bg_initialized_ = true;
+}
+
 void Renderer::draw_scene(Scene& scene,
                            const std::vector<SpriteDrawInfo>& entity_sprites,
                            const std::vector<SpriteDrawInfo>& outline_sprites,
@@ -191,6 +242,32 @@ void Renderer::draw_scene(Scene& scene,
     VkCommandBufferBeginInfo begin_info{};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(cmd, &begin_info);
+
+    // ===== Pre-pass: Gaussian splatting compute (before render pass) =====
+    if (gs_initialized_ && gs_renderer_.has_cloud()) {
+        // Frustum-cull chunks and re-upload only visible Gaussians
+        // (skipped for shadow-box maps where all Gaussians are uploaded once at load)
+        if (!gs_skip_chunk_cull_ && !gs_chunk_grid_.empty()) {
+            glm::mat4 gs_vp = gs_proj_ * gs_view_;
+            auto visible = gs_chunk_grid_.visible_chunks(gs_vp);
+
+            // Dirty check: skip re-upload if same chunks are visible
+            if (visible != gs_prev_visible_) {
+                gs_prev_visible_ = visible;
+                gs_chunk_grid_.gather(visible, gs_active_buffer_);
+                if (!gs_active_buffer_.empty()) {
+                    // Wait for all in-flight frames before writing shared SSBO
+                    // to avoid race with GPU reads from previous frame
+                    vkDeviceWaitIdle(device);
+                    gs_renderer_.update_active_gaussians(
+                        gs_active_buffer_.data(),
+                        static_cast<uint32_t>(gs_active_buffer_.size()));
+                }
+            }
+        }
+
+        gs_renderer_.render(cmd, gs_view_, gs_proj_);
+    }
 
     // ===== Pass 1: Scene render pass (offscreen HDR) =====
     {
@@ -417,6 +494,69 @@ void Renderer::draw_scene(Scene& scene,
 
     post_process_.record_post_process(cmd, image_index, pp_params);
 
+    // ===== GS background + fullscreen blit (in composite pass, screen-space, before UI) =====
+    if (gs_initialized_ && gs_renderer_.has_cloud() && font_initialized_) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ui_pipeline_);
+        sprite_batch_.bind(cmd, current_frame_);
+
+        VkRect2D full_scissor{};
+        full_scissor.offset = {0, 0};
+        full_scissor.extent = swapchain_.extent();
+        vkCmdSetScissor(cmd, 0, 1, &full_scissor);
+
+        // Background behind GS (sky, mountains, etc.)
+        if (gs_bg_initialized_) {
+            sprite_batch_.begin();
+            SpriteDrawInfo bg_blit{};
+            bg_blit.position = {
+                static_cast<float>(kWindowWidth) * 0.5f,
+                static_cast<float>(kWindowHeight) * 0.5f,
+                0.0f
+            };
+            bg_blit.size = {
+                static_cast<float>(kWindowWidth),
+                static_cast<float>(kWindowHeight)
+            };
+            bg_blit.uv_min = {0.0f, 0.0f};
+            bg_blit.uv_max = {1.0f, 1.0f};
+            bg_blit.color = {1.0f, 1.0f, 1.0f, 1.0f};
+            sprite_batch_.draw(bg_blit);
+            auto bg_flush = sprite_batch_.flush(current_frame_);
+            if (bg_flush.index_count > 0) {
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                        sprite_pipeline_layout_, 0, 1,
+                                        &gs_bg_descriptor_sets_[current_frame_], 0, nullptr);
+                vkCmdDrawIndexed(cmd, bg_flush.index_count, 1, 0, bg_flush.vertex_offset, 0);
+            }
+        }
+
+        // GS output on top (alpha-composited over background)
+        sprite_batch_.begin();
+        SpriteDrawInfo gs_blit{};
+        // UI ortho projection: (0,0) = top-left, (kWindowWidth, kWindowHeight) = bottom-right
+        // Apply parallax blit offset for shadow-box mode (cached GS image, shift quad)
+        gs_blit.position = {
+            static_cast<float>(kWindowWidth) * 0.5f + gs_blit_offset_x_,
+            static_cast<float>(kWindowHeight) * 0.5f + gs_blit_offset_y_,
+            0.0f
+        };
+        gs_blit.size = {
+            static_cast<float>(kWindowWidth),
+            static_cast<float>(kWindowHeight)
+        };
+        gs_blit.uv_min = {0.0f, 0.0f};
+        gs_blit.uv_max = {1.0f, 1.0f};
+        gs_blit.color = {1.0f, 1.0f, 1.0f, 1.0f};
+        sprite_batch_.draw(gs_blit);
+        auto gs_flush = sprite_batch_.flush(current_frame_);
+        if (gs_flush.index_count > 0) {
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    sprite_pipeline_layout_, 0, 1,
+                                    &gs_ui_descriptor_sets_[current_frame_], 0, nullptr);
+            vkCmdDrawIndexed(cmd, gs_flush.index_count, 1, 0, gs_flush.vertex_offset, 0);
+        }
+    }
+
     // ===== Pass 5: UI (drawn inside the composite render pass, unaffected by post-processing) =====
     if (font_initialized_ && !ui_batches.empty()) {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ui_pipeline_);
@@ -625,6 +765,10 @@ void Renderer::shutdown() {
         for (auto& buf : ui_uniform_buffers_) {
             buf.destroy(context_.allocator());
         }
+    }
+
+    if (gs_initialized_) {
+        gs_renderer_.shutdown(context_.allocator());
     }
 
     if (screenshot_buffer_initialized_) {

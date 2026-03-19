@@ -49,6 +49,7 @@ public:
     void record_post_process(VkCommandBuffer cmd, uint32_t swapchain_index,
                              const PostProcessParams& params);
 
+
 private:
     struct ImageResource {
         VkImage image = VK_NULL_HANDLE;

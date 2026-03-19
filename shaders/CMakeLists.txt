@@ -22,6 +22,12 @@ set(SHADER_SOURCES
     ${SHADER_SOURCE_DIR}/bloom_blur.frag
     ${SHADER_SOURCE_DIR}/composite.frag
     ${SHADER_SOURCE_DIR}/sprite_outline.frag
+    ${SHADER_SOURCE_DIR}/gs_preprocess.comp
+    ${SHADER_SOURCE_DIR}/gs_sort.comp
+    ${SHADER_SOURCE_DIR}/gs_render.comp
+    ${SHADER_SOURCE_DIR}/gs_radix_histogram.comp
+    ${SHADER_SOURCE_DIR}/gs_radix_scan.comp
+    ${SHADER_SOURCE_DIR}/gs_radix_scatter.comp
 )
 
 set(SHADER_OUTPUTS "")

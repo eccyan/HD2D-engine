@@ -4,6 +4,7 @@ import { TilePalettePanel } from './components/TilePalettePanel.js';
 import { TileCanvas } from './components/TileCanvas.js';
 import { PropertiesPanel } from './components/PropertiesPanel.js';
 import { AIPanel } from './components/AIPanel.js';
+import { CollisionOverlay } from './components/CollisionOverlay.js';
 import { useEngine } from './hooks/useEngine.js';
 import { useEngineSync } from './hooks/useEngineSync.js';
 import { useEditorStore } from './store/useEditorStore.js';
@@ -56,6 +57,7 @@ export function App() {
             useEditorStore.getState().setTile(col, row, tileId, solid);
             engine.setTile(col, row, tileId, solid);
           }} />
+          <CollisionOverlay />
         </div>
         <div style={styles.rightPanel}>
           <PropertiesPanel />

@@ -36,8 +36,26 @@ interface PortalPlacement {
   spawn_facing: string;
 }
 
-type Tool = 'paint' | 'erase' | 'fill' | 'select';
-type Layer = 'tiles' | 'lights' | 'npcs' | 'portals' | 'backgrounds' | 'environment';
+interface GaussianSplatConfig {
+  ply_file: string;
+  camera: {
+    position: [number, number, number];
+    target: [number, number, number];
+    fov: number;
+  };
+  render_width: number;
+  render_height: number;
+}
+
+interface CollisionGridData {
+  width: number;
+  height: number;
+  cell_size: number;
+  solid: boolean[];
+}
+
+type Tool = 'paint' | 'erase' | 'fill' | 'select' | 'collision';
+type Layer = 'tiles' | 'lights' | 'npcs' | 'portals' | 'backgrounds' | 'environment' | 'collision';
 
 interface HistoryEntry {
   tiles: TileData[];
@@ -107,6 +125,15 @@ interface EditorState {
   pushHistory: () => void;
   undo: () => void;
   redo: () => void;
+
+  // Gaussian splatting (optional, for GS scenes)
+  gaussianSplat: GaussianSplatConfig | null;
+  setGaussianSplat: (gs: GaussianSplatConfig | null) => void;
+
+  // Collision grid (for GS scenes without tilemap collision)
+  collisionGrid: CollisionGridData | null;
+  setCollisionGrid: (grid: CollisionGridData | null) => void;
+  toggleCollisionCell: (x: number, y: number) => void;
 
   // Scene file
   currentScenePath: string;
@@ -347,6 +374,31 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   },
 
   // ---------------------------------------------------------------------------
+  // Gaussian splatting
+  // ---------------------------------------------------------------------------
+  gaussianSplat: null,
+  setGaussianSplat: (gs) => set({ gaussianSplat: gs, dirty: true }),
+
+  // ---------------------------------------------------------------------------
+  // Collision grid
+  // ---------------------------------------------------------------------------
+  collisionGrid: null,
+  setCollisionGrid: (grid) => set({ collisionGrid: grid, dirty: true }),
+
+  toggleCollisionCell: (x, y) => {
+    const { collisionGrid } = get();
+    if (!collisionGrid) return;
+    if (x < 0 || x >= collisionGrid.width || y < 0 || y >= collisionGrid.height) return;
+    const idx = y * collisionGrid.width + x;
+    const newSolid = [...collisionGrid.solid];
+    newSolid[idx] = !newSolid[idx];
+    set({
+      collisionGrid: { ...collisionGrid, solid: newSolid },
+      dirty: true,
+    });
+  },
+
+  // ---------------------------------------------------------------------------
   // Scene file
   // ---------------------------------------------------------------------------
   currentScenePath: 'assets/scenes/untitled.json',
@@ -362,6 +414,8 @@ export type {
   NpcPlacement,
   LightPlacement,
   PortalPlacement,
+  GaussianSplatConfig,
+  CollisionGridData,
   Tool,
   Layer,
   HistoryEntry,
