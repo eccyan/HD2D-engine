@@ -4,7 +4,7 @@ import { parseKey } from './voxelUtils.js';
 export function exportPly(
   voxels: Map<VoxelKey, Voxel>,
   gridWidth: number,
-  gridDepth: number,
+  gridHeight: number,
 ): Blob {
   const entries = Array.from(voxels.entries());
   const count = entries.length;
@@ -39,16 +39,23 @@ export function exportPly(
 
   let offset = headerBytes.length;
   const halfW = gridWidth / 2;
-  const halfD = gridDepth / 2;
   const voxelScale = Math.log(0.5);
+
+  // Find max Y for centering vertically
+  let maxY = 0;
+  for (const [key] of entries) {
+    const [, vy] = parseKey(key);
+    if (vy > maxY) maxY = vy;
+  }
+  const halfH = maxY / 2;
 
   for (const [key, voxel] of entries) {
     const [vx, vy, vz] = parseKey(key);
 
-    // Bricklayer → PLY coordinate transform
+    // Bricklayer X,Y wall → PLY: center X and Y, depth along -Z
     const px = vx - halfW;
-    const py = gridDepth / 2 - vz;
-    const pz = vy;
+    const py = vy - halfH;
+    const pz = -vz;
 
     view.setFloat32(offset, px, true); offset += 4;
     view.setFloat32(offset, py, true); offset += 4;
