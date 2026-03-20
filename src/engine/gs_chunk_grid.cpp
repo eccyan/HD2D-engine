@@ -194,7 +194,7 @@ uint32_t GsChunkGrid::gather_lod(const std::vector<uint32_t>& chunk_indices,
     // Distance thresholds based on chunk size
     float near_dist = 2.0f * chunk_size_;
     float far_dist = 8.0f * chunk_size_;
-    float min_ratio = 0.1f;  // 10% kept at far distance
+    float min_ratio = 0.25f;  // 25% kept at far distance
 
     // Compute per-chunk distances and initial keep ratios
     struct ChunkLod {
@@ -239,14 +239,26 @@ uint32_t GsChunkGrid::gather_lod(const std::vector<uint32_t>& chunk_indices,
 
     out.resize(total_wanted);
 
-    // Copy the first keep_count Gaussians from each chunk (sorted by importance)
+    // Stride-based decimation: evenly sample across each chunk to avoid
+    // spatial bias when importance values are uniform (e.g. voxel data)
     uint32_t offset = 0;
     for (const auto& lod : lods) {
         const auto& chunk = chunks_[lod.idx];
         uint32_t count = std::min(lod.keep_count, chunk.count);
-        std::memcpy(out.data() + offset,
-                    sorted_gaussians_.data() + chunk.start_index,
-                    count * sizeof(Gaussian));
+        if (count == chunk.count) {
+            // Full copy — no decimation needed
+            std::memcpy(out.data() + offset,
+                        sorted_gaussians_.data() + chunk.start_index,
+                        count * sizeof(Gaussian));
+        } else {
+            // Stride through chunk to ensure spatial uniformity
+            float stride = static_cast<float>(chunk.count) / static_cast<float>(count);
+            for (uint32_t i = 0; i < count; ++i) {
+                uint32_t src = std::min(static_cast<uint32_t>(i * stride),
+                                        chunk.count - 1);
+                out[offset + i] = sorted_gaussians_[chunk.start_index + src];
+            }
+        }
         offset += count;
     }
 
