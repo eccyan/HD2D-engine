@@ -118,7 +118,7 @@ export function VoxelMesh() {
       onContextMenu={handleClick}
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial vertexColors />
+      <meshStandardMaterial color="#ffffff" />
     </instancedMesh>
   );
 }
