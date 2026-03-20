@@ -15,6 +15,7 @@
     "three": "^0.170.0",
     "@react-three/fiber": "^8.17.0",
     "@react-three/drei": "^9.117.0",
+    "@huggingface/transformers": "^3.4.0",
     "@vulkan-game-tools/engine-client": "workspace:*",
     "@vulkan-game-tools/asset-types": "workspace:*",
     "@vulkan-game-tools/ui-kit": "workspace:*",

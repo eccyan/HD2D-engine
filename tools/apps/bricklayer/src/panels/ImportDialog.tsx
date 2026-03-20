@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useSceneStore } from '../store/useSceneStore.js';
+import { estimateDepth } from '../lib/depthEstimate.js';
 
 const styles: Record<string, React.CSSProperties> = {
   overlay: {
@@ -16,7 +17,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #444',
     borderRadius: 8,
     padding: 24,
-    width: 360,
+    width: 400,
     display: 'flex',
     flexDirection: 'column',
     gap: 16,
@@ -61,40 +62,95 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontSize: 13,
   },
+  progressBar: {
+    width: '100%',
+    height: 6,
+    background: '#2a2a4a',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    background: '#77f',
+    borderRadius: 3,
+    transition: 'width 0.2s',
+  },
+  hint: {
+    fontSize: 11,
+    color: '#666',
+    lineHeight: '1.4',
+  },
 };
+
+type ImportMode = 'flat' | 'luminance' | 'depth';
 
 export function ImportDialog({ onClose }: { onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [mode, setMode] = useState<'flat' | 'luminance'>('flat');
+  const [mode, setMode] = useState<ImportMode>('flat');
   const [maxHeight, setMaxHeight] = useState(16);
   const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState('');
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!file) return;
+
     const img = new Image();
-    img.onload = () => {
+    const imageUrl = URL.createObjectURL(file);
+
+    img.onload = async () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      URL.revokeObjectURL(imageUrl);
+
       const store = useSceneStore.getState();
       store.pushUndo();
-      store.importImage(imageData, mode, maxHeight);
-      onClose();
+
+      if (mode === 'depth') {
+        setLoading(true);
+        setProgress(0);
+        setStatus('Loading depth model...');
+
+        try {
+          const { depthMap } = await estimateDepth(imageData, (p) => {
+            setProgress(p);
+            if (p < 100) {
+              setStatus(`Downloading model... ${Math.round(p)}%`);
+            }
+          });
+
+          setStatus('Generating voxels...');
+          store.importImage(imageData, 'depth', maxHeight, depthMap);
+          onClose();
+        } catch (err) {
+          console.error('Depth estimation failed:', err);
+          setStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          setLoading(false);
+        }
+      } else {
+        store.importImage(imageData, mode, maxHeight);
+        onClose();
+      }
     };
-    img.src = URL.createObjectURL(file);
+
+    img.src = imageUrl;
   };
 
+  const showHeightSlider = mode === 'luminance' || mode === 'depth';
+
   return (
-    <div style={styles.overlay} onClick={onClose}>
+    <div style={styles.overlay} onClick={loading ? undefined : onClose}>
       <div style={styles.dialog} onClick={(e) => e.stopPropagation()}>
         <span style={styles.title}>Import Image</span>
 
         <div style={styles.row}>
           <span style={styles.label}>File</span>
-          <button style={styles.btn} onClick={() => fileRef.current?.click()}>
+          <button style={styles.btn} onClick={() => fileRef.current?.click()} disabled={loading}>
             {file ? file.name : 'Choose...'}
           </button>
           <input
@@ -111,14 +167,24 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
           <select
             style={styles.select}
             value={mode}
-            onChange={(e) => setMode(e.target.value as 'flat' | 'luminance')}
+            onChange={(e) => setMode(e.target.value as ImportMode)}
+            disabled={loading}
           >
             <option value="flat">Flat (1 voxel per pixel)</option>
             <option value="luminance">Luminance (height from brightness)</option>
+            <option value="depth">Depth AI (height from estimated depth)</option>
           </select>
         </div>
 
-        {mode === 'luminance' && (
+        {mode === 'depth' && (
+          <div style={styles.hint}>
+            Uses Depth Anything V2 to estimate per-pixel depth from the image.
+            Close objects become tall voxel columns, distant objects become short.
+            Model downloads on first use (~50 MB, cached in browser).
+          </div>
+        )}
+
+        {showHeightSlider && (
           <div style={styles.row}>
             <span style={styles.label}>Max Height</span>
             <input
@@ -128,14 +194,33 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
               value={maxHeight}
               onChange={(e) => setMaxHeight(Number(e.target.value))}
               style={{ flex: 1 }}
+              disabled={loading}
             />
             <span style={{ fontSize: 13 }}>{maxHeight}</span>
           </div>
         )}
 
+        {loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+            </div>
+            <span style={{ fontSize: 12, color: '#aaa' }}>{status}</span>
+          </div>
+        )}
+
         <div style={styles.actions}>
-          <button style={styles.btn} onClick={onClose}>Cancel</button>
-          <button style={styles.btnPrimary} onClick={handleImport} disabled={!file}>Import</button>
+          <button style={styles.btn} onClick={onClose} disabled={loading}>Cancel</button>
+          <button
+            style={{
+              ...styles.btnPrimary,
+              ...(loading ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+            }}
+            onClick={handleImport}
+            disabled={!file || loading}
+          >
+            {loading ? 'Processing...' : 'Import'}
+          </button>
         </div>
       </div>
     </div>

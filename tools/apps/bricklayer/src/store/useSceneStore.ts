@@ -206,7 +206,7 @@ export interface SceneStoreState {
 
   // Actions – file
   newScene: (width: number, depth: number) => void;
-  importImage: (imageData: ImageData, mode: 'flat' | 'luminance', maxHeight: number) => void;
+  importImage: (imageData: ImageData, mode: 'flat' | 'luminance' | 'depth', maxHeight: number, depthMap?: Float32Array) => void;
   saveProject: () => BricklayerFile;
   loadProject: (data: BricklayerFile) => void;
 }
@@ -521,7 +521,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
     redoStack: [],
   }),
 
-  importImage: (imageData, mode, maxHeight) => {
+  importImage: (imageData, mode, maxHeight, depthMap?) => {
     const { gridWidth, gridDepth } = get();
     const next = new Map<VoxelKey, Voxel>();
     const w = Math.min(imageData.width, gridWidth);
@@ -538,7 +538,17 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
 
         if (mode === 'flat') {
           next.set(voxelKey(ix, 0, iz), { color: [r, g, b, a] });
+        } else if (mode === 'depth' && depthMap) {
+          // Depth map: 0 = closest (tall), 1 = farthest (short)
+          // Invert so close objects become tall voxel columns
+          const depthIdx = iz * imageData.width + ix;
+          const depth = depthMap[depthIdx] ?? 0;
+          const colHeight = Math.max(1, Math.round((1 - depth) * maxHeight));
+          for (let iy = 0; iy < colHeight; iy++) {
+            next.set(voxelKey(ix, iy, iz), { color: [r, g, b, a] });
+          }
         } else {
+          // luminance mode
           const lum = 0.299 * r + 0.587 * g + 0.114 * b;
           const colHeight = Math.max(1, Math.round((lum / 255) * maxHeight));
           for (let iy = 0; iy < colHeight; iy++) {
