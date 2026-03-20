@@ -203,6 +203,15 @@ void GsDemoState::update(App& app, float dt) {
             fps_ = static_cast<float>(fps_frame_count_) / elapsed;
             fps_frame_count_ = 0;
             fps_clock_ = now;
+
+            // Auto-adjust hybrid interval in shadow box mode
+            if (shadow_box_mode_) {
+                if (fps_ < kTargetFps * 0.85f && gs_render_interval_ < kMaxInterval) {
+                    gs_render_interval_++;
+                } else if (fps_ > kTargetFps * 1.3f && gs_render_interval_ > kMinInterval) {
+                    gs_render_interval_--;
+                }
+            }
         }
     }
 
