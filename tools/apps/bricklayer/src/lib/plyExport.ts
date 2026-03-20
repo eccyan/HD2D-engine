@@ -55,7 +55,7 @@ export function exportPly(
     // Bricklayer X,Y wall → PLY: center X and Y, depth along -Z
     const px = vx - halfW;
     const py = vy - halfH;
-    const pz = -vz;
+    const pz = vz;
 
     view.setFloat32(offset, px, true); offset += 4;
     view.setFloat32(offset, py, true); offset += 4;
