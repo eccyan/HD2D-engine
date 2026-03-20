@@ -218,6 +218,76 @@ void GsDemoState::update(App& app, float dt) {
         }
     }
 
+    // Accumulate effect time
+    effect_time_ += dt;
+    app.renderer().gs_renderer().set_effect_time(effect_time_);
+
+    // T → cycle toon shading (0 → 3 → 4 → 5 → 0)
+    if (app.input().was_key_pressed(GLFW_KEY_T)) {
+        auto& gs = app.renderer().gs_renderer();
+        int bands = gs.toon_bands();
+        if (bands == 0) bands = 3;
+        else if (bands == 3) bands = 4;
+        else if (bands == 4) bands = 5;
+        else bands = 0;
+        gs.set_toon_bands(bands);
+        std::fprintf(stderr, "Toon bands: %d\n", bands);
+    }
+
+    // L → cycle lighting (0=off → 1=directional → 2=point → 0)
+    if (app.input().was_key_pressed(GLFW_KEY_L)) {
+        auto& gs = app.renderer().gs_renderer();
+        int mode = (gs.light_mode() + 1) % 3;
+        gs.set_light_mode(mode);
+        std::fprintf(stderr, "Light mode: %d\n", mode);
+    }
+
+    // Shift+Click → touch deformation
+    if (app.input().was_mouse_pressed(0) &&
+        app.input().is_key_down(GLFW_KEY_LEFT_SHIFT)) {
+        app.renderer().gs_renderer().set_touch_point(target_, 20.0f);
+        touch_timer_ = 0.001f;  // start timer
+    }
+
+    // Update touch decay
+    if (touch_timer_ > 0.0f) {
+        touch_timer_ += dt;
+        if (touch_timer_ > kTouchDecay) {
+            touch_timer_ = 0.0f;
+            app.renderer().gs_renderer().clear_touch();
+        }
+    }
+
+    // F → toggle fire effect
+    if (app.input().was_key_pressed(GLFW_KEY_F)) {
+        fire_active_ = !fire_active_;
+        auto& gs = app.renderer().gs_renderer();
+        if (fire_active_ && app.renderer().has_gs_cloud()) {
+            auto aabb = app.renderer().gs_chunk_grid().cloud_bounds();
+            float y_range = aabb.max.y - aabb.min.y;
+            gs.set_fire_region(aabb.max.y - y_range * 0.2f, aabb.max.y);
+        } else {
+            gs.clear_fire();
+            fire_active_ = false;
+        }
+        std::fprintf(stderr, "Fire: %s\n", fire_active_ ? "ON" : "OFF");
+    }
+
+    // G → toggle water effect
+    if (app.input().was_key_pressed(GLFW_KEY_G)) {
+        water_active_ = !water_active_;
+        auto& gs = app.renderer().gs_renderer();
+        if (water_active_ && app.renderer().has_gs_cloud()) {
+            auto aabb = app.renderer().gs_chunk_grid().cloud_bounds();
+            float y_range = aabb.max.y - aabb.min.y;
+            gs.set_water_threshold(aabb.min.y + y_range * 0.3f);
+        } else {
+            gs.clear_water();
+            water_active_ = false;
+        }
+        std::fprintf(stderr, "Water: %s\n", water_active_ ? "ON" : "OFF");
+    }
+
     if (shadow_box_mode_) {
         update_shadow_box_camera(app, dt);
     } else {
@@ -232,7 +302,7 @@ void GsDemoState::build_draw_lists(App& app) {
     // Semi-transparent HUD panel (top-left in Y-UP coords)
     constexpr float panel_x = 10.0f;
     constexpr float panel_w = 280.0f;
-    constexpr float panel_h = 186.0f;
+    constexpr float panel_h = 220.0f;
     constexpr float panel_top = 720.0f - 10.0f;  // 10px from screen top
     constexpr float panel_cy = panel_top - panel_h * 0.5f;
 
@@ -282,12 +352,30 @@ void GsDemoState::build_draw_lists(App& app) {
              fmt(target_.y) + ", " + fmt(target_.z), lx, y, scale, white);
     y -= 22.0f;
 
+    // Active effects line
+    {
+        std::string fx;
+        auto& gs = app.renderer().gs_renderer();
+        if (gs.toon_bands() > 0) fx += "Toon=" + std::to_string(gs.toon_bands()) + " ";
+        if (gs.light_mode() == 1) fx += "DirLight ";
+        else if (gs.light_mode() == 2) fx += "PtLight ";
+        if (touch_timer_ > 0.0f) fx += "Touch ";
+        if (fire_active_) fx += "Fire ";
+        if (water_active_) fx += "Water ";
+        if (!fx.empty()) {
+            ui.label("FX: " + fx, lx, y, scale, {1.0f, 0.9f, 0.3f, 1.0f});
+            y -= 18.0f;
+        }
+    }
+
     if (shadow_box_mode_) {
         ui.label("Hybrid N=" + std::to_string(gs_render_interval_) +
                  "  Mouse:Parallax  P:Exit  R:Reset", lx, y, 0.35f, dim);
     } else {
-        ui.label("Drag:Orbit  Scroll:Zoom  WASD:Pan  Up/Dn:Scale  P:ShadowBox  R:Reset", lx, y, 0.35f, dim);
+        ui.label("Drag:Orbit  Scroll:Zoom  WASD:Pan  P:ShadowBox  R:Reset", lx, y, 0.35f, dim);
     }
+    y -= 14.0f;
+    ui.label("T:Toon  L:Light  F:Fire  G:Water  Shift+Click:Touch", lx, y, 0.35f, dim);
 }
 
 }  // namespace vulkan_game

@@ -44,11 +44,22 @@ layout(set = 0, binding = 3) uniform Uniforms {
     vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = scale_multiplier
     vec4 cone_dir;      // xyz = cone direction, w = unused
     vec4 cam_pos;       // xyz = camera position, w = unused
+    vec4 effect_flags;  // x = toon_bands, y = light_mode, z = touch_active, w = time
+    vec4 light_params;  // xyz = light_dir, w = intensity
+    vec4 touch_point;   // xyz = world_pos, w = radius
+    vec4 effect_params; // x = water_y, y = fire_y_min, z = fire_y_max, w = strength
 };
 
 layout(set = 0, binding = 4) buffer VisibleCountBuffer {
     uint visible_count;
 };
+
+// Simple hash for per-Gaussian variation
+float hash_uint(uint n) {
+    n = (n << 13u) ^ n;
+    n = n * (n * n * 15731u + 789221u) + 1376312589u;
+    return float(n & 0x7fffffffu) / float(0x7fffffff);
+}
 
 // Build rotation matrix from quaternion
 mat3 quat_to_mat(vec4 q) {
@@ -65,9 +76,71 @@ void main() {
     if (idx >= params.z) return;
 
     GpuGaussian g = gaussians[idx];
+    vec3 pos = g.pos_opacity.xyz;
+    float opacity = g.pos_opacity.w;
+    vec3 col = g.color_pad.rgb;
+
+    float time = effect_flags.w;
+    float h = hash_uint(idx);
+
+    // --- Touch deformation (Phase 4) ---
+    if (effect_flags.z > 0.5) {
+        vec3 tp = touch_point.xyz;
+        float radius = touch_point.w;
+        float dist = length(pos - tp);
+        if (dist < radius) {
+            float falloff = 1.0 - dist / radius;
+            falloff *= falloff;
+            float t = time;  // time since effect start (managed by CPU touch_timer)
+            float displacement = falloff * sin(t * 8.0 - dist * 3.0) * exp(-t * 2.0) * radius * 0.3;
+            vec3 dir = (dist > 0.001) ? normalize(pos - tp) : vec3(0.0, 1.0, 0.0);
+            pos += dir * displacement;
+        }
+    }
+
+    // --- Fire effect (Phase 5) ---
+    float fire_y_min = effect_params.y;
+    float fire_y_max = effect_params.z;
+    if (fire_y_max > fire_y_min + 0.01) {
+        float fire_range = fire_y_max - fire_y_min;
+        if (pos.y >= fire_y_min && pos.y <= fire_y_max) {
+            float fire_factor = (pos.y - fire_y_min) / fire_range;
+
+            // Upward drift + horizontal jitter
+            pos.y += fire_factor * sin(time * 3.0 + h * 6.28) * fire_range * 0.15;
+            pos.x += sin(time * 5.0 + h * 12.56) * fire_range * 0.03 * fire_factor;
+            pos.z += cos(time * 4.0 + h * 9.42) * fire_range * 0.03 * fire_factor;
+
+            // Color shift toward orange/red
+            vec3 fire_color = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.15, 0.0), fire_factor);
+            col = mix(col, fire_color, fire_factor * 0.8);
+
+            // Opacity flicker
+            opacity *= 0.7 + 0.3 * sin(time * 10.0 + h * 6.28);
+        }
+    }
+
+    // --- Water effect (Phase 6) ---
+    float water_y = effect_params.x;
+    if (water_y > -999.0) {
+        if (pos.y < water_y) {
+            float depth_below = (water_y - pos.y) / max(water_y + 999.0, 1.0);
+            float tint = clamp(depth_below * 2.0, 0.0, 1.0);
+
+            // Sinusoidal ripple
+            pos.y += sin(time * 2.0 + pos.x * 0.5 + h * 6.28) * 0.5 * (1.0 - tint * 0.5);
+            pos.x += sin(time * 1.5 + pos.z * 0.3) * 0.3 * tint;
+
+            // Blue tint
+            col = mix(col, vec3(0.1, 0.3, 0.8), tint * 0.6);
+
+            // Transparency
+            opacity *= mix(1.0, 0.7, tint);
+        }
+    }
 
     // Transform to view space
-    vec4 view_pos = view * vec4(g.pos_opacity.xyz, 1.0);
+    vec4 view_pos = view * vec4(pos, 1.0);
 
     // Frustum cull: discard if behind near plane (view space z is negative for visible objects)
     if (view_pos.z > -0.1) {
@@ -103,7 +176,7 @@ void main() {
 
     // Viewing cone backface cull (shadow box mode): cull Gaussians outside viewing cone
     if (shadow_box.y > 0.0) {
-        vec3 to_gaussian = normalize(g.pos_opacity.xyz - cam_pos.xyz);
+        vec3 to_gaussian = normalize(pos - cam_pos.xyz);
         if (dot(to_gaussian, cone_dir.xyz) < shadow_box.y) {
             sort_entries[idx].key = 0xFFFF;
             sort_entries[idx].index = idx;
@@ -175,8 +248,8 @@ void main() {
     splat.center = vec2(screen_x, screen_y);
     splat.depth = -view_pos.z;
     splat.radius = radius_px;
-    splat.conic_opacity = vec4(conic_a, conic_b, conic_c, g.pos_opacity.w);
-    splat.color = vec4(g.color_pad.rgb, 1.0);
+    splat.conic_opacity = vec4(conic_a, conic_b, conic_c, opacity);
+    splat.color = vec4(col, 1.0);
     projected[idx] = splat;
 
     // Write sort entry — quantize depth to 16-bit key for 2-pass radix sort

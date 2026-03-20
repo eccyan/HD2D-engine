@@ -27,14 +27,18 @@ struct ProjectedSplat {
     glm::vec4 color;          // rgb + alpha
 };  // 48 bytes
 
-// Uniform data for compute shaders
+// Uniform data for compute shaders (256 bytes, aligned)
 struct GsUniforms {
     glm::mat4 view;
     glm::mat4 proj;
     glm::uvec4 params;       // x = width, y = height, z = gaussian_count, w = sort_size
-    glm::vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = unused
+    glm::vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = scale_multiplier
     glm::vec4 cone_dir;      // xyz = cone direction, w = unused
     glm::vec4 cam_pos;       // xyz = camera position, w = unused
+    glm::vec4 effect_flags;  // x = toon_bands, y = light_mode, z = touch_active, w = time
+    glm::vec4 light_params;  // xyz = light_dir, w = intensity
+    glm::vec4 touch_point;   // xyz = world_pos, w = radius
+    glm::vec4 effect_params; // x = water_y, y = fire_y_min, z = fire_y_max, w = strength
 };
 
 // Sort key: depth packed with index
@@ -545,6 +549,14 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
                                      static_cast<float>(num_sort_passes_), scale_multiplier_);
     uniforms.cone_dir = glm::vec4(shadow_box_cone_dir_, 0.0f);
     uniforms.cam_pos = glm::vec4(shadow_box_cam_pos_, 0.0f);
+    uniforms.effect_flags = glm::vec4(
+        static_cast<float>(toon_bands_),
+        static_cast<float>(light_mode_),
+        touch_active_ ? 1.0f : 0.0f,
+        time_);
+    uniforms.light_params = glm::vec4(glm::normalize(light_dir_), light_intensity_);
+    uniforms.touch_point = glm::vec4(touch_point_, touch_radius_);
+    uniforms.effect_params = glm::vec4(water_y_, fire_y_min_, fire_y_max_, effect_strength_);
     std::memcpy(uniform_buffer_.mapped(), &uniforms, sizeof(uniforms));
 
     // In skip-sort mode, skip the entire compute pipeline after the first

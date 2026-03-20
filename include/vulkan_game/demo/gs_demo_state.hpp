@@ -47,6 +47,13 @@ private:
     // Scale multiplier (adjusted with +/- keys)
     float scale_multiplier_ = 1.0f;
 
+    // Visual effects
+    float effect_time_ = 0.0f;
+    bool fire_active_ = false;
+    bool water_active_ = false;
+    float touch_timer_ = 0.0f;       // seconds since touch, 0 = inactive
+    static constexpr float kTouchDecay = 3.0f;  // seconds until touch fades
+
     // FPS tracking (wall clock for accuracy despite dt clamping)
     std::chrono::steady_clock::time_point fps_clock_{};
     int fps_frame_count_ = 0;

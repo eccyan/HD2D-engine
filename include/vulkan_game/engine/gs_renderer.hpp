@@ -36,6 +36,32 @@ public:
     void set_scale_multiplier(float m) { scale_multiplier_ = m; }
     float scale_multiplier() const { return scale_multiplier_; }
     bool sort_done_once() const { return sort_done_once_; }
+
+    // Visual effect setters
+    void set_effect_time(float t) { time_ = t; }
+    void set_toon_bands(int bands) { toon_bands_ = bands; }
+    int toon_bands() const { return toon_bands_; }
+    void set_light_mode(int mode) { light_mode_ = mode; }
+    int light_mode() const { return light_mode_; }
+    void set_light_dir(const glm::vec3& d) { light_dir_ = d; }
+    void set_light_intensity(float i) { light_intensity_ = i; }
+    void set_touch_point(const glm::vec3& p, float radius) {
+        touch_point_ = p; touch_radius_ = radius; touch_active_ = true;
+    }
+    void clear_touch() { touch_active_ = false; }
+    bool touch_active() const { return touch_active_; }
+    void set_fire_region(float y_min, float y_max, float strength = 1.0f) {
+        fire_y_min_ = y_min; fire_y_max_ = y_max; effect_strength_ = strength;
+    }
+    void clear_fire() { fire_y_min_ = 0.0f; fire_y_max_ = 0.0f; }
+    void set_water_threshold(float y, float strength = 1.0f) {
+        water_y_ = y; effect_strength_ = strength;
+    }
+    void clear_water() { water_y_ = -1000.0f; }
+    float water_y() const { return water_y_; }
+    float fire_y_min() const { return fire_y_min_; }
+    float fire_y_max() const { return fire_y_max_; }
+
     void shutdown(VmaAllocator allocator);
 
 private:
@@ -116,6 +142,20 @@ private:
     glm::vec3 shadow_box_cam_pos_{0.0f};
     uint32_t num_sort_passes_ = 2;
     float scale_multiplier_ = 1.0f;
+
+    // Visual effect state
+    float time_ = 0.0f;
+    int toon_bands_ = 0;          // 0 = off, 3/4/5 = band count
+    int light_mode_ = 0;          // 0 = off, 1 = directional, 2 = point
+    glm::vec3 light_dir_{0.5f, 1.0f, 0.7f};
+    float light_intensity_ = 1.0f;
+    glm::vec3 touch_point_{0.0f};
+    float touch_radius_ = 20.0f;
+    bool touch_active_ = false;
+    float water_y_ = -1000.0f;    // sentinel: disabled
+    float fire_y_min_ = 0.0f;
+    float fire_y_max_ = 0.0f;
+    float effect_strength_ = 1.0f;
 };
 
 }  // namespace vulkan_game
