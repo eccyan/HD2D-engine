@@ -244,10 +244,21 @@ void GsDemoState::update(App& app, float dt) {
 
     // X → touch deformation at camera target
     if (app.input().was_key_pressed(GLFW_KEY_X)) {
-        app.renderer().gs_renderer().set_touch_point(target_, 20.0f);
+        glm::vec3 touch_pos = target_;
+        float touch_radius = 20.0f;
+        // Scale touch to cloud size and center z in the cloud volume
+        if (app.renderer().has_gs_cloud()) {
+            auto aabb = app.renderer().gs_chunk_grid().cloud_bounds();
+            float max_extent = std::max({aabb.max.x - aabb.min.x,
+                                         aabb.max.y - aabb.min.y,
+                                         aabb.max.z - aabb.min.z});
+            touch_radius = max_extent * 0.15f;  // 15% of cloud extent
+            touch_pos.z = (aabb.min.z + aabb.max.z) * 0.5f;  // center of cloud volume
+        }
+        app.renderer().gs_renderer().set_touch_point(touch_pos, touch_radius);
         touch_timer_ = 0.001f;  // start timer
-        std::fprintf(stderr, "Touch at (%.1f, %.1f, %.1f)\n",
-                     target_.x, target_.y, target_.z);
+        std::fprintf(stderr, "Touch at (%.1f, %.1f, %.1f) r=%.1f\n",
+                     touch_pos.x, touch_pos.y, touch_pos.z, touch_radius);
     }
 
     // Update touch decay

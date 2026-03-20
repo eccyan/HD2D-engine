@@ -94,7 +94,11 @@ void main() {
             float falloff = 1.0 - dist / radius;
             falloff *= falloff;
             float t = touch_time;
-            float displacement = falloff * sin(t * 8.0 - dist * 3.0) * exp(-t * 2.0) * radius * 0.3;
+            // Strong initial burst that decays over 3 seconds
+            // Radial push + oscillation for spring-like wobble
+            float push = falloff * exp(-t * 1.5) * radius * 0.5;
+            float wobble = sin(t * 10.0 - dist * 0.2) * exp(-t * 2.0) * radius * 0.3 * falloff;
+            float displacement = push + wobble;
             vec3 dir = (dist > 0.001) ? normalize(pos - tp) : vec3(0.0, 1.0, 0.0);
             pos += dir * displacement;
         }

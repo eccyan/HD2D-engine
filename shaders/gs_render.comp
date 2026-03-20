@@ -159,9 +159,9 @@ void main() {
             // Quantize luminance, preserve hue — avoids harsh per-channel banding
             float lum = dot(base_color, vec3(0.299, 0.587, 0.114));
             float quant_lum = floor(lum * bands + 0.5) / bands;
-            float scale_factor = (lum > 0.001) ? quant_lum / lum : 1.0;
-            // Blend 70% quantized, 30% original for softer look
-            base_color = mix(base_color, base_color * scale_factor, 0.7);
+            float scale_factor = (lum > 0.001) ? min(quant_lum / lum, 1.5) : 1.0;
+            // Blend 60% quantized, 40% original for softer look
+            base_color = mix(base_color, base_color * scale_factor, 0.6);
 
             // Edge detection from depth discontinuity (silhouette outlines only)
             float depth_c = tile_depth[local_id.y][local_id.x];
