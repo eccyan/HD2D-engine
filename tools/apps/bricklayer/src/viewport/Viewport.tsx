@@ -56,8 +56,12 @@ export function Viewport() {
         screenSpacePanning
         mouseButtons={{
           LEFT: 0,
-          MIDDLE: 2,
-          RIGHT: 1,
+          MIDDLE: 1,
+          RIGHT: 2,
+        }}
+        touches={{
+          ONE: 0,
+          TWO: 1,
         }}
       />
     </Canvas>
