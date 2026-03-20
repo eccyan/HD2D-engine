@@ -33,6 +33,8 @@ public:
     void clear_shadow_box_params();
     void set_skip_sort(bool skip) { skip_sort_ = skip; }
     bool skip_sort() const { return skip_sort_; }
+    void set_scale_multiplier(float m) { scale_multiplier_ = m; }
+    float scale_multiplier() const { return scale_multiplier_; }
     bool sort_done_once() const { return sort_done_once_; }
     void shutdown(VmaAllocator allocator);
 
@@ -113,6 +115,7 @@ private:
     glm::vec3 shadow_box_cone_dir_{0.0f, 0.0f, -1.0f};
     glm::vec3 shadow_box_cam_pos_{0.0f};
     uint32_t num_sort_passes_ = 4;
+    float scale_multiplier_ = 1.0f;
 };
 
 }  // namespace vulkan_game

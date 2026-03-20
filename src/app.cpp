@@ -1041,9 +1041,7 @@ void App::init_scene(const std::string& scene_path) {
             std::fprintf(stderr, "Warning: %s (skipping GS rendering)\n", e.what());
         }
         if (!cloud.empty()) {
-            if (gs.scale_multiplier != 1.0f) {
-                cloud.scale_all(gs.scale_multiplier);
-            }
+            renderer_.gs_renderer().set_scale_multiplier(gs.scale_multiplier);
             std::fprintf(stderr, "GS: Loaded %u Gaussians from %s\n",
                          cloud.count(), gs.ply_file.c_str());
             std::fprintf(stderr, "GS: AABB min=(%.1f,%.1f,%.1f) max=(%.1f,%.1f,%.1f)\n",

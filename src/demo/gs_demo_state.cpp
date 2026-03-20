@@ -20,6 +20,9 @@ void GsDemoState::on_enter(App& app) {
     app.renderer().set_gs_skip_chunk_cull(false);
     app.renderer().gs_renderer().set_skip_sort(false);
 
+    // Sync local scale from scene-loaded value
+    scale_multiplier_ = app.renderer().gs_renderer().scale_multiplier();
+
     // Set initial camera based on loaded cloud AABB
     if (app.renderer().has_gs_cloud()) {
         auto& grid = app.renderer().gs_chunk_grid();
@@ -166,6 +169,16 @@ void GsDemoState::update(App& app, float dt) {
         return;
     }
 
+    // Up/Down → adjust scale multiplier
+    if (app.input().was_key_pressed(GLFW_KEY_UP)) {
+        scale_multiplier_ = std::min(scale_multiplier_ + 0.1f, 10.0f);
+        app.renderer().gs_renderer().set_scale_multiplier(scale_multiplier_);
+    }
+    if (app.input().was_key_pressed(GLFW_KEY_DOWN)) {
+        scale_multiplier_ = std::max(scale_multiplier_ - 0.1f, 0.1f);
+        app.renderer().gs_renderer().set_scale_multiplier(scale_multiplier_);
+    }
+
     // P → toggle shadow box mode (hybrid: re-render every N frames)
     if (app.input().was_key_pressed(GLFW_KEY_P)) {
         shadow_box_mode_ = !shadow_box_mode_;
@@ -207,7 +220,7 @@ void GsDemoState::build_draw_lists(App& app) {
     // Semi-transparent HUD panel (top-left in Y-UP coords)
     constexpr float panel_x = 10.0f;
     constexpr float panel_w = 280.0f;
-    constexpr float panel_h = 168.0f;
+    constexpr float panel_h = 186.0f;
     constexpr float panel_top = 720.0f - 10.0f;  // 10px from screen top
     constexpr float panel_cy = panel_top - panel_h * 0.5f;
 
@@ -245,6 +258,9 @@ void GsDemoState::build_draw_lists(App& app) {
              lx, y, scale, white);
     y -= 18.0f;
 
+    ui.label("Scale: " + fmt(scale_multiplier_), lx, y, scale, white);
+    y -= 18.0f;
+
     ui.label("Az:" + fmt(glm::degrees(azimuth_)) +
              "  El:" + fmt(glm::degrees(elevation_)) +
              "  Dist:" + fmt(distance_), lx, y, scale, white);
@@ -258,7 +274,7 @@ void GsDemoState::build_draw_lists(App& app) {
         ui.label("Hybrid N=" + std::to_string(gs_render_interval_) +
                  "  Mouse:Parallax  P:Exit  R:Reset", lx, y, 0.35f, dim);
     } else {
-        ui.label("Drag:Orbit  Scroll:Zoom  WASD:Pan  P:ShadowBox  R:Reset", lx, y, 0.35f, dim);
+        ui.label("Drag:Orbit  Scroll:Zoom  WASD:Pan  Up/Dn:Scale  P:ShadowBox  R:Reset", lx, y, 0.35f, dim);
     }
 }
 

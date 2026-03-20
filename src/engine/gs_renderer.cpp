@@ -542,7 +542,7 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
     uniforms.proj = proj;
     uniforms.params = glm::uvec4(width, height, gaussian_count_, sort_size_);
     uniforms.shadow_box = glm::vec4(shadow_box_margin_, shadow_box_cone_cos_,
-                                     static_cast<float>(num_sort_passes_), 0.0f);
+                                     static_cast<float>(num_sort_passes_), scale_multiplier_);
     uniforms.cone_dir = glm::vec4(shadow_box_cone_dir_, 0.0f);
     uniforms.cam_pos = glm::vec4(shadow_box_cam_pos_, 0.0f);
     std::memcpy(uniform_buffer_.mapped(), &uniforms, sizeof(uniforms));

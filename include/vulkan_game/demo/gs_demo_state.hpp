@@ -39,6 +39,9 @@ private:
     uint32_t gs_render_interval_ = 4;
     glm::vec2 last_compute_offset_{0.0f};
 
+    // Scale multiplier (adjusted with +/- keys)
+    float scale_multiplier_ = 1.0f;
+
     // FPS tracking (wall clock for accuracy despite dt clamping)
     std::chrono::steady_clock::time_point fps_clock_{};
     int fps_frame_count_ = 0;
