@@ -106,24 +106,46 @@ void main() {
     }
 
     // --- Fire effect (Phase 5) ---
+    // Burn front is not active when burn_t > 0 (burn effect handles its own fire)
     float fire_y_min = effect_params.y;
     float fire_y_max = effect_params.z;
-    if (fire_y_max > fire_y_min + 0.01) {
+    float burn_t_check = effect_params2.w;
+    if (fire_y_max > fire_y_min + 0.01 && burn_t_check <= 0.0) {
         float fire_range = fire_y_max - fire_y_min;
+
+        // Rising flame front: starts at fire_y_min, climbs up over time
+        // Cycles every ~8 seconds, creating a repeating upward sweep
+        float cycle = fract(time * 0.125);  // 0→1 over 8 seconds
+        float flame_front = fire_y_min + fire_range * cycle * 1.3;  // overshoots top
+
         if (pos.y >= fire_y_min && pos.y <= fire_y_max) {
-            float fire_factor = (pos.y - fire_y_min) / fire_range;
+            // Distance below the flame front — positive means already engulfed
+            float dist_below_front = flame_front - pos.y;
+            // Intensity: strongest at the front, fading behind; zero above front
+            float front_band = fire_range * 0.25;  // width of active flame zone
+            float intensity = clamp(dist_below_front / front_band, 0.0, 1.0);
+            // Fade out well behind the front (flames die down after passing)
+            float behind_fade = clamp(1.0 - (dist_below_front - front_band) / (fire_range * 0.5), 0.0, 1.0);
+            intensity *= behind_fade;
 
-            // Upward drift + horizontal jitter
-            pos.y += fire_factor * sin(time * 3.0 + h * 6.28) * fire_range * 0.15;
-            pos.x += sin(time * 5.0 + h * 12.56) * fire_range * 0.03 * fire_factor;
-            pos.z += cos(time * 4.0 + h * 9.42) * fire_range * 0.03 * fire_factor;
+            if (intensity > 0.001) {
+                float fire_factor = (pos.y - fire_y_min) / fire_range;
 
-            // Color shift toward orange/red — strong tint
-            vec3 fire_color = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.1, 0.0), fire_factor);
-            col = mix(col, fire_color, 0.5 + fire_factor * 0.4);
+                // Upward drift + horizontal jitter — scaled by intensity
+                pos.y += intensity * sin(time * 3.0 + h * 6.28) * fire_range * 0.15;
+                pos.x += sin(time * 5.0 + h * 12.56) * fire_range * 0.03 * intensity;
+                pos.z += cos(time * 4.0 + h * 9.42) * fire_range * 0.03 * intensity;
 
-            // Opacity flicker
-            opacity *= 0.7 + 0.3 * sin(time * 10.0 + h * 6.28);
+                // Color: bright yellow at the front edge, deeper red behind
+                vec3 fire_color = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.1, 0.0), fire_factor);
+                // Brighten at the leading edge of the front
+                float edge_glow = clamp(1.0 - abs(dist_below_front) / (front_band * 0.3), 0.0, 1.0);
+                fire_color = mix(fire_color, vec3(1.0, 0.9, 0.3), edge_glow * 0.5);
+                col = mix(col, fire_color, intensity * (0.5 + fire_factor * 0.4));
+
+                // Opacity flicker
+                opacity *= mix(1.0, 0.7 + 0.3 * sin(time * 10.0 + h * 6.28), intensity);
+            }
         }
     }
 
