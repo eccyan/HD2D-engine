@@ -44,7 +44,7 @@ layout(set = 0, binding = 3) uniform Uniforms {
     vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = scale_multiplier
     vec4 cone_dir;      // xyz = cone direction, w = unused
     vec4 cam_pos;       // xyz = camera position, w = unused
-    vec4 effect_flags;  // x = toon_bands, y = light_mode, z = touch_active, w = time
+    vec4 effect_flags;  // x = toon_bands, y = light_mode, z = touch_timer (0=off), w = time
     vec4 light_params;  // xyz = light_dir, w = intensity
     vec4 touch_point;   // xyz = world_pos, w = radius
     vec4 effect_params; // x = water_y, y = fire_y_min, z = fire_y_max, w = strength
@@ -84,14 +84,16 @@ void main() {
     float h = hash_uint(idx);
 
     // --- Touch deformation (Phase 4) ---
-    if (effect_flags.z > 0.5) {
+    // effect_flags.z carries the touch timer (>0 = active, value = seconds since touch)
+    float touch_time = effect_flags.z;
+    if (touch_time > 0.0) {
         vec3 tp = touch_point.xyz;
         float radius = touch_point.w;
         float dist = length(pos - tp);
         if (dist < radius) {
             float falloff = 1.0 - dist / radius;
             falloff *= falloff;
-            float t = time;  // time since effect start (managed by CPU touch_timer)
+            float t = touch_time;
             float displacement = falloff * sin(t * 8.0 - dist * 3.0) * exp(-t * 2.0) * radius * 0.3;
             vec3 dir = (dist > 0.001) ? normalize(pos - tp) : vec3(0.0, 1.0, 0.0);
             pos += dir * displacement;

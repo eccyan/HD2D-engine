@@ -32,7 +32,7 @@ layout(set = 0, binding = 2) uniform Uniforms {
     vec4 shadow_box;    // x = margin, y = cone_cos, z = num_sort_passes, w = unused
     vec4 cone_dir;      // xyz = cone direction, w = unused
     vec4 cam_pos;       // xyz = camera position, w = unused
-    vec4 effect_flags;  // x = toon_bands, y = light_mode, z = touch_active, w = time
+    vec4 effect_flags;  // x = toon_bands, y = light_mode, z = touch_timer (0=off), w = time
     vec4 light_params;  // xyz = light_dir, w = intensity
     vec4 touch_point;   // xyz = world_pos, w = radius
     vec4 effect_params; // x = water_y, y = fire_y_min, z = fire_y_max, w = strength
@@ -159,16 +159,32 @@ void main() {
 
             // Edge detection from depth discontinuity
             float depth_c = tile_depth[local_id.y][local_id.x];
-            float threshold = depth_c * 0.05;  // 5% relative threshold
+            if (depth_c > 0.0) {
+                // 15% relative threshold — voxel GS data has steep depth variation
+                float threshold = depth_c * 0.15;
 
-            bool edge = false;
-            if (local_id.x > 0u  && abs(tile_depth[local_id.y][local_id.x - 1u] - depth_c) > threshold) edge = true;
-            if (local_id.x < 15u && abs(tile_depth[local_id.y][local_id.x + 1u] - depth_c) > threshold) edge = true;
-            if (local_id.y > 0u  && abs(tile_depth[local_id.y - 1u][local_id.x] - depth_c) > threshold) edge = true;
-            if (local_id.y < 15u && abs(tile_depth[local_id.y + 1u][local_id.x] - depth_c) > threshold) edge = true;
+                // Only compare against neighbors that have valid depth (non-zero)
+                bool edge = false;
+                if (local_id.x > 0u) {
+                    float nd = tile_depth[local_id.y][local_id.x - 1u];
+                    if (nd > 0.0 && abs(nd - depth_c) > threshold) edge = true;
+                }
+                if (local_id.x < 15u) {
+                    float nd = tile_depth[local_id.y][local_id.x + 1u];
+                    if (nd > 0.0 && abs(nd - depth_c) > threshold) edge = true;
+                }
+                if (local_id.y > 0u) {
+                    float nd = tile_depth[local_id.y - 1u][local_id.x];
+                    if (nd > 0.0 && abs(nd - depth_c) > threshold) edge = true;
+                }
+                if (local_id.y < 15u) {
+                    float nd = tile_depth[local_id.y + 1u][local_id.x];
+                    if (nd > 0.0 && abs(nd - depth_c) > threshold) edge = true;
+                }
 
-            if (edge) {
-                base_color = vec3(0.0);  // black outlines
+                if (edge) {
+                    base_color *= 0.15;  // dark outlines (not pure black)
+                }
             }
         }
 

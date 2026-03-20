@@ -45,10 +45,11 @@ public:
     int light_mode() const { return light_mode_; }
     void set_light_dir(const glm::vec3& d) { light_dir_ = d; }
     void set_light_intensity(float i) { light_intensity_ = i; }
-    void set_touch_point(const glm::vec3& p, float radius) {
-        touch_point_ = p; touch_radius_ = radius; touch_active_ = true;
+    void set_touch_point(const glm::vec3& p, float radius, float timer = 0.0f) {
+        touch_point_ = p; touch_radius_ = radius; touch_active_ = true; touch_time_ = timer;
     }
-    void clear_touch() { touch_active_ = false; }
+    void set_touch_time(float t) { touch_time_ = t; }
+    void clear_touch() { touch_active_ = false; touch_time_ = 0.0f; }
     bool touch_active() const { return touch_active_; }
     void set_fire_region(float y_min, float y_max, float strength = 1.0f) {
         fire_y_min_ = y_min; fire_y_max_ = y_max; effect_strength_ = strength;
@@ -152,6 +153,7 @@ private:
     glm::vec3 touch_point_{0.0f};
     float touch_radius_ = 20.0f;
     bool touch_active_ = false;
+    float touch_time_ = 0.0f;
     float water_y_ = -1000.0f;    // sentinel: disabled
     float fire_y_min_ = 0.0f;
     float fire_y_max_ = 0.0f;

@@ -71,9 +71,11 @@ void GsDemoState::reset_camera() {
 void GsDemoState::update_camera(App& app, float dt) {
     auto& input = app.input();
 
-    // Mouse drag → orbit
+    // Mouse drag → orbit (suppressed when Shift is held for touch deformation)
     glm::vec2 mouse = input.mouse_pos();
-    if (input.is_mouse_down(0)) {
+    bool shift_held = input.is_key_down(GLFW_KEY_LEFT_SHIFT) ||
+                      input.is_key_down(GLFW_KEY_RIGHT_SHIFT);
+    if (input.is_mouse_down(0) && !shift_held) {
         if (!dragging_) {
             dragging_ = true;
             last_mouse_ = mouse;
@@ -252,6 +254,7 @@ void GsDemoState::update(App& app, float dt) {
     // Update touch decay
     if (touch_timer_ > 0.0f) {
         touch_timer_ += dt;
+        app.renderer().gs_renderer().set_touch_time(touch_timer_);
         if (touch_timer_ > kTouchDecay) {
             touch_timer_ = 0.0f;
             app.renderer().gs_renderer().clear_touch();

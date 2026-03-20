@@ -552,7 +552,7 @@ void GsRenderer::render(VkCommandBuffer cmd, const glm::mat4& view, const glm::m
     uniforms.effect_flags = glm::vec4(
         static_cast<float>(toon_bands_),
         static_cast<float>(light_mode_),
-        touch_active_ ? 1.0f : 0.0f,
+        touch_active_ ? touch_time_ : 0.0f,
         time_);
     uniforms.light_params = glm::vec4(glm::normalize(light_dir_), light_intensity_);
     uniforms.touch_point = glm::vec4(touch_point_, touch_radius_);
