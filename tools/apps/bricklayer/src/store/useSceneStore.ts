@@ -538,11 +538,10 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
         if (mode === 'flat') {
           next.set(voxelKey(ix, 0, iz), { color: [r, g, b, a] });
         } else if (mode === 'depth' && depthMap) {
-          // Depth map: 0 = closest (tall), 1 = farthest (short)
-          // Invert so close objects become tall voxel columns
+          // Depth map: higher value = closer to camera = taller column
           const depthIdx = iz * imageData.width + ix;
           const depth = depthMap[depthIdx] ?? 0;
-          const colHeight = Math.max(1, Math.round((1 - depth) * maxHeight));
+          const colHeight = Math.max(1, Math.round(depth * maxHeight));
           for (let iy = 0; iy < colHeight; iy++) {
             next.set(voxelKey(ix, iy, iz), { color: [r, g, b, a] });
           }
