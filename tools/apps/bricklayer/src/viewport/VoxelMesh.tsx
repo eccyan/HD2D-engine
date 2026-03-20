@@ -2,38 +2,60 @@ import React, { useRef, useMemo, useCallback, useEffect } from 'react';
 import { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSceneStore } from '../store/useSceneStore.js';
-import { parseKey, brushPositions } from '../lib/voxelUtils.js';
+import { voxelKey, parseKey, brushPositions } from '../lib/voxelUtils.js';
 import type { VoxelKey } from '../store/types.js';
 
 const _dummy = new THREE.Object3D();
 
-// sRGB → linear conversion for a single channel (0-255 input, 0-1 linear output)
+// sRGB -> linear conversion for a single channel (0-255 input, 0-1 linear output)
 function srgbToLinear(c: number): number {
   const s = c / 255;
   return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
 }
 
+// 6-neighbor offsets for surface detection
+const NEIGHBORS: [number, number, number][] = [
+  [1, 0, 0], [-1, 0, 0],
+  [0, 1, 0], [0, -1, 0],
+  [0, 0, 1], [0, 0, -1],
+];
+
 export function VoxelMesh() {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const voxels = useSceneStore((s) => s.voxels);
 
-  const entries = useMemo(() => Array.from(voxels.entries()), [voxels]);
-  const count = entries.length;
+  // Filter to surface-only voxels (at least one exposed face)
+  const surfaceEntries = useMemo(() => {
+    const all = Array.from(voxels.entries());
+    if (all.length < 1000) return all; // skip culling for small sets
 
-  // Build index → key map for raycasting
+    return all.filter(([key]) => {
+      const [x, y, z] = parseKey(key);
+      for (const [dx, dy, dz] of NEIGHBORS) {
+        if (!voxels.has(voxelKey(x + dx, y + dy, z + dz))) {
+          return true; // at least one face exposed
+        }
+      }
+      return false; // fully enclosed — cull
+    });
+  }, [voxels]);
+
+  const count = surfaceEntries.length;
+
+  // Build index -> key map for raycasting (maps surface index to original voxel key)
   const indexToKey = useMemo(() => {
     const map = new Map<number, VoxelKey>();
-    entries.forEach(([key], i) => map.set(i, key));
+    surfaceEntries.forEach(([key], i) => map.set(i, key));
     return map;
-  }, [entries]);
+  }, [surfaceEntries]);
 
-  // Pre-compute matrix and color buffers
+  // Pre-compute matrix and color buffers from surface voxels only
   const { matrices, colors } = useMemo(() => {
     const mat = new Float32Array(count * 16);
     const col = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
-      const [key, voxel] = entries[i];
+      const [key, voxel] = surfaceEntries[i];
       const [x, y, z] = parseKey(key);
 
       _dummy.position.set(x, y, z);
@@ -48,7 +70,7 @@ export function VoxelMesh() {
     }
 
     return { matrices: mat, colors: col };
-  }, [entries, count]);
+  }, [surfaceEntries, count]);
 
   // Apply buffers to the InstancedMesh
   useEffect(() => {
@@ -67,7 +89,6 @@ export function VoxelMesh() {
         new Float32Array(count * 3), 3
       );
     }
-    // Resize if needed
     if (mesh.instanceColor.array.length < count * 3) {
       mesh.instanceColor = new THREE.InstancedBufferAttribute(
         new Float32Array(count * 3), 3

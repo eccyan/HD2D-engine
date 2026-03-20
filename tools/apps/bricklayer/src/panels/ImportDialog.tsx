@@ -84,10 +84,30 @@ const styles: Record<string, React.CSSProperties> = {
 
 type ImportMode = 'flat' | 'luminance' | 'depth';
 
+function downscaleImage(img: HTMLImageElement, maxWidth: number): ImageData {
+  const canvas = document.createElement('canvas');
+
+  if (img.width <= maxWidth) {
+    canvas.width = img.width;
+    canvas.height = img.height;
+  } else {
+    const scale = maxWidth / img.width;
+    canvas.width = maxWidth;
+    canvas.height = Math.round(img.height * scale);
+  }
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
 export function ImportDialog({ onClose }: { onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<ImportMode>('flat');
   const [maxHeight, setMaxHeight] = useState(16);
+  const [maxWidth, setMaxWidth] = useState(256);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -100,12 +120,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
     const imageUrl = URL.createObjectURL(file);
 
     img.onload = async () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      const imageData = downscaleImage(img, maxWidth);
       URL.revokeObjectURL(imageUrl);
 
       const store = useSceneStore.getState();
@@ -183,6 +198,24 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             Model downloads on first use (~50 MB, cached in browser).
           </div>
         )}
+
+        <div style={styles.row}>
+          <span style={styles.label}>Max Width</span>
+          <input
+            type="range"
+            min={32}
+            max={1024}
+            step={32}
+            value={maxWidth}
+            onChange={(e) => setMaxWidth(Number(e.target.value))}
+            style={{ flex: 1 }}
+            disabled={loading}
+          />
+          <span style={{ fontSize: 13, minWidth: 40 }}>{maxWidth}px</span>
+        </div>
+        <div style={styles.hint}>
+          Downscales image before voxelization. Lower = fewer voxels, faster rendering.
+        </div>
 
         {showHeightSlider && (
           <div style={styles.row}>
