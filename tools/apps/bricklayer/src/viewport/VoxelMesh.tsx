@@ -1,45 +1,83 @@
-import React, { useRef, useMemo, useCallback } from 'react';
-import { useFrame, useThree, ThreeEvent } from '@react-three/fiber';
+import React, { useRef, useMemo, useCallback, useEffect } from 'react';
+import { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSceneStore } from '../store/useSceneStore.js';
-import { voxelKey, parseKey, brushPositions } from '../lib/voxelUtils.js';
+import { parseKey, brushPositions } from '../lib/voxelUtils.js';
+import type { VoxelKey } from '../store/types.js';
 
 const _dummy = new THREE.Object3D();
-const _color = new THREE.Color();
+
+// sRGB → linear conversion for a single channel (0-255 input, 0-1 linear output)
+function srgbToLinear(c: number): number {
+  const s = c / 255;
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
 
 export function VoxelMesh() {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const meshRef = useRef<THREE.InstancedMesh>(null!);
   const voxels = useSceneStore((s) => s.voxels);
-  const activeTool = useSceneStore((s) => s.activeTool);
-  const brushSize = useSceneStore((s) => s.brushSize);
 
   const entries = useMemo(() => Array.from(voxels.entries()), [voxels]);
-  const maxCount = Math.max(entries.length, 1);
+  const count = entries.length;
 
-  // Build index map for raycasting
+  // Build index → key map for raycasting
   const indexToKey = useMemo(() => {
-    const map = new Map<number, string>();
+    const map = new Map<number, VoxelKey>();
     entries.forEach(([key], i) => map.set(i, key));
     return map;
   }, [entries]);
 
-  useFrame(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
+  // Pre-compute matrix and color buffers
+  const { matrices, colors } = useMemo(() => {
+    const mat = new Float32Array(count * 16);
+    const col = new Float32Array(count * 3);
 
-    entries.forEach(([key, voxel], i) => {
+    for (let i = 0; i < count; i++) {
+      const [key, voxel] = entries[i];
       const [x, y, z] = parseKey(key);
-      _dummy.position.set(x, y, z);
-      _dummy.updateMatrix();
-      mesh.setMatrixAt(i, _dummy.matrix);
-      _color.setRGB(voxel.color[0] / 255, voxel.color[1] / 255, voxel.color[2] / 255, THREE.SRGBColorSpace);
-      mesh.setColorAt(i, _color);
-    });
 
-    mesh.count = entries.length;
+      _dummy.position.set(x, y, z);
+      _dummy.scale.set(1, 1, 1);
+      _dummy.rotation.set(0, 0, 0);
+      _dummy.updateMatrix();
+      _dummy.matrix.toArray(mat, i * 16);
+
+      col[i * 3 + 0] = srgbToLinear(voxel.color[0]);
+      col[i * 3 + 1] = srgbToLinear(voxel.color[1]);
+      col[i * 3 + 2] = srgbToLinear(voxel.color[2]);
+    }
+
+    return { matrices: mat, colors: col };
+  }, [entries, count]);
+
+  // Apply buffers to the InstancedMesh
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh || count === 0) return;
+
+    mesh.count = count;
+
+    // Write instance matrices
+    mesh.instanceMatrix.array.set(matrices);
     mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  });
+
+    // Write instance colors
+    if (!mesh.instanceColor) {
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(
+        new Float32Array(count * 3), 3
+      );
+    }
+    // Resize if needed
+    if (mesh.instanceColor.array.length < count * 3) {
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(
+        new Float32Array(count * 3), 3
+      );
+    }
+    (mesh.instanceColor.array as Float32Array).set(colors);
+    mesh.instanceColor.needsUpdate = true;
+
+    mesh.computeBoundingSphere();
+  }, [matrices, colors, count]);
 
   const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -48,7 +86,7 @@ export function VoxelMesh() {
     const key = indexToKey.get(e.instanceId);
     if (!key) return;
 
-    const [x, y, z] = parseKey(key as `${number},${number},${number}`);
+    const [x, y, z] = parseKey(key);
     const store = useSceneStore.getState();
     const normal = e.face?.normal;
 
@@ -69,8 +107,7 @@ export function VoxelMesh() {
       case 'paint': {
         store.pushUndo();
         if (store.brushSize > 1) {
-          const positions = brushPositions(x, y, z, store.brushSize);
-          for (const [px, py, pz] of positions) {
+          for (const [px, py, pz] of brushPositions(x, y, z, store.brushSize)) {
             store.paintVoxel(px, py, pz);
           }
         } else {
@@ -110,15 +147,18 @@ export function VoxelMesh() {
     }
   }, [indexToKey]);
 
+  // Key forces remount when count changes so buffer sizes match
   return (
     <instancedMesh
+      key={count}
       ref={meshRef}
-      args={[undefined, undefined, maxCount]}
+      args={[undefined, undefined, Math.max(count, 1)]}
       onClick={handleClick}
       onContextMenu={handleClick}
+      frustumCulled={false}
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#ffffff" />
+      <meshLambertMaterial />
     </instancedMesh>
   );
 }
