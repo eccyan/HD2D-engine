@@ -165,9 +165,12 @@ void Renderer::init_gs(const GaussianCloud& cloud, uint32_t width, uint32_t heig
     gs_chunk_grid_.build(cloud, 32.0f);
     gs_prev_visible_.clear();
 
-    // Auto-set LOD budget for large clouds (keeps small scenes unaffected)
-    if (cloud.count() > 200000 && gs_gaussian_budget_ == 0) {
-        gs_gaussian_budget_ = 200000;
+    // Auto-enable adaptive LOD budget for large clouds
+    gs_total_gaussian_count_ = cloud.count();
+    if (gs_total_gaussian_count_ > 200000 && gs_gaussian_budget_ == 0) {
+        gs_gaussian_budget_ = gs_total_gaussian_count_;  // start at full, let adaptive tuning reduce
+        gs_adaptive_budget_ = true;
+        gs_smoothed_fps_ = 60.0f;
     }
 
     // Create descriptor sets for sampling the GS output as a sprite texture
@@ -248,6 +251,31 @@ void Renderer::draw_scene(Scene& scene,
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     vkBeginCommandBuffer(cmd, &begin_info);
 
+    // ===== Adaptive GS budget: converge to target FPS then lock =====
+    if (gs_adaptive_budget_ && gs_gaussian_budget_ > 0 && dt > 0.0f) {
+        float fps = 1.0f / dt;
+        gs_smoothed_fps_ = gs_smoothed_fps_ * 0.9f + fps * 0.1f;
+
+        if (!gs_budget_locked_) {
+            uint32_t prev_budget = gs_gaussian_budget_;
+
+            if (gs_smoothed_fps_ < gs_target_fps_) {
+                // Too slow — reduce budget proportionally
+                float scale = gs_smoothed_fps_ / gs_target_fps_;
+                gs_gaussian_budget_ = std::max(kGsBudgetMin,
+                    static_cast<uint32_t>(gs_gaussian_budget_ * scale));
+                gs_prev_visible_.clear();
+                gs_stable_frame_count_ = 0;
+            } else {
+                // At or above target — check if stable enough to lock
+                gs_stable_frame_count_++;
+                if (gs_stable_frame_count_ >= kGsStableFramesNeeded) {
+                    gs_budget_locked_ = true;
+                }
+            }
+        }
+    }
+
     // ===== Pre-pass: Gaussian splatting compute (before render pass) =====
     if (gs_initialized_ && gs_renderer_.has_cloud()) {
         // Frustum-cull chunks and re-upload only visible Gaussians
@@ -258,6 +286,11 @@ void Renderer::draw_scene(Scene& scene,
 
             // Dirty check: skip re-upload if same chunks are visible
             if (visible != gs_prev_visible_) {
+                // Visible set changed — unlock adaptive budget for re-tuning
+                if (gs_budget_locked_) {
+                    gs_budget_locked_ = false;
+                    gs_stable_frame_count_ = 0;
+                }
                 gs_prev_visible_ = visible;
                 if (gs_gaussian_budget_ > 0) {
                     glm::vec3 cam_pos = glm::vec3(glm::inverse(gs_view_)[3]);

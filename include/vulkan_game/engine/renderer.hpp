@@ -152,6 +152,14 @@ private:
     std::vector<uint32_t> gs_prev_visible_;
     bool gs_skip_chunk_cull_ = false;
     uint32_t gs_gaussian_budget_ = 0;  // 0 = unlimited (no LOD decimation)
+    uint32_t gs_total_gaussian_count_ = 0;  // total Gaussians in loaded cloud
+    bool gs_adaptive_budget_ = false;
+    bool gs_budget_locked_ = false;
+    float gs_smoothed_fps_ = 60.0f;
+    float gs_target_fps_ = 30.0f;
+    uint32_t gs_stable_frame_count_ = 0;
+    static constexpr uint32_t kGsBudgetMin = 50000;
+    static constexpr uint32_t kGsStableFramesNeeded = 30;  // ~0.5s at 60fps
     float gs_blit_offset_x_ = 0.0f;
     float gs_blit_offset_y_ = 0.0f;
 
