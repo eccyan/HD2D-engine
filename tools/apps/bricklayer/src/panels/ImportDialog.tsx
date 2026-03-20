@@ -223,7 +223,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
             <input
               type="range"
               min={1}
-              max={64}
+              max={256}
               value={maxHeight}
               onChange={(e) => setMaxHeight(Number(e.target.value))}
               style={{ flex: 1 }}
