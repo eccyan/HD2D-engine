@@ -36,6 +36,7 @@ layout(set = 0, binding = 2) uniform Uniforms {
     vec4 light_params;  // xyz = light_dir, w = intensity
     vec4 touch_point;   // xyz = world_pos, w = radius
     vec4 effect_params; // x = water_y, y = fire_y_min, z = fire_y_max, w = strength
+    vec4 effect_params2; // x = pulse_t, y = xray_depth, z = swirl_t, w = unused
 };
 
 layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D output_image;
@@ -60,6 +61,9 @@ void main() {
 
     vec2 pix_center = vec2(pixel) + 0.5;
 
+    // X-Ray depth threshold
+    float xray_depth = effect_params2.y;
+
     // Accumulate color front-to-back
     vec3 color = vec3(0.0);
     float alpha_accum = 0.0;
@@ -74,6 +78,9 @@ void main() {
         if (sort_entries[s].key == 0xFFFF) break;
 
         ProjectedSplat splat = projected[idx];
+
+        // X-Ray: skip front Gaussians by depth threshold
+        if (xray_depth > 0.0 && splat.depth < xray_depth) continue;
 
         // Quick bounding box check
         vec2 d = pix_center - splat.center;
@@ -196,6 +203,18 @@ void main() {
 
         // Re-premultiply
         color = base_color * alpha_accum;
+    }
+
+    // --- X-Ray color treatment ---
+    if (xray_depth > 0.0 && alpha_accum > 0.001) {
+        vec3 base = color / max(alpha_accum, 0.001);
+        float lum = dot(base, vec3(0.299, 0.587, 0.114));
+        // Blue-green medical-scan tint
+        vec3 xray_color = vec3(lum * 0.3, lum * 0.8, lum * 1.0);
+        // Edge glow: thin regions (low alpha) glow brighter
+        float edge_glow = 1.0 + max(0.0, 1.0 - alpha_accum * 2.0) * 0.5;
+        xray_color *= edge_glow;
+        color = xray_color * alpha_accum;
     }
 
     // Write output (premultiplied alpha)

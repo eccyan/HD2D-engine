@@ -48,6 +48,7 @@ layout(set = 0, binding = 3) uniform Uniforms {
     vec4 light_params;  // xyz = light_dir, w = intensity
     vec4 touch_point;   // xyz = world_pos, w = radius
     vec4 effect_params; // x = water_y, y = fire_y_min, z = fire_y_max, w = strength
+    vec4 effect_params2; // x = pulse_t, y = xray_depth, z = swirl_t, w = unused
 };
 
 layout(set = 0, binding = 4) buffer VisibleCountBuffer {
@@ -148,6 +149,52 @@ void main() {
         }
     }
 
+    // --- Explode effect ---
+    float explode_t = cone_dir.w;
+    if (explode_t > 0.0) {
+        // Per-Gaussian unique direction via hash
+        float hx = hash_uint(idx * 7u + 31u) * 2.0 - 1.0;
+        float hy = hash_uint(idx * 13u + 53u) * 0.5 + 0.5;  // upward bias
+        float hz = hash_uint(idx * 19u + 97u) * 2.0 - 1.0;
+        vec3 explode_dir = normalize(vec3(hx, hy, hz));
+        float t2 = explode_t * explode_t;
+        pos += explode_dir * t2 * 200.0;
+        // Gravity after midpoint
+        pos.y -= max(0.0, explode_t - 0.5) * 80.0;
+        // Fade
+        opacity *= max(0.0, 1.0 - explode_t * 0.8);
+        // Glow
+        col = mix(col, vec3(1.0), explode_t * 0.3);
+    }
+
+    // --- Voxelize position snap ---
+    float voxel_t = cam_pos.w;
+    if (voxel_t > 0.0) {
+        float grid = 4.0;
+        vec3 snapped = floor(pos / grid + 0.5) * grid;
+        pos = mix(pos, snapped, voxel_t);
+        // Color quantize
+        col = mix(col, floor(col * 8.0 + 0.5) / 8.0, voxel_t);
+    }
+
+    // --- Swirl rotation ---
+    float swirl_t = effect_params2.z;
+    if (swirl_t > 0.0) {
+        // Rotate around Y axis through approximate cloud center
+        vec3 center = vec3(0.0, 0.0, 64.0);
+        vec2 rel = pos.xz - center.xz;
+        float dist = length(rel);
+        // Differential rotation: outer spins faster
+        float angle = swirl_t * (2.0 + dist * 0.05) * time;
+        float cs = cos(angle);
+        float sn = sin(angle);
+        pos.x = center.x + rel.x * cs - rel.y * sn;
+        pos.z = center.z + rel.x * sn + rel.y * cs;
+        // Funnel lift: near center rises
+        float lift = max(0.0, 1.0 - dist * 0.02) * swirl_t * 30.0;
+        pos.y += lift;
+    }
+
     // Transform to view space
     vec4 view_pos = view * vec4(pos, 1.0);
 
@@ -196,6 +243,37 @@ void main() {
     // Compute 3D covariance matrix Sigma = R * S * S^T * R^T
     mat3 R = quat_to_mat(g.rot);
     vec3 s = g.scale_pad.xyz * shadow_box.w;
+
+    // --- Voxelize scale uniformize ---
+    if (voxel_t > 0.0) {
+        float grid = 4.0;
+        s = mix(s, vec3(grid * 0.4), voxel_t);
+    }
+
+    // --- Pulse scale modulation ---
+    float pulse_t = effect_params2.x;
+    if (pulse_t > 0.0) {
+        vec3 center = vec3(0.0, 0.0, 64.0);
+        float dist_from_center = length(pos - center);
+        float phase = pulse_t * 4.0 - dist_from_center * 0.05;
+        // Double-beat heartbeat pattern
+        float beat = 0.5 + 0.5 * sin(phase * 6.2832);
+        float beat2 = 0.5 + 0.5 * sin(phase * 6.2832 * 2.0);
+        float scale_mod = 0.8 + 0.5 * beat * beat2;
+        s *= scale_mod;
+        // Slight red warmth on expansion
+        col = mix(col, col * vec3(1.2, 0.9, 0.9), beat * beat2 * 0.3);
+    }
+
+    // --- Swirl scale stretch ---
+    if (swirl_t > 0.0) {
+        vec3 center_s = vec3(0.0, 0.0, 64.0);
+        float dist_s = length(pos.xz - center_s.xz);
+        float stretch = 1.0 + dist_s * 0.003 * swirl_t;
+        s.x *= stretch;
+        s.z *= stretch;
+    }
+
     mat3 S = mat3(
         s.x, 0, 0,
         0, s.y, 0,

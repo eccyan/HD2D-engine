@@ -63,6 +63,18 @@ public:
     float fire_y_min() const { return fire_y_min_; }
     float fire_y_max() const { return fire_y_max_; }
 
+    // Wave 2 effect setters
+    void set_explode_t(float t) { explode_t_ = t; }
+    float explode_t() const { return explode_t_; }
+    void set_voxel_t(float t) { voxel_t_ = t; }
+    float voxel_t() const { return voxel_t_; }
+    void set_pulse_t(float t) { pulse_t_ = t; }
+    float pulse_t() const { return pulse_t_; }
+    void set_xray_depth(float d) { xray_depth_ = d; }
+    float xray_depth() const { return xray_depth_; }
+    void set_swirl_t(float t) { swirl_t_ = t; }
+    float swirl_t() const { return swirl_t_; }
+
     void shutdown(VmaAllocator allocator);
 
 private:
@@ -158,6 +170,13 @@ private:
     float fire_y_min_ = 0.0f;
     float fire_y_max_ = 0.0f;
     float effect_strength_ = 1.0f;
+
+    // Wave 2 effects
+    float explode_t_ = 0.0f;
+    float voxel_t_ = 0.0f;
+    float pulse_t_ = 0.0f;
+    float xray_depth_ = 0.0f;
+    float swirl_t_ = 0.0f;
 };
 
 }  // namespace vulkan_game

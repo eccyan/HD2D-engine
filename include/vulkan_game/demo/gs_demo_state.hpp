@@ -54,6 +54,15 @@ private:
     float touch_timer_ = 0.0f;       // seconds since touch, 0 = inactive
     static constexpr float kTouchDecay = 3.0f;  // seconds until touch fades
 
+    // Wave 2 effects
+    float explode_timer_ = 0.0f;     // 0=off, animates 0→1 over 3s
+    bool voxel_active_ = false;
+    float voxel_blend_ = 0.0f;       // smooth 0→1
+    bool pulse_active_ = false;
+    float xray_depth_ = 0.0f;        // 0=off, +20 per press, wraps at 300
+    bool swirl_active_ = false;
+    float swirl_blend_ = 0.0f;       // smooth 0→1
+
     // FPS tracking (wall clock for accuracy despite dt clamping)
     std::chrono::steady_clock::time_point fps_clock_{};
     int fps_frame_count_ = 0;

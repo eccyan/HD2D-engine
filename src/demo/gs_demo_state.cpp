@@ -301,6 +301,70 @@ void GsDemoState::update(App& app, float dt) {
         std::fprintf(stderr, "Water: %s\n", water_active_ ? "ON" : "OFF");
     }
 
+    // E → explode (one-shot 3s animation)
+    if (app.input().was_key_pressed(GLFW_KEY_E)) {
+        explode_timer_ = 0.001f;  // start
+        std::fprintf(stderr, "Explode: START\n");
+    }
+
+    // V → toggle voxelize
+    if (app.input().was_key_pressed(GLFW_KEY_V)) {
+        voxel_active_ = !voxel_active_;
+        std::fprintf(stderr, "Voxelize: %s\n", voxel_active_ ? "ON" : "OFF");
+    }
+
+    // H → toggle pulse
+    if (app.input().was_key_pressed(GLFW_KEY_H)) {
+        pulse_active_ = !pulse_active_;
+        std::fprintf(stderr, "Pulse: %s\n", pulse_active_ ? "ON" : "OFF");
+    }
+
+    // Y → X-Ray depth peel (+20, wrap at 300→0)
+    if (app.input().was_key_pressed(GLFW_KEY_Y)) {
+        xray_depth_ += 20.0f;
+        if (xray_depth_ > 300.0f) xray_depth_ = 0.0f;
+        app.renderer().gs_renderer().set_xray_depth(xray_depth_);
+        std::fprintf(stderr, "X-Ray depth: %.0f\n", xray_depth_);
+    }
+
+    // C → toggle swirl
+    if (app.input().was_key_pressed(GLFW_KEY_C)) {
+        swirl_active_ = !swirl_active_;
+        std::fprintf(stderr, "Swirl: %s\n", swirl_active_ ? "ON" : "OFF");
+    }
+
+    // Animate explode (0→1 over 3s, auto-reset)
+    if (explode_timer_ > 0.0f) {
+        explode_timer_ += dt;
+        float t = std::min(explode_timer_ / 3.0f, 1.0f);
+        app.renderer().gs_renderer().set_explode_t(t);
+        if (explode_timer_ >= 3.0f) {
+            explode_timer_ = 0.0f;
+            app.renderer().gs_renderer().set_explode_t(0.0f);
+        }
+    }
+
+    // Smooth lerp voxel blend
+    {
+        float target = voxel_active_ ? 1.0f : 0.0f;
+        float speed = 3.0f;  // transition speed
+        if (voxel_blend_ < target) voxel_blend_ = std::min(voxel_blend_ + speed * dt, target);
+        else if (voxel_blend_ > target) voxel_blend_ = std::max(voxel_blend_ - speed * dt, target);
+        app.renderer().gs_renderer().set_voxel_t(voxel_blend_);
+    }
+
+    // Pulse: pass effect_time when active
+    app.renderer().gs_renderer().set_pulse_t(pulse_active_ ? effect_time_ : 0.0f);
+
+    // Smooth lerp swirl blend
+    {
+        float target = swirl_active_ ? 1.0f : 0.0f;
+        float speed = 2.0f;
+        if (swirl_blend_ < target) swirl_blend_ = std::min(swirl_blend_ + speed * dt, target);
+        else if (swirl_blend_ > target) swirl_blend_ = std::max(swirl_blend_ - speed * dt, target);
+        app.renderer().gs_renderer().set_swirl_t(swirl_blend_);
+    }
+
     if (shadow_box_mode_) {
         update_shadow_box_camera(app, dt);
     } else {
@@ -315,7 +379,7 @@ void GsDemoState::build_draw_lists(App& app) {
     // Semi-transparent HUD panel (top-left in Y-UP coords)
     constexpr float panel_x = 10.0f;
     constexpr float panel_w = 280.0f;
-    constexpr float panel_h = 220.0f;
+    constexpr float panel_h = 240.0f;
     constexpr float panel_top = 720.0f - 10.0f;  // 10px from screen top
     constexpr float panel_cy = panel_top - panel_h * 0.5f;
 
@@ -375,6 +439,11 @@ void GsDemoState::build_draw_lists(App& app) {
         if (touch_timer_ > 0.0f) fx += "Touch ";
         if (fire_active_) fx += "Fire ";
         if (water_active_) fx += "Water ";
+        if (explode_timer_ > 0.0f) fx += "Explode ";
+        if (voxel_blend_ > 0.01f) fx += "Voxel ";
+        if (pulse_active_) fx += "Pulse ";
+        if (xray_depth_ > 0.0f) fx += "XRay=" + std::to_string(static_cast<int>(xray_depth_)) + " ";
+        if (swirl_blend_ > 0.01f) fx += "Swirl ";
         if (!fx.empty()) {
             ui.label("FX: " + fx, lx, y, scale, {1.0f, 0.9f, 0.3f, 1.0f});
             y -= 18.0f;
@@ -389,6 +458,8 @@ void GsDemoState::build_draw_lists(App& app) {
     }
     y -= 14.0f;
     ui.label("T:Toon  L:Light  F:Fire  G:Water  X:Touch", lx, y, 0.35f, dim);
+    y -= 14.0f;
+    ui.label("E:Explode  V:Voxel  H:Pulse  Y:XRay  C:Swirl", lx, y, 0.35f, dim);
 }
 
 }  // namespace vulkan_game
