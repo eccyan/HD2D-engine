@@ -157,6 +157,9 @@ GaussianCloud GaussianCloud::load_ply(const std::string& path) {
     // Opacity
     auto* op = find_prop({"opacity"});
 
+    // Bone index (character skeletal posing)
+    auto* bi = find_prop({"bone_index"});
+
     if (!px || !py || !pz) {
         throw std::runtime_error("PLY file missing position properties (x, y, z)");
     }
@@ -228,6 +231,19 @@ GaussianCloud GaussianCloud::load_ply(const std::string& path) {
 
         // Importance for LOD: large, opaque Gaussians are most important
         g.importance = g.opacity * std::max({g.scale.x, g.scale.y, g.scale.z});
+
+        // Bone index
+        if (bi) {
+            if (bi->type == "uchar" || bi->type == "uint8") {
+                uint8_t v;
+                std::memcpy(&v, row + bi->offset, 1);
+                g.bone_index = static_cast<uint32_t>(v);
+            } else {
+                g.bone_index = static_cast<uint32_t>(read_float(row, *bi));
+            }
+        } else {
+            g.bone_index = 0;
+        }
 
         cloud.bounds_.expand(g.position);
     }

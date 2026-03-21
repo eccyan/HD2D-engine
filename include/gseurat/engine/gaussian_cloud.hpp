@@ -15,7 +15,8 @@ struct Gaussian {
     glm::vec3 color;      // 12 bytes (SH DC coefficient → linear RGB)
     float opacity;         // 4 bytes
     float importance;      // 4 bytes (opacity * max_scale, for LOD decimation)
-};  // 60 bytes
+    uint32_t bone_index;   // 4 bytes (body part index for skeletal posing, 0 = no bone)
+};  // 64 bytes
 
 struct AABB {
     glm::vec3 min{std::numeric_limits<float>::max()};

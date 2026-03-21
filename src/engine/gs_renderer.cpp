@@ -122,7 +122,7 @@ void GsRenderer::create_output_image(uint32_t width, uint32_t height) {
 void GsRenderer::create_descriptor_resources() {
     // Descriptor pool — enough for all sets
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 30},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 32},
         {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
     };
@@ -137,7 +137,7 @@ void GsRenderer::create_descriptor_resources() {
         throw std::runtime_error("Failed to create GS descriptor pool");
     }
 
-    // Preprocess layout: { gaussians, projected, sort_keys, uniforms, visible_count }
+    // Preprocess layout: { gaussians, projected, sort_keys, uniforms, visible_count, bones }
     {
         VkDescriptorSetLayoutBinding bindings[] = {
             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
@@ -145,10 +145,11 @@ void GsRenderer::create_descriptor_resources() {
             {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
             {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
+            {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr},
         };
         VkDescriptorSetLayoutCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        ci.bindingCount = 5;
+        ci.bindingCount = 6;
         ci.pBindings = bindings;
         vkCreateDescriptorSetLayout(device_, &ci, nullptr, &preprocess_layout_);
     }
@@ -329,6 +330,7 @@ void GsRenderer::load_cloud(const GaussianCloud& cloud) {
     histogram_ssbo_.destroy(allocator_);
     uniform_buffer_.destroy(allocator_);
     visible_count_ssbo_.destroy(allocator_);
+    bone_ssbo_.destroy(allocator_);
 
     // Create GPU storage buffers
     gaussian_ssbo_ = Buffer::create_storage(allocator_, gaussian_buf_size);
@@ -339,13 +341,25 @@ void GsRenderer::load_cloud(const GaussianCloud& cloud) {
     uniform_buffer_ = Buffer::create_uniform(allocator_, sizeof(GsUniforms));
     visible_count_ssbo_ = Buffer::create_storage_readback(allocator_, sizeof(uint32_t));
 
+    // Bone transform SSBO (always allocated, zeroed if unused)
+    bone_ssbo_ = Buffer::create_storage(allocator_, kMaxBones * sizeof(glm::mat4));
+    bone_count_ = 0;
+    {
+        auto* bones = static_cast<glm::mat4*>(bone_ssbo_.mapped());
+        for (uint32_t i = 0; i < kMaxBones; ++i) bones[i] = glm::mat4(1.0f);
+    }
+
     // Upload Gaussian data
     {
         auto* gpu_data = static_cast<GpuGaussian*>(gaussian_ssbo_.mapped());
         for (uint32_t i = 0; i < gaussian_count_; ++i) {
             const auto& g = cloud.gaussians()[i];
             gpu_data[i].pos_opacity = glm::vec4(g.position, g.opacity);
-            gpu_data[i].scale_pad = glm::vec4(g.scale, 0.0f);
+            // Pack bone_index as uint bits into scale_pad.w
+            float bone_as_float;
+            uint32_t bone_idx = g.bone_index;
+            std::memcpy(&bone_as_float, &bone_idx, sizeof(float));
+            gpu_data[i].scale_pad = glm::vec4(g.scale, bone_as_float);
             gpu_data[i].rot = glm::vec4(g.rotation.x, g.rotation.y, g.rotation.z, g.rotation.w);
             gpu_data[i].color_pad = glm::vec4(g.color, 1.0f);
         }
@@ -374,7 +388,10 @@ void GsRenderer::update_active_gaussians(const Gaussian* data, uint32_t count) {
     auto* gpu_data = static_cast<GpuGaussian*>(gaussian_ssbo_.mapped());
     for (uint32_t i = 0; i < count; ++i) {
         gpu_data[i].pos_opacity = glm::vec4(data[i].position, data[i].opacity);
-        gpu_data[i].scale_pad = glm::vec4(data[i].scale, 0.0f);
+        float bone_f;
+        uint32_t bi = data[i].bone_index;
+        std::memcpy(&bone_f, &bi, sizeof(float));
+        gpu_data[i].scale_pad = glm::vec4(data[i].scale, bone_f);
         gpu_data[i].rot = glm::vec4(data[i].rotation.x, data[i].rotation.y,
                                      data[i].rotation.z, data[i].rotation.w);
         gpu_data[i].color_pad = glm::vec4(data[i].color, 1.0f);
@@ -392,14 +409,31 @@ void GsRenderer::update_active_gaussians(const Gaussian* data, uint32_t count) {
     init_sort_buf(sort_b_ssbo_);
 }
 
+void GsRenderer::upload_bone_transforms(const glm::mat4* transforms, uint32_t count) {
+    if (!bone_ssbo_.mapped() || count == 0) return;
+    uint32_t n = std::min(count, kMaxBones);
+    auto* dst = static_cast<glm::mat4*>(bone_ssbo_.mapped());
+    std::memcpy(dst, transforms, n * sizeof(glm::mat4));
+    bone_count_ = n;
+}
+
+void GsRenderer::clear_bone_transforms() {
+    bone_count_ = 0;
+    if (bone_ssbo_.mapped()) {
+        auto* dst = static_cast<glm::mat4*>(bone_ssbo_.mapped());
+        for (uint32_t i = 0; i < kMaxBones; ++i) dst[i] = glm::mat4(1.0f);
+    }
+}
+
 void GsRenderer::update_descriptors() {
-    // Preprocess set: gaussians(0), projected(1), sort_keys_A(2), uniforms(3), visible_count(4)
+    // Preprocess set: gaussians(0), projected(1), sort_keys_A(2), uniforms(3), visible_count(4), bones(5)
     {
         VkDescriptorBufferInfo gaussian_info{gaussian_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
         VkDescriptorBufferInfo projected_info{projected_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
         VkDescriptorBufferInfo sort_info{sort_keys_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
         VkDescriptorBufferInfo uniform_info{uniform_buffer_.buffer(), 0, sizeof(GsUniforms)};
         VkDescriptorBufferInfo visible_count_info{visible_count_ssbo_.buffer(), 0, sizeof(uint32_t)};
+        VkDescriptorBufferInfo bone_info{bone_ssbo_.buffer(), 0, VK_WHOLE_SIZE};
 
         VkWriteDescriptorSet writes[] = {
             {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, preprocess_set_, 0, 0, 1,
@@ -412,8 +446,10 @@ void GsRenderer::update_descriptors() {
              VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nullptr, &uniform_info, nullptr},
             {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, preprocess_set_, 4, 0, 1,
              VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &visible_count_info, nullptr},
+            {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, nullptr, preprocess_set_, 5, 0, 1,
+             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, nullptr, &bone_info, nullptr},
         };
-        vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
+        vkUpdateDescriptorSets(device_, 6, writes, 0, nullptr);
     }
 
     // Legacy sort set
@@ -715,6 +751,7 @@ void GsRenderer::shutdown(VmaAllocator allocator) {
     histogram_ssbo_.destroy(allocator);
     uniform_buffer_.destroy(allocator);
     visible_count_ssbo_.destroy(allocator);
+    bone_ssbo_.destroy(allocator);
 
     if (output_sampler_) vkDestroySampler(device_, output_sampler_, nullptr);
     if (output_view_) vkDestroyImageView(device_, output_view_, nullptr);
