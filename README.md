@@ -135,6 +135,7 @@ Output is sampled with nearest-neighbor filtering for stylized upscale.
 | P | Toggle shadow box (parallax) mode |
 | T/L/F/G/X | Toon / Light / Fire / Water / Touch |
 | E/V/H/Y/C/B | Explode / Voxel / Pulse / X-Ray / Swirl / Burn |
+| K | Toggle character demo (procedural walking humanoid) |
 
 ### Scene Format
 

@@ -417,6 +417,23 @@ void GsDemoState::update(AppBase& app, float dt) {
         }
     }
 
+    // K → toggle character demo
+    if (app.input().was_key_pressed(GLFW_KEY_K)) {
+        character_demo_ = !character_demo_;
+        if (character_demo_) {
+            spawn_test_character(app);
+            std::fprintf(stderr, "Character demo: ON\n");
+        } else {
+            app.renderer().gs_renderer().clear_bone_transforms();
+            character_anim_time_ = 0.0f;
+            std::fprintf(stderr, "Character demo: OFF\n");
+        }
+    }
+
+    if (character_demo_) {
+        update_character_pose(app, dt);
+    }
+
     if (shadow_box_mode_) {
         update_shadow_box_camera(app, dt);
     } else {
@@ -654,6 +671,95 @@ void GsDemoState::update_streaming(AppBase& app) {
                 active.data(), static_cast<uint32_t>(active.size()));
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Character demo — procedural voxel humanoid with walking animation
+// ---------------------------------------------------------------------------
+
+void GsDemoState::spawn_test_character(AppBase& app) {
+    // Generate a simple humanoid from voxels:
+    // body parts: 0=unassigned, 1=torso, 2=head, 3=arm_l, 4=arm_r, 5=leg_l, 6=leg_r
+    std::vector<Gaussian> gaussians;
+
+    auto add_box = [&](float cx, float cy, float cz, int w, int h, int d,
+                       glm::vec3 color, uint32_t bone) {
+        for (int x = 0; x < w; ++x) {
+            for (int y = 0; y < h; ++y) {
+                for (int z = 0; z < d; ++z) {
+                    Gaussian g{};
+                    g.position = {cx + x - w/2.0f, cy + y, cz + z - d/2.0f};
+                    g.scale = glm::vec3(0.5f);
+                    g.rotation = glm::quat(1, 0, 0, 0);
+                    g.color = color;
+                    g.opacity = 1.0f;
+                    g.importance = 1.0f;
+                    g.bone_index = bone;
+                    gaussians.push_back(g);
+                }
+            }
+        }
+    };
+
+    // Torso (bone 1) — centered at origin, 4×6×2
+    add_box(0, 4, 0, 4, 6, 2, {0.2f, 0.5f, 0.8f}, 1);
+    // Head (bone 2) — on top of torso, 3×3×2
+    add_box(0, 10, 0, 3, 3, 2, {0.9f, 0.75f, 0.6f}, 2);
+    // Left arm (bone 3) — left of torso, 2×5×2
+    add_box(-3.5f, 5, 0, 2, 5, 2, {0.2f, 0.5f, 0.8f}, 3);
+    // Right arm (bone 4) — right of torso, 2×5×2
+    add_box(3.5f, 5, 0, 2, 5, 2, {0.2f, 0.5f, 0.8f}, 4);
+    // Left leg (bone 5) — bottom-left, 2×4×2
+    add_box(-1.0f, 0, 0, 2, 4, 2, {0.3f, 0.3f, 0.5f}, 5);
+    // Right leg (bone 6) — bottom-right, 2×4×2
+    add_box(1.0f, 0, 0, 2, 4, 2, {0.3f, 0.3f, 0.5f}, 6);
+
+    auto cloud = GaussianCloud::from_gaussians(std::move(gaussians));
+    app.renderer().init_gs(cloud, 320, 240);
+    std::fprintf(stderr, "Character: spawned %u voxel Gaussians\n", cloud.count());
+
+    character_anim_time_ = 0.0f;
+}
+
+void GsDemoState::update_character_pose(AppBase& app, float dt) {
+    character_anim_time_ += dt;
+
+    // Simple walk cycle: arms and legs swing sinusoidally
+    float swing = std::sin(character_anim_time_ * 4.0f) * 0.5f;  // radians
+
+    glm::mat4 bones[7];
+    // Bone 0: identity (unused/unassigned)
+    bones[0] = glm::mat4(1.0f);
+    // Bone 1: torso — slight bob
+    bones[1] = glm::translate(glm::mat4(1.0f), {0, std::abs(swing) * 0.3f, 0});
+    // Bone 2: head — follows torso
+    bones[2] = bones[1];
+    // Bone 3: left arm — swing forward/back around shoulder joint (y=9)
+    {
+        auto t = glm::translate(glm::mat4(1.0f), {-3.5f, 9.0f, 0.0f});
+        auto r = glm::rotate(glm::mat4(1.0f), swing, {1, 0, 0});
+        bones[3] = t * r * glm::translate(glm::mat4(1.0f), {3.5f, -9.0f, 0.0f});
+    }
+    // Bone 4: right arm — opposite swing
+    {
+        auto t = glm::translate(glm::mat4(1.0f), {3.5f, 9.0f, 0.0f});
+        auto r = glm::rotate(glm::mat4(1.0f), -swing, {1, 0, 0});
+        bones[4] = t * r * glm::translate(glm::mat4(1.0f), {-3.5f, -9.0f, 0.0f});
+    }
+    // Bone 5: left leg — opposite to left arm
+    {
+        auto t = glm::translate(glm::mat4(1.0f), {-1.0f, 4.0f, 0.0f});
+        auto r = glm::rotate(glm::mat4(1.0f), -swing, {1, 0, 0});
+        bones[5] = t * r * glm::translate(glm::mat4(1.0f), {1.0f, -4.0f, 0.0f});
+    }
+    // Bone 6: right leg — opposite to right arm
+    {
+        auto t = glm::translate(glm::mat4(1.0f), {1.0f, 4.0f, 0.0f});
+        auto r = glm::rotate(glm::mat4(1.0f), swing, {1, 0, 0});
+        bones[6] = t * r * glm::translate(glm::mat4(1.0f), {-1.0f, -4.0f, 0.0f});
+    }
+
+    app.renderer().gs_renderer().upload_bone_transforms(bones, 7);
 }
 
 }  // namespace gseurat
