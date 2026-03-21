@@ -387,7 +387,7 @@ void Renderer::draw_scene(Scene& scene,
         }
 
         // Tilemap pass
-        if (scene.tile_layer().has_value()) {
+        if (flags.tilemap_rendering && scene.tile_layer().has_value()) {
             sprite_batch_.begin();
             for (const auto& draw_info : scene.tile_layer()->generate_draw_infos(scene.tile_animator())) {
                 sprite_batch_.draw(draw_info);

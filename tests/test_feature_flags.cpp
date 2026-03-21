@@ -44,10 +44,10 @@ int main() {
         std::printf("PASS: gs_viewer() profile\n");
     }
 
-    // 3. Entry count == 30
+    // 3. Entry count == 32
     {
-        assert(FeatureFlags::entries().size() == 30);
-        std::printf("PASS: entry count == 30\n");
+        assert(FeatureFlags::entries().size() == 32);
+        std::printf("PASS: entry count == 32\n");
     }
 
     // 4. Pointer-to-member round-trip
@@ -85,6 +85,22 @@ int main() {
         assert(flags.bloom == true);
         assert(flags.music == true);
         std::printf("PASS: individual flag toggle\n");
+    }
+
+    // 7. New tilemap flags default true
+    {
+        FeatureFlags flags{};
+        assert(flags.tilemap_rendering == true);
+        assert(flags.tilemap_collision == true);
+        std::printf("PASS: tilemap flags default true\n");
+    }
+
+    // 8. gs_viewer() has tilemap flags false
+    {
+        auto flags = FeatureFlags::gs_viewer();
+        assert(!flags.tilemap_rendering);
+        assert(!flags.tilemap_collision);
+        std::printf("PASS: gs_viewer() tilemap flags false\n");
     }
 
     std::printf("\nAll feature_flags tests passed.\n");

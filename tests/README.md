@@ -56,15 +56,53 @@ c++ -std=c++23 -I include \
 ./build/test_feature_flags
 ```
 
-**Tests (6):**
+**Tests (8):**
 | # | Test | What it verifies |
 |---|------|------------------|
-| 1 | Default flags all true | All 30 flags true via entries() iteration |
+| 1 | Default flags all true | All 32 flags true via entries() iteration |
 | 2 | gs_viewer() profile | Non-GS flags false, gs_rendering/chunk_culling/lod/adaptive true, gs_parallax false |
-| 3 | Entry count | `entries().size() == 30` |
+| 3 | Entry count | `entries().size() == 32` |
 | 4 | Pointer-to-member round-trip | `flags.*entry.ptr` reads/writes correctly |
 | 5 | GS category entries | Exactly 5 entries with category "3DGS" |
 | 6 | Individual flag toggle | Set one GS flag false, verify others unaffected |
+| 7 | Tilemap flags default true | `tilemap_rendering` and `tilemap_collision` default true |
+| 8 | gs_viewer() tilemap false | GS viewer profile has both tilemap flags false |
+
+### test_tilemap
+
+Tests TileAnimator, resolve_tilemap_collision, and TileLayer::generate_draw_infos.
+
+**Build:**
+```bash
+c++ -std=c++23 -I include \
+    -I build/macos-debug/_deps/glm-src \
+    -I build/macos-debug/_deps/stb-src \
+    -I build/macos-debug/_deps/vma-src/include \
+    $(pkg-config --cflags vulkan 2>/dev/null || echo "-I$VULKAN_SDK/include") \
+    tests/test_tilemap.cpp src/engine/tilemap.cpp \
+    -o build/test_tilemap
+```
+
+**Run:**
+```bash
+./build/test_tilemap
+```
+
+**Tests (12):**
+| # | Test | What it verifies |
+|---|------|------------------|
+| 1 | resolve without animation | `resolve(id)` returns same id when no definition matches |
+| 2 | add_definition + resolve | After adding def (base=5, frames=[10,11,12]), `resolve(5)` → 10 |
+| 3 | update advances frame | After `update(frame_duration)`, `resolve(5)` → 11 |
+| 4 | update wraps around | After cycling all frames, wraps to frame 0 |
+| 5 | reset clears state | After `reset()`, `resolve(5)` → 5 (no definition) |
+| 6 | empty solid vector | Returns position unchanged |
+| 7 | no overlap | Far-away position returns unchanged |
+| 8 | push out minimum axis | Overlapping solid tile pushes out on smaller overlap axis |
+| 9 | two adjacent solids | Both collisions resolved correctly |
+| 10 | skip tiles | 0xFFFF tiles produce no draw info |
+| 11 | position calculation | 2×2 grid positions are centered correctly |
+| 12 | animator integration | Animated tile changes UV coordinates |
 
 ### test_gs_chunk_grid
 

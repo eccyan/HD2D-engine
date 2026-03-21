@@ -31,6 +31,8 @@ struct FeatureFlags {
     bool weather = true;
     bool blob_shadows = true;
     bool animated_tiles = true;
+    bool tilemap_rendering = true;   // Tilemap draw pass in renderer
+    bool tilemap_collision = true;   // Player-tilemap AABB collision resolution
     bool water_reflections = true;
     bool y_sort_depth = true;
     bool sprite_outlines = true;
@@ -68,16 +70,16 @@ struct FeatureFlags {
     // GS viewer: GS subsystem enabled (except parallax), everything else off
     static constexpr FeatureFlags gs_viewer() {
         return FeatureFlags{
-            false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false, false,
-            false, false, false,
-            false, false, false, false,
-            false, false,
+            false, false, false, false, false, false, false, false,  // Rendering (8)
+            false, false, false, false, false, false, false, false,  // Effects 1-8
+            false, false, false, false, false,                       // Effects 9-13
+            false, false, false, false,                              // Gameplay (4)
+            false, false,                                            // Audio (2)
             true, true, true, true, false
         };
     }
 
-    static constexpr std::array<Entry, 30> entries() {
+    static constexpr std::array<Entry, 32> entries() {
         return {{
             {"Parallax BG",    "24",  "RENDERING", &FeatureFlags::parallax_backgrounds},
             {"Point Lights",   "11",  "RENDERING", &FeatureFlags::point_lights},
@@ -91,6 +93,8 @@ struct FeatureFlags {
             {"Weather",        "25",  "EFFECTS",   &FeatureFlags::weather},
             {"Blob Shadows",   "28",  "EFFECTS",   &FeatureFlags::blob_shadows},
             {"Animated Tiles", "29",  "EFFECTS",   &FeatureFlags::animated_tiles},
+            {"Tilemap Render", "3",   "EFFECTS",   &FeatureFlags::tilemap_rendering},
+            {"Tilemap Collsn", "3",   "EFFECTS",   &FeatureFlags::tilemap_collision},
             {"Water Reflect.", "30",  "EFFECTS",   &FeatureFlags::water_reflections},
             {"Y-Sort Depth",  "33",  "EFFECTS",   &FeatureFlags::y_sort_depth},
             {"Sprite Outlines","34",  "EFFECTS",   &FeatureFlags::sprite_outlines},

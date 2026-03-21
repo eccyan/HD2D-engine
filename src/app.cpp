@@ -1301,7 +1301,7 @@ void App::update_game(float dt) {
         // === Explore mode ===
         auto move_result = ecs::systems::player_movement(world_, input_, dt);
 
-        if (scene_.tile_layer().has_value()) {
+        if (feature_flags_.tilemap_collision && scene_.tile_layer().has_value()) {
             ecs::systems::player_collision(world_, *scene_.tile_layer());
         }
 
