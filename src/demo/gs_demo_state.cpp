@@ -2,7 +2,6 @@
 #include "gseurat/engine/app_base.hpp"
 #include "gseurat/engine/gaussian_cloud.hpp"
 #include "gseurat/engine/gs_chunk_grid.hpp"
-#include "gseurat/engine/scene_loader.hpp"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -423,11 +422,8 @@ void GsDemoState::update(AppBase& app, float dt) {
         character_demo_ = !character_demo_;
         if (character_demo_) {
             spawn_test_character(app);
-            std::fprintf(stderr, "Character demo: ON\n");
         } else {
-            app.renderer().gs_renderer().clear_bone_transforms();
-            character_anim_time_ = 0.0f;
-            std::fprintf(stderr, "Character demo: OFF\n");
+            despawn_test_character(app);
         }
     }
 
@@ -679,33 +675,23 @@ void GsDemoState::update_streaming(AppBase& app) {
 // ---------------------------------------------------------------------------
 
 void GsDemoState::spawn_test_character(AppBase& app) {
-    // Find the center of the existing map
+    // Save original map Gaussians (only once)
+    if (map_gaussians_.empty() && app.renderer().has_gs_cloud()) {
+        const auto& all = app.renderer().gs_chunk_grid().all_gaussians();
+        map_gaussians_.assign(all.begin(), all.end());
+    }
+
+    // Find center of the map
     glm::vec3 center{0.0f};
-    if (app.renderer().has_gs_cloud()) {
-        auto aabb = app.renderer().gs_chunk_grid().cloud_bounds();
+    if (!map_gaussians_.empty()) {
+        AABB aabb;
+        for (const auto& g : map_gaussians_) aabb.expand(g.position);
         center = aabb.center();
     }
     character_origin_ = center;
 
-    // Gather existing map Gaussians
-    std::vector<Gaussian> merged;
-    auto& grid = app.renderer().gs_chunk_grid();
-    if (!grid.empty()) {
-        std::vector<uint32_t> all_chunks;
-        // Gather all chunks by using a very wide frustum (identity = everything visible)
-        all_chunks = grid.visible_chunks(glm::mat4(1.0f));
-        // If that returns nothing, manually build indices
-        if (all_chunks.empty()) {
-            // Fallback: re-load from scene
-            auto scene = SceneLoader::load(app.current_scene_path());
-            if (scene.gaussian_splat) {
-                auto cloud = GaussianCloud::load_ply(scene.gaussian_splat->ply_file);
-                merged.insert(merged.end(), cloud.gaussians().begin(), cloud.gaussians().end());
-            }
-        } else {
-            grid.gather(all_chunks, merged);
-        }
-    }
+    // Start with a copy of the original map (no accumulated characters)
+    std::vector<Gaussian> merged = map_gaussians_;
     uint32_t map_count = static_cast<uint32_t>(merged.size());
 
     // Generate humanoid at center: body parts 1-6
@@ -742,10 +728,28 @@ void GsDemoState::spawn_test_character(AppBase& app) {
     uint32_t gs_h = app.renderer().gs_renderer().output_height();
     if (gs_w == 0) { gs_w = 320; gs_h = 240; }
     app.renderer().init_gs(cloud, gs_w, gs_h);
-    std::fprintf(stderr, "Character: %u map + %u character Gaussians, placed at (%.1f, %.1f, %.1f)\n",
+    std::fprintf(stderr, "Character: %u map + %u character Gaussians at (%.1f, %.1f, %.1f)\n",
                  map_count, char_count, center.x, center.y, center.z);
 
     character_anim_time_ = 0.0f;
+    std::fprintf(stderr, "Character demo: ON\n");
+}
+
+void GsDemoState::despawn_test_character(AppBase& app) {
+    app.renderer().gs_renderer().clear_bone_transforms();
+    character_anim_time_ = 0.0f;
+
+    // Restore original map without character
+    if (!map_gaussians_.empty()) {
+        auto cloud = GaussianCloud::from_gaussians(
+            std::vector<Gaussian>(map_gaussians_));
+        uint32_t gs_w = app.renderer().gs_renderer().output_width();
+        uint32_t gs_h = app.renderer().gs_renderer().output_height();
+        if (gs_w == 0) { gs_w = 320; gs_h = 240; }
+        app.renderer().init_gs(cloud, gs_w, gs_h);
+    }
+
+    std::fprintf(stderr, "Character demo: OFF\n");
 }
 
 void GsDemoState::update_character_pose(AppBase& app, float dt) {
@@ -756,14 +760,14 @@ void GsDemoState::update_character_pose(AppBase& app, float dt) {
     float swing = std::sin(character_anim_time_ * 4.0f) * 0.5f;
 
     glm::mat4 bones[7];
-    bones[0] = glm::mat4(1.0f);  // unused
+    bones[0] = glm::mat4(1.0f);  // unused / map Gaussians
 
     // Torso bob
     bones[1] = glm::translate(glm::mat4(1.0f), {0, std::abs(swing) * 0.3f, 0});
     // Head follows torso
     bones[2] = bones[1];
 
-    // Arms swing around shoulder joints (character-local y=9, offset by origin)
+    // Pivot rotation: translate to joint, rotate, translate back
     auto pivot_rotate = [&](glm::vec3 pivot_local, float angle) {
         glm::vec3 world_pivot = o + pivot_local;
         auto t = glm::translate(glm::mat4(1.0f), world_pivot);

@@ -93,7 +93,9 @@ private:
     bool character_demo_ = false;
     float character_anim_time_ = 0.0f;
     glm::vec3 character_origin_{0.0f};  // center of map where character stands
+    std::vector<Gaussian> map_gaussians_;  // original map data (before character merge)
     void spawn_test_character(AppBase& app);
+    void despawn_test_character(AppBase& app);
     void update_character_pose(AppBase& app, float dt);
 };
 

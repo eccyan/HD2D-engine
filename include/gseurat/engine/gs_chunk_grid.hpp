@@ -27,6 +27,8 @@ public:
                         std::vector<Gaussian>& out) const;
     bool empty() const { return chunks_.empty(); }
     AABB cloud_bounds() const { return cloud_bounds_; }
+    const std::vector<Gaussian>& all_gaussians() const { return sorted_gaussians_; }
+    uint32_t chunk_count() const { return static_cast<uint32_t>(chunks_.size()); }
 
 private:
     std::vector<GsChunk> chunks_;
