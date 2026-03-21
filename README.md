@@ -58,12 +58,11 @@ cmake --build --preset <platform>-debug
 cmake --build --preset <platform>-release
 ```
 
-Two demo executables are produced:
+One demo executable is produced:
 
 | Executable | Description |
 |---|---|
-| `gseurat_demo` | Full engine demo with gameplay, NPCs, dialog, particles |
-| `gseurat_gs_demo` | GS viewer with visual effects, LOD, and chunk streaming |
+| `gseurat_demo` | GS viewer with visual effects, LOD, and chunk streaming |
 
 ## Architecture
 
@@ -268,12 +267,10 @@ See [tests/README.md](tests/README.md) for detailed build commands and test desc
 ```
 src/
   engine/         Engine core (renderer, ECS, audio, particles, streaming, etc.)
-  game/           Game-specific states and systems
-  demo/           Demo applications (gameplay demo, GS viewer)
+  demo/           Demo application (GS viewer)
 include/
   gseurat/
     engine/       Engine headers
-    game/         Game state headers
     demo/         Demo app headers
 shaders/          GLSL shaders (compiled to SPIR-V at build time)
 assets/           Game assets (scenes, textures, maps)

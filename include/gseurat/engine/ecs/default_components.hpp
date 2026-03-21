@@ -1,8 +1,11 @@
 #pragma once
 
 #include "gseurat/engine/ecs/types.hpp"
+#include "gseurat/engine/direction.hpp"
 
 #include <glm/glm.hpp>
+
+#include <string>
 
 namespace gseurat::ecs {
 
@@ -15,6 +18,15 @@ struct Sprite {
     glm::vec4 tint{1.0f, 1.0f, 1.0f, 1.0f};
     glm::vec2 uv_min{0.0f, 0.0f};
     glm::vec2 uv_max{1.0f, 1.0f};
+};
+
+struct Facing {
+    Direction dir = Direction::Down;
+};
+
+struct ScriptRef {
+    std::string module_name;
+    std::string class_name;
 };
 
 }  // namespace gseurat::ecs
