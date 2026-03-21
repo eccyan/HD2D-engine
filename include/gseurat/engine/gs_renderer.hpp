@@ -77,6 +77,11 @@ public:
     void set_burn_t(float t) { burn_t_ = t; }
     float burn_t() const { return burn_t_; }
 
+    // Bone transforms for character skinning (max 32 bones)
+    static constexpr uint32_t kMaxBones = 32;
+    void upload_bone_transforms(const glm::mat4* transforms, uint32_t count);
+    void clear_bone_transforms();
+
     void shutdown(VmaAllocator allocator);
 
 private:
@@ -104,6 +109,8 @@ private:
     Buffer histogram_ssbo_;          // Radix sort histogram (256 bins × num_workgroups)
     Buffer uniform_buffer_;          // Camera + resolution
     Buffer visible_count_ssbo_;      // Atomic counter: visible Gaussians after frustum cull
+    Buffer bone_ssbo_;               // Bone transforms for character skinning
+    uint32_t bone_count_ = 0;
     uint32_t gaussian_count_ = 0;
     uint32_t max_gaussian_count_ = 0;
     uint32_t sort_size_ = 0;         // Power-of-2 padded count

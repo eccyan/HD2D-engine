@@ -1,4 +1,4 @@
-import type { VoxelKey, Voxel } from '../store/types.js';
+import type { VoxelKey, Voxel, BodyPart } from '../store/types.js';
 import { parseKey, voxelKey } from './voxelUtils.js';
 
 const NEIGHBORS: [number, number, number][] = [
@@ -7,10 +7,22 @@ const NEIGHBORS: [number, number, number][] = [
   [0, 0, 1], [0, 0, -1],
 ];
 
+/** Build a lookup from voxel key → bone index for character export. */
+function buildBoneMap(parts: BodyPart[]): Map<VoxelKey, number> {
+  const map = new Map<VoxelKey, number>();
+  for (let i = 0; i < parts.length; i++) {
+    for (const key of parts[i].voxelKeys) {
+      map.set(key, i);
+    }
+  }
+  return map;
+}
+
 export function exportPly(
   voxels: Map<VoxelKey, Voxel>,
   gridWidth: number,
   gridHeight: number,
+  parts?: BodyPart[],
 ): Blob {
   // Surface culling: skip interior voxels enclosed by 6 neighbors
   const allEntries = Array.from(voxels.entries());
@@ -24,6 +36,9 @@ export function exportPly(
     return false; // fully enclosed
   });
   const count = entries.length;
+
+  const hasBones = parts && parts.length > 0;
+  const boneMap = hasBones ? buildBoneMap(parts) : null;
 
   const header =
     `ply\n` +
@@ -43,11 +58,12 @@ export function exportPly(
     `property float rot_1\n` +
     `property float rot_2\n` +
     `property float rot_3\n` +
+    (hasBones ? `property uchar bone_index\n` : '') +
     `end_header\n`;
 
   const headerBytes = new TextEncoder().encode(header);
-  const floatsPerVertex = 14;
-  const bodyBytes = count * floatsPerVertex * 4;
+  const bytesPerVertex = 14 * 4 + (hasBones ? 1 : 0);
+  const bodyBytes = count * bytesPerVertex;
   const buffer = new ArrayBuffer(headerBytes.length + bodyBytes);
   const uint8 = new Uint8Array(buffer);
   uint8.set(headerBytes, 0);
@@ -98,6 +114,13 @@ export function exportPly(
     view.setFloat32(offset, 0, true); offset += 4;
     view.setFloat32(offset, 0, true); offset += 4;
     view.setFloat32(offset, 0, true); offset += 4;
+
+    // Bone index (optional)
+    if (boneMap) {
+      const bone = boneMap.get(key) ?? 0;
+      view.setUint8(offset, bone);
+      offset += 1;
+    }
   }
 
   return new Blob([buffer], { type: 'application/octet-stream' });

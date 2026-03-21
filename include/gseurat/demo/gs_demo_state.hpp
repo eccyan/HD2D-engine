@@ -1,11 +1,13 @@
 #pragma once
 
 #include "gseurat/engine/game_state.hpp"
+#include "gseurat/engine/gaussian_cloud.hpp"
 #include "gseurat/engine/gs_chunk_streamer.hpp"
 #include "gseurat/engine/gs_parallax_camera.hpp"
 
 #include <glm/glm.hpp>
 #include <chrono>
+#include <vector>
 
 namespace gseurat {
 
@@ -86,6 +88,15 @@ private:
     bool streaming_mode_ = false;
     GsChunkStreamer chunk_streamer_;
     std::string chunk_dir_;  // directory where chunk PLYs are written
+
+    // Character demo (K key to toggle)
+    bool character_demo_ = false;
+    float character_anim_time_ = 0.0f;
+    glm::vec3 character_origin_{0.0f};  // center of map where character stands
+    std::vector<Gaussian> map_gaussians_;  // original map data (before character merge)
+    void spawn_test_character(AppBase& app);
+    void despawn_test_character(AppBase& app);
+    void update_character_pose(AppBase& app, float dt);
 };
 
 }  // namespace gseurat

@@ -417,6 +417,20 @@ void GsDemoState::update(AppBase& app, float dt) {
         }
     }
 
+    // K → toggle character demo
+    if (app.input().was_key_pressed(GLFW_KEY_K)) {
+        character_demo_ = !character_demo_;
+        if (character_demo_) {
+            spawn_test_character(app);
+        } else {
+            despawn_test_character(app);
+        }
+    }
+
+    if (character_demo_) {
+        update_character_pose(app, dt);
+    }
+
     if (shadow_box_mode_) {
         update_shadow_box_camera(app, dt);
     } else {
@@ -654,6 +668,119 @@ void GsDemoState::update_streaming(AppBase& app) {
                 active.data(), static_cast<uint32_t>(active.size()));
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Character demo — procedural voxel humanoid with walking animation
+// ---------------------------------------------------------------------------
+
+void GsDemoState::spawn_test_character(AppBase& app) {
+    // Save original map Gaussians (only once)
+    if (map_gaussians_.empty() && app.renderer().has_gs_cloud()) {
+        const auto& all = app.renderer().gs_chunk_grid().all_gaussians();
+        map_gaussians_.assign(all.begin(), all.end());
+    }
+
+    // Find center of the map
+    glm::vec3 center{0.0f};
+    if (!map_gaussians_.empty()) {
+        AABB aabb;
+        for (const auto& g : map_gaussians_) aabb.expand(g.position);
+        center = aabb.center();
+    }
+    character_origin_ = center;
+
+    // Start with a copy of the original map (no accumulated characters)
+    std::vector<Gaussian> merged = map_gaussians_;
+    uint32_t map_count = static_cast<uint32_t>(merged.size());
+
+    // Generate humanoid at center: body parts 1-6
+    auto add_box = [&](float cx, float cy, float cz, int w, int h, int d,
+                       glm::vec3 color, uint32_t bone) {
+        for (int x = 0; x < w; ++x) {
+            for (int y = 0; y < h; ++y) {
+                for (int z = 0; z < d; ++z) {
+                    Gaussian g{};
+                    g.position = center + glm::vec3(cx + x - w/2.0f, cy + y, cz + z - d/2.0f);
+                    g.scale = glm::vec3(0.5f);
+                    g.rotation = glm::quat(1, 0, 0, 0);
+                    g.color = color;
+                    g.opacity = 1.0f;
+                    g.importance = 1.0f;
+                    g.bone_index = bone;
+                    merged.push_back(g);
+                }
+            }
+        }
+    };
+
+    add_box(0, 4, 0, 4, 6, 2, {0.2f, 0.5f, 0.8f}, 1);  // Torso
+    add_box(0, 10, 0, 3, 3, 2, {0.9f, 0.75f, 0.6f}, 2); // Head
+    add_box(-3.5f, 5, 0, 2, 5, 2, {0.2f, 0.5f, 0.8f}, 3); // Left arm
+    add_box(3.5f, 5, 0, 2, 5, 2, {0.2f, 0.5f, 0.8f}, 4);  // Right arm
+    add_box(-1.0f, 0, 0, 2, 4, 2, {0.3f, 0.3f, 0.5f}, 5); // Left leg
+    add_box(1.0f, 0, 0, 2, 4, 2, {0.3f, 0.3f, 0.5f}, 6);  // Right leg
+
+    uint32_t char_count = static_cast<uint32_t>(merged.size()) - map_count;
+    auto cloud = GaussianCloud::from_gaussians(std::move(merged));
+
+    uint32_t gs_w = app.renderer().gs_renderer().output_width();
+    uint32_t gs_h = app.renderer().gs_renderer().output_height();
+    if (gs_w == 0) { gs_w = 320; gs_h = 240; }
+    app.renderer().init_gs(cloud, gs_w, gs_h);
+    std::fprintf(stderr, "Character: %u map + %u character Gaussians at (%.1f, %.1f, %.1f)\n",
+                 map_count, char_count, center.x, center.y, center.z);
+
+    character_anim_time_ = 0.0f;
+    std::fprintf(stderr, "Character demo: ON\n");
+}
+
+void GsDemoState::despawn_test_character(AppBase& app) {
+    app.renderer().gs_renderer().clear_bone_transforms();
+    character_anim_time_ = 0.0f;
+
+    // Restore original map without character
+    if (!map_gaussians_.empty()) {
+        auto cloud = GaussianCloud::from_gaussians(
+            std::vector<Gaussian>(map_gaussians_));
+        uint32_t gs_w = app.renderer().gs_renderer().output_width();
+        uint32_t gs_h = app.renderer().gs_renderer().output_height();
+        if (gs_w == 0) { gs_w = 320; gs_h = 240; }
+        app.renderer().init_gs(cloud, gs_w, gs_h);
+    }
+
+    std::fprintf(stderr, "Character demo: OFF\n");
+}
+
+void GsDemoState::update_character_pose(AppBase& app, float dt) {
+    character_anim_time_ += dt;
+    const glm::vec3& o = character_origin_;
+
+    // Walk cycle: arms and legs swing sinusoidally around joints
+    float swing = std::sin(character_anim_time_ * 4.0f) * 0.5f;
+
+    glm::mat4 bones[7];
+    bones[0] = glm::mat4(1.0f);  // unused / map Gaussians
+
+    // Torso bob
+    bones[1] = glm::translate(glm::mat4(1.0f), {0, std::abs(swing) * 0.3f, 0});
+    // Head follows torso
+    bones[2] = bones[1];
+
+    // Pivot rotation: translate to joint, rotate, translate back
+    auto pivot_rotate = [&](glm::vec3 pivot_local, float angle) {
+        glm::vec3 world_pivot = o + pivot_local;
+        auto t = glm::translate(glm::mat4(1.0f), world_pivot);
+        auto r = glm::rotate(glm::mat4(1.0f), angle, {1, 0, 0});
+        return t * r * glm::translate(glm::mat4(1.0f), -world_pivot);
+    };
+
+    bones[3] = pivot_rotate({-3.5f, 9.0f, 0.0f}, swing);   // Left arm
+    bones[4] = pivot_rotate({3.5f, 9.0f, 0.0f}, -swing);    // Right arm
+    bones[5] = pivot_rotate({-1.0f, 4.0f, 0.0f}, -swing);   // Left leg
+    bones[6] = pivot_rotate({1.0f, 4.0f, 0.0f}, swing);     // Right leg
+
+    app.renderer().gs_renderer().upload_bone_transforms(bones, 7);
 }
 
 }  // namespace gseurat
