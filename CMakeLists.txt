@@ -215,13 +215,6 @@ if(APPLE)
     )
 endif()
 
-# --- Main executable --------------------------------------------------------
-
-add_executable(vulkan_game src/main.cpp src/app.cpp)
-target_compile_definitions(vulkan_game PRIVATE VG_BUILD_PROFILE=0)
-target_link_libraries(vulkan_game PRIVATE vulkan_game_core)
-add_dependencies(vulkan_game shaders)
-
 # --- Demo executable --------------------------------------------------------
 
 add_executable(vulkan_game_demo
@@ -233,13 +226,6 @@ target_link_libraries(vulkan_game_demo PRIVATE vulkan_game_core)
 add_dependencies(vulkan_game_demo shaders)
 
 # --- Copy assets to build directory -----------------------------------------
-
-add_custom_command(TARGET vulkan_game POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${PROJECT_SOURCE_DIR}/assets
-        $<TARGET_FILE_DIR:vulkan_game>/assets
-    COMMENT "Copying assets to build directory"
-)
 
 add_custom_command(TARGET vulkan_game_demo POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
