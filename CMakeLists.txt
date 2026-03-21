@@ -181,6 +181,7 @@ add_library(vulkan_game_core OBJECT
     src/game/gameplay_state.cpp
     src/game/pause_state.cpp
     src/game/transition_state.cpp
+    src/engine/async_loader.cpp
 )
 
 if(NOT WIN32)
