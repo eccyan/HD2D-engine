@@ -129,7 +129,7 @@ export function parseVox(buffer: ArrayBuffer): VoxFile {
 
     for (const v of xyziChunks[i]) {
       // MagicaVoxel uses Y-up with Z as depth; we remap:
-      // MV (x, y, z) → Bricklayer (x, z, y) so MV's Z becomes our Y (height)
+      // MV (x, y, z) -> Echidna (x, z, y) so MV's Z becomes our Y (height)
       const key = voxelKey(v.x, v.z, v.y);
       // Color index in .vox is 1-based (0 = empty), palette is 0-indexed
       const color = usePalette[(v.colorIndex - 1) & 0xff];

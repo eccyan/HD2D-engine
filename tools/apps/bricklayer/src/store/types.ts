@@ -126,26 +126,6 @@ export interface PlayerData {
   character_id: string;
 }
 
-// ── Character ──
-
-export interface BodyPart {
-  id: string;
-  parent: string | null;
-  joint: [number, number, number];
-  voxelKeys: VoxelKey[];
-}
-
-export interface PoseData {
-  /** Per-part euler rotations in degrees [rx, ry, rz] */
-  rotations: Record<string, [number, number, number]>;
-}
-
-export interface CharacterManifest {
-  name: string;
-  parts: BodyPart[];
-  poses: Record<string, PoseData>;
-}
-
 export type ToolType =
   | 'place'
   | 'paint'
@@ -153,8 +133,7 @@ export type ToolType =
   | 'fill'
   | 'extrude'
   | 'eyedropper'
-  | 'select'
-  | 'assign_part';
+  | 'select';
 
 export type InspectorTab =
   | 'scene'
@@ -163,8 +142,7 @@ export type InspectorTab =
   | 'vfx'
   | 'entities'
   | 'backgrounds'
-  | 'gaussian'
-  | 'character';
+  | 'gaussian';
 
 export interface SelectedEntity {
   type: string;

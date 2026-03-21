@@ -8,7 +8,6 @@ import { VfxTab } from './VfxTab.js';
 import { EntitiesTab } from './EntitiesTab.js';
 import { BackgroundTab } from './BackgroundTab.js';
 import { GaussianTab } from './GaussianTab.js';
-import { CharacterTab } from './CharacterTab.js';
 
 const tabs: { id: InspectorTab; label: string }[] = [
   { id: 'scene', label: 'Scene' },
@@ -18,7 +17,6 @@ const tabs: { id: InspectorTab; label: string }[] = [
   { id: 'entities', label: 'Entities' },
   { id: 'backgrounds', label: 'BG' },
   { id: 'gaussian', label: 'GS' },
-  { id: 'character', label: 'Char' },
 ];
 
 const styles: Record<string, React.CSSProperties> = {
@@ -82,7 +80,6 @@ export function Inspector() {
         {inspectorTab === 'entities' && <EntitiesTab />}
         {inspectorTab === 'backgrounds' && <BackgroundTab />}
         {inspectorTab === 'gaussian' && <GaussianTab />}
-        {inspectorTab === 'character' && <CharacterTab />}
       </div>
     </div>
   );
