@@ -267,12 +267,10 @@ See [tests/README.md](tests/README.md) for detailed build commands and test desc
 ```
 src/
   engine/         Engine core (renderer, ECS, audio, particles, streaming, etc.)
-  game/           Game-specific states and systems
-  demo/           Demo applications (gameplay demo, GS viewer)
+  demo/           Demo application (GS viewer)
 include/
   gseurat/
     engine/       Engine headers
-    game/         Game state headers
     demo/         Demo app headers
 shaders/          GLSL shaders (compiled to SPIR-V at build time)
 assets/           Game assets (scenes, textures, maps)

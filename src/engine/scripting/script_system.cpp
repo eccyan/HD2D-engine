@@ -1,7 +1,6 @@
 #include "gseurat/engine/scripting/script_system.hpp"
 #include "gseurat/engine/app_base.hpp"
 #include "gseurat/engine/ecs/default_components.hpp"
-#include "gseurat/game/components.hpp"
 
 #include <cstdio>
 

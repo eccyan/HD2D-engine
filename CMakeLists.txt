@@ -176,11 +176,6 @@ add_library(gseurat_core OBJECT
     src/engine/scripting/wren_vm.cpp
     src/engine/scripting/wren_bindings.cpp
     src/engine/scripting/script_system.cpp
-    src/game/systems.cpp
-    src/game/title_state.cpp
-    src/game/gameplay_state.cpp
-    src/game/pause_state.cpp
-    src/game/transition_state.cpp
     src/engine/async_loader.cpp
     src/engine/staging_uploader.cpp
     src/engine/gs_chunk_streamer.cpp

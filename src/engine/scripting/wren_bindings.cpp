@@ -1,7 +1,6 @@
 #include "gseurat/engine/scripting/wren_bindings.hpp"
 #include "gseurat/engine/app_base.hpp"
 #include "gseurat/engine/ecs/default_components.hpp"
-#include "gseurat/game/components.hpp"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
