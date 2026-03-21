@@ -221,7 +221,6 @@ Engine (Vulkan) ←→ Unix Socket ←→ Bridge Proxy (ws://localhost:9100) ←
 | Tool | Port | Description |
 |------|------|-------------|
 | **Bridge Proxy** | 9100/9101 | Node.js relay between Unix socket and WebSocket clients |
-| **Seurat** | 5179 | Sprite art pipeline: concept → chibi → pixel → animation frames |
 | **Level Designer** | 5173 | Tile painting, NPC/light/portal placement, AI level generation |
 | **Particle Designer** | 5176 | Visual EmitterConfig editor with live engine preview |
 | **Audio Composer** | 5177 | 4-layer interactive music editor with MusicGen AI |
