@@ -70,13 +70,14 @@ private:
         std::function<std::any()> job;
     };
 
-    void worker_loop(std::stop_token stop);
+    void worker_loop();
 
-    std::jthread worker_;
+    std::thread worker_;
+    std::atomic<bool> stop_requested_{false};
     bool initialized_ = false;
 
     mutable std::mutex request_mutex_;
-    std::condition_variable_any request_cv_;
+    std::condition_variable request_cv_;
     std::deque<Request> request_queue_;
 
     mutable std::mutex result_mutex_;

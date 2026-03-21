@@ -11,6 +11,7 @@ AsyncLoader::~AsyncLoader() {
 void AsyncLoader::init() {
     if (initialized_) return;
     initialized_ = true;
+    stop_requested_.store(false, std::memory_order_relaxed);
 
     // Clear any stale state from a previous init/shutdown cycle
     {
@@ -22,17 +23,15 @@ void AsyncLoader::init() {
         cancelled_.clear();
     }
 
-    worker_ = std::jthread([this](std::stop_token stop) {
-        worker_loop(stop);
-    });
+    worker_ = std::thread([this] { worker_loop(); });
 }
 
 void AsyncLoader::shutdown() {
     if (!initialized_) return;
     initialized_ = false;
 
-    // Request stop — this signals the condition variable via stop_token
-    worker_.request_stop();
+    // Signal stop
+    stop_requested_.store(true, std::memory_order_release);
 
     // Wake the worker if it's waiting
     request_cv_.notify_all();
@@ -93,18 +92,19 @@ uint32_t AsyncLoader::pending_count() const {
     return queued + in_flight_.load(std::memory_order_relaxed);
 }
 
-void AsyncLoader::worker_loop(std::stop_token stop) {
-    while (!stop.stop_requested()) {
+void AsyncLoader::worker_loop() {
+    while (!stop_requested_.load(std::memory_order_acquire)) {
         Request req;
 
         // Wait for a request
         {
             std::unique_lock lock(request_mutex_);
-            request_cv_.wait(lock, stop, [this] {
-                return !request_queue_.empty();
+            request_cv_.wait(lock, [this] {
+                return !request_queue_.empty() ||
+                       stop_requested_.load(std::memory_order_acquire);
             });
 
-            if (stop.stop_requested()) break;
+            if (stop_requested_.load(std::memory_order_acquire)) break;
             if (request_queue_.empty()) continue;
 
             req = std::move(request_queue_.front());
