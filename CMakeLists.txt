@@ -183,6 +183,7 @@ add_library(vulkan_game_core OBJECT
     src/game/transition_state.cpp
     src/engine/async_loader.cpp
     src/engine/staging_uploader.cpp
+    src/engine/gs_chunk_streamer.cpp
 )
 
 if(NOT WIN32)
