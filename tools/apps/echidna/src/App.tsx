@@ -193,30 +193,27 @@ export function App() {
   return (
     <div style={styles.root}>
       <MenuBar />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
-        {/* 3-panel row */}
-        <div style={styles.body}>
-          {/* Left panel */}
-          <div style={{ width: leftWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: '#1e1e3a', borderRight: '1px solid #333' }}>
-            <ModeTabs />
-            {mode === 'build' ? <ToolBar /> : <AnimateLeftPanel />}
-          </div>
-          <ResizeHandle onDrag={handleLeftDrag} />
+      <div style={styles.body}>
+        {/* Left panel */}
+        <div style={{ width: leftWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: '#1e1e3a', borderRight: '1px solid #333' }}>
+          <ModeTabs />
+          {mode === 'build' ? <ToolBar /> : <AnimateLeftPanel />}
+        </div>
+        <ResizeHandle onDrag={handleLeftDrag} />
 
-          {/* Center panel */}
-          <div style={styles.viewport}>
+        {/* Center panel */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
+          <div style={{ flex: 1, position: 'relative' as const }}>
             <CharacterViewport />
           </div>
-          <ResizeHandle onDrag={handleRightDrag} />
-
-          {/* Right panel */}
-          <div style={{ ...styles.inspector, width: rightWidth }}>
-            {mode === 'build' ? <BuildPanel /> : <AnimateRightPanel />}
-          </div>
+          {mode === 'animate' && <Timeline />}
         </div>
+        <ResizeHandle onDrag={handleRightDrag} />
 
-        {/* Timeline — full width, bottom, only in Animate mode */}
-        {mode === 'animate' && <Timeline />}
+        {/* Right panel */}
+        <div style={{ ...styles.inspector, width: rightWidth }}>
+          {mode === 'build' ? <BuildPanel /> : <AnimateRightPanel />}
+        </div>
       </div>
     </div>
   );
