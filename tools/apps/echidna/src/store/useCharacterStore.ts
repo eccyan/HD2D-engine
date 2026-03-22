@@ -351,7 +351,7 @@ export const useCharacterStore = create<CharacterStoreState>((set, get) => ({
     if (parts.some((p) => p.id === name)) return;
     const part: BodyPart = {
       id: name,
-      parent: parts.length > 0 ? parts[0].id : null,
+      parent: get().selectedPart ?? (parts.length > 0 ? parts[0].id : null),
       joint: [0, 0, 0],
       voxelKeys: [],
     };
