@@ -199,15 +199,15 @@ function ModeTabs() {
 function BuildModeLayout() {
   return (
     <>
-      <ToolBar />
+      <div style={{ display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
+        <ModeTabs />
+        <ToolBar />
+      </div>
       <div style={styles.viewport}>
         <CharacterViewport />
       </div>
       <div style={styles.inspector}>
-        <ModeTabs />
-        <div style={{ padding: 12, overflowY: 'auto', flex: 1 }}>
-          <BuildPanel />
-        </div>
+        <BuildPanel />
       </div>
     </>
   );
@@ -216,17 +216,17 @@ function BuildModeLayout() {
 function AnimateModeLayout() {
   return (
     <>
-      <AnimateLeftPanel />
+      <div style={{ display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
+        <ModeTabs />
+        <AnimateLeftPanel />
+      </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
         <div style={styles.viewport}>
           <CharacterViewport />
         </div>
         <Timeline />
       </div>
-      <div style={styles.inspector}>
-        <ModeTabs />
-        <AnimateRightPanel />
-      </div>
+      <AnimateRightPanel />
     </>
   );
 }
