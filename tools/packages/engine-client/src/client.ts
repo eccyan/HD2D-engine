@@ -195,7 +195,7 @@ export class EngineClient {
       if (handlers !== undefined) {
         for (const handler of handlers) {
           try {
-            handler(parsed as EngineEvent);
+            handler(parsed as unknown as EngineEvent);
           } catch (err) {
             console.error(`[EngineClient] Event handler for "${eventName}" threw:`, err);
           }
@@ -206,7 +206,7 @@ export class EngineClient {
       if (wildcardHandlers !== undefined) {
         for (const handler of wildcardHandlers) {
           try {
-            handler(parsed as EngineEvent);
+            handler(parsed as unknown as EngineEvent);
           } catch (err) {
             console.error("[EngineClient] Wildcard event handler threw:", err);
           }
