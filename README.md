@@ -15,7 +15,7 @@ A Vulkan-based 3D Gaussian Splatting engine built with C++23. Named after **3DGS
 - **Day/night cycle** — Ambient color interpolation with weather system
 - **Save system** — JSON-based save/load with game flags
 - **AI debugging** — Unix socket control server for deterministic step-mode testing
-- **Creative tooling** — 6 web-based tools for content authoring (level design, particles, audio, maps)
+- **Creative tooling** — 7 web-based tools for content authoring (level design, characters, particles, audio, maps)
 
 ## Prerequisites
 
@@ -143,15 +143,16 @@ Output is sampled with nearest-neighbor filtering for stylized upscale.
 Characters are authored as voxel body parts, exported as Gaussians with per-splat bone indices, and animated via GPU bone transforms.
 
 ```
-MagicaVoxel (.vox) → Bricklayer (edit parts/joints/poses) → PLY + manifest JSON
-                                                                    ↓
+MagicaVoxel (.vox) → Echidna (edit parts/joints/poses) → PLY + manifest JSON
+                                                                 ↓
 Engine: PLY load → bone_index per Gaussian → preprocess shader → skeletal skinning
 ```
 
-**Authoring** (Bricklayer Character tab):
+**Authoring** (Echidna — port 5179):
 - Import `.vox` files — each MagicaVoxel model maps to a body part
-- Define bone hierarchy (parent/child) with joint pivot positions
-- Create named poses with per-part euler rotations
+- Assign Part tool: click voxels to assign to body parts, with part highlighting
+- Define bone hierarchy (parent/child) with joint pivot positions and gizmo visualization
+- Create named poses with per-part euler rotations and live preview
 - Export PLY with `bone_index` property + character manifest JSON
 
 **Runtime** (Engine):
@@ -249,7 +250,8 @@ Engine (Vulkan) ←→ Unix Socket ←→ Bridge Proxy (ws://localhost:9100) ←
 | **Particle Designer** | 5176 | Visual EmitterConfig editor with live engine preview |
 | **Audio Composer** | 5177 | 4-layer interactive music editor with MusicGen AI |
 | **SFX Designer** | 5178 | Waveform editor, procedural synthesis, AI SFX generation |
-| **Bricklayer** | 5180 | 3D voxel map/character editor with .vox import, bone posing, and PLY export |
+| **Echidna** | 5179 | Voxel character editor with body parts, bone posing, .vox import, PLY export |
+| **Bricklayer** | 5180 | 3D voxel map editor with depth estimation and PLY export |
 
 ```bash
 # Prerequisites: Node.js 18+, pnpm
@@ -302,7 +304,7 @@ assets/           Game assets (scenes, textures, maps)
 tests/            C++ integration tests (assert-based)
 tools/            Web-based creative tooling ecosystem (TypeScript/React)
   packages/       Shared libraries (engine-client, asset-types, ai-providers, ui-kit)
-  apps/           Tool applications (bridge, level-designer, bricklayer, etc.)
+  apps/           Tool applications (bridge, level-designer, echidna, bricklayer, etc.)
 docs/             Performance reports and tool documentation
 .devcontainer/    Container development environment
 ```
