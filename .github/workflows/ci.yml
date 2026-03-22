@@ -107,8 +107,5 @@ jobs:
       - name: Install dependencies
         run: cd tools && pnpm install
 
-      - name: Build packages
-        run: cd tools && pnpm -r build
-
       - name: Run tests
         run: cd tools && pnpm --filter @gseurat/tests test:echidna-ply-export
