@@ -137,6 +137,7 @@ Output is sampled with nearest-neighbor filtering for stylized upscale.
 | T/L/F/G/X | Toon / Light / Fire / Water / Touch |
 | E/V/H/Y/C/B | Explode / Voxel / Pulse / X-Ray / Swirl / Burn |
 | K | Toggle character demo (procedural walking humanoid) |
+| N | Toggle scene layers (auto-generate heightmap, nav, light probes) |
 
 ### Voxel Character Pipeline
 

@@ -427,6 +427,17 @@ void GsDemoState::update(AppBase& app, float dt) {
         }
     }
 
+    // N → generate scene layers (heightmap, nav zones, light probes)
+    if (app.input().was_key_pressed(GLFW_KEY_N)) {
+        scene_layers_active_ = !scene_layers_active_;
+        if (scene_layers_active_) {
+            generate_scene_layers(app);
+        } else {
+            scene_grid_ = {};
+            std::fprintf(stderr, "Scene layers: OFF\n");
+        }
+    }
+
     if (character_demo_) {
         update_character_pose(app, dt);
     }
@@ -548,6 +559,41 @@ void GsDemoState::build_draw_lists(AppBase& app) {
     ui.label("T:Toon  L:Light  F:Fire  G:Water  X:Touch  M:Stream", lx, y, 0.35f, dim);
     y -= 14.0f;
     ui.label("E:Explode  V:Voxel  H:Pulse  Y:XRay  C:Swirl  B:Burn", lx, y, 0.35f, dim);
+    y -= 14.0f;
+    ui.label("K:Character  N:SceneLayers", lx, y, 0.35f, dim);
+
+    // Scene layers info
+    if (scene_layers_active_ && scene_grid_.width > 0) {
+        y -= 18.0f;
+        glm::vec4 layer_color{0.5f, 1.0f, 0.8f, 1.0f};
+        char buf[128];
+        uint32_t walkable = 0;
+        float min_elev = 1e9f, max_elev = -1e9f;
+        for (uint32_t i = 0; i < scene_grid_.width * scene_grid_.height; ++i) {
+            if (!scene_grid_.solid[i]) {
+                walkable++;
+                if (i < scene_grid_.elevation.size()) {
+                    min_elev = std::min(min_elev, scene_grid_.elevation[i]);
+                    max_elev = std::max(max_elev, scene_grid_.elevation[i]);
+                }
+            }
+        }
+        std::snprintf(buf, sizeof(buf), "Grid: %ux%u  Walkable: %u/%u",
+                      scene_grid_.width, scene_grid_.height,
+                      walkable, scene_grid_.width * scene_grid_.height);
+        ui.label(buf, lx, y, scale, layer_color);
+        y -= 16.0f;
+        if (min_elev < 1e8f) {
+            std::snprintf(buf, sizeof(buf), "Elevation: %.1f - %.1f", min_elev, max_elev);
+            ui.label(buf, lx, y, scale, layer_color);
+            y -= 16.0f;
+        }
+        // Show light probe sample at grid center
+        uint32_t cx = scene_grid_.width / 2, cy = scene_grid_.height / 2;
+        auto probe = scene_grid_.get_light_probe(cx, cy);
+        std::snprintf(buf, sizeof(buf), "Probe@center: (%.2f, %.2f, %.2f)", probe.x, probe.y, probe.z);
+        ui.label(buf, lx, y, scale, layer_color);
+    }
 }
 
 void GsDemoState::enter_streaming_mode(AppBase& app) {
@@ -781,6 +827,38 @@ void GsDemoState::update_character_pose(AppBase& app, float dt) {
     bones[6] = pivot_rotate({1.0f, 4.0f, 0.0f}, swing);     // Right leg
 
     app.renderer().gs_renderer().upload_bone_transforms(bones, 7);
+}
+
+void GsDemoState::generate_scene_layers(AppBase& app) {
+    if (!app.renderer().has_gs_cloud()) {
+        std::fprintf(stderr, "Scene layers: No cloud loaded\n");
+        return;
+    }
+
+    // Get all Gaussians from the chunk grid
+    const auto& all = app.renderer().gs_chunk_grid().all_gaussians();
+    auto cloud = GaussianCloud::from_gaussians(std::vector<Gaussian>(all.begin(), all.end()));
+
+    // Auto-generate collision grid with elevation and light probes
+    auto aabb = app.renderer().gs_chunk_grid().cloud_bounds();
+    float extent_x = aabb.max.x - aabb.min.x;
+    float extent_z = aabb.max.z - aabb.min.z;
+    float cell = std::max(1.0f, std::max(extent_x, extent_z) / 64.0f);  // ~64 cells on longest axis
+    uint32_t gw = std::max(1u, static_cast<uint32_t>(extent_x / cell));
+    uint32_t gh = std::max(1u, static_cast<uint32_t>(extent_z / cell));
+
+    scene_grid_ = generate_collision_from_gaussians(cloud, gw, gh, cell, cell * 2.0f);
+
+    // Count stats
+    uint32_t walkable = 0;
+    for (uint32_t i = 0; i < gw * gh; ++i) {
+        if (!scene_grid_.solid[i]) walkable++;
+    }
+
+    std::fprintf(stderr, "Scene layers: ON\n");
+    std::fprintf(stderr, "  Grid: %ux%u (cell_size=%.1f)\n", gw, gh, cell);
+    std::fprintf(stderr, "  Walkable: %u/%u cells\n", walkable, gw * gh);
+    std::fprintf(stderr, "  Elevation + light probes auto-generated from %u Gaussians\n", cloud.count());
 }
 
 }  // namespace gseurat
