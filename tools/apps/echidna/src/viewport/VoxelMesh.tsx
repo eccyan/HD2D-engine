@@ -400,12 +400,6 @@ export function VoxelMesh() {
           }
           store.setBoxSelection(selected);
           setBoxStart(null);
-
-          // In animate mode, auto-assign to selected bone
-          if (store.mode === 'animate' && store.selectedPart && selected.length > 0) {
-            store.pushUndo();
-            store.assignVoxelsToPart(selected, store.selectedPart);
-          }
         }
         break;
       }
