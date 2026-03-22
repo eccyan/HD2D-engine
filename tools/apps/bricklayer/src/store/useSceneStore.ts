@@ -16,8 +16,6 @@ import type {
   SelectedEntity,
   Snapshot,
   BricklayerFile,
-  BodyPart,
-  PoseData,
 } from './types.js';
 import { voxelKey, parseKey, floodFill3D, brushPositions } from '../lib/voxelUtils.js';
 
@@ -202,31 +200,6 @@ export interface SceneStoreState {
   setShowCollision: (v: boolean) => void;
   setShowGizmos: (v: boolean) => void;
 
-  // Character editing
-  characterMode: boolean;
-  characterParts: BodyPart[];
-  characterPoses: Record<string, PoseData>;
-  selectedPart: string | null;
-  selectedPose: string | null;
-  previewPose: boolean;
-  characterName: string;
-
-  // Actions – character
-  setCharacterMode: (on: boolean) => void;
-  setCharacterName: (name: string) => void;
-  addPart: (name: string) => void;
-  removePart: (id: string) => void;
-  updatePartJoint: (id: string, joint: [number, number, number]) => void;
-  setPartParent: (id: string, parentId: string | null) => void;
-  assignVoxelsToPart: (keys: VoxelKey[], partId: string) => void;
-  setSelectedPart: (id: string | null) => void;
-  addPose: (name: string) => void;
-  removePose: (name: string) => void;
-  setSelectedPose: (name: string | null) => void;
-  updatePoseRotation: (poseName: string, partId: string, rotation: [number, number, number]) => void;
-  setPreviewPose: (on: boolean) => void;
-  importVoxModels: (parts: { name: string; voxels: Map<VoxelKey, Voxel> }[]) => void;
-
   // Actions – undo/redo
   undo: () => void;
   redo: () => void;
@@ -268,15 +241,6 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
   showGrid: true,
   showCollision: false,
   showGizmos: true,
-
-  // Character
-  characterMode: false,
-  characterParts: [],
-  characterPoses: {},
-  selectedPart: null,
-  selectedPose: null,
-  previewPose: false,
-  characterName: '',
 
   undoStack: [],
   redoStack: [],
@@ -626,130 +590,6 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
     }
 
     set({ voxels: next, gridWidth: w, gridDepth: maxHeight });
-  },
-
-  // ── Character ──
-
-  setCharacterMode: (on) => set({ characterMode: on }),
-  setCharacterName: (name) => set({ characterName: name }),
-
-  addPart: (name) => {
-    const parts = get().characterParts;
-    const part: BodyPart = {
-      id: name,
-      parent: parts.length > 0 ? parts[0].id : null,
-      joint: [0, 0, 0],
-      voxelKeys: [],
-    };
-    set({ characterParts: [...parts, part], selectedPart: name });
-  },
-
-  removePart: (id) => {
-    const parts = get().characterParts.filter((p) => p.id !== id);
-    // Unparent children of removed part
-    const updated = parts.map((p) => (p.parent === id ? { ...p, parent: null } : p));
-    const poses = { ...get().characterPoses };
-    for (const name of Object.keys(poses)) {
-      const rotations = { ...poses[name].rotations };
-      delete rotations[id];
-      poses[name] = { rotations };
-    }
-    set({
-      characterParts: updated,
-      characterPoses: poses,
-      selectedPart: get().selectedPart === id ? null : get().selectedPart,
-    });
-  },
-
-  updatePartJoint: (id, joint) => {
-    set({
-      characterParts: get().characterParts.map((p) =>
-        p.id === id ? { ...p, joint } : p,
-      ),
-    });
-  },
-
-  setPartParent: (id, parentId) => {
-    set({
-      characterParts: get().characterParts.map((p) =>
-        p.id === id ? { ...p, parent: parentId } : p,
-      ),
-    });
-  },
-
-  assignVoxelsToPart: (keys, partId) => {
-    const keySet = new Set(keys);
-    set({
-      characterParts: get().characterParts.map((p) => {
-        if (p.id === partId) {
-          // Add keys not already assigned
-          const existing = new Set(p.voxelKeys);
-          const merged = [...p.voxelKeys, ...keys.filter((k) => !existing.has(k))];
-          return { ...p, voxelKeys: merged };
-        }
-        // Remove these keys from other parts
-        const filtered = p.voxelKeys.filter((k) => !keySet.has(k));
-        return filtered.length !== p.voxelKeys.length ? { ...p, voxelKeys: filtered } : p;
-      }),
-    });
-  },
-
-  setSelectedPart: (id) => set({ selectedPart: id }),
-
-  addPose: (name) => {
-    const poses = { ...get().characterPoses };
-    if (!poses[name]) {
-      poses[name] = { rotations: {} };
-    }
-    set({ characterPoses: poses, selectedPose: name });
-  },
-
-  removePose: (name) => {
-    const poses = { ...get().characterPoses };
-    delete poses[name];
-    set({
-      characterPoses: poses,
-      selectedPose: get().selectedPose === name ? null : get().selectedPose,
-    });
-  },
-
-  setSelectedPose: (name) => set({ selectedPose: name }),
-
-  updatePoseRotation: (poseName, partId, rotation) => {
-    const poses = { ...get().characterPoses };
-    const pose = poses[poseName] ?? { rotations: {} };
-    poses[poseName] = { rotations: { ...pose.rotations, [partId]: rotation } };
-    set({ characterPoses: poses });
-  },
-
-  setPreviewPose: (on) => set({ previewPose: on }),
-
-  importVoxModels: (models) => {
-    const voxels = new Map(get().voxels);
-    const parts: BodyPart[] = [...get().characterParts];
-
-    for (const model of models) {
-      // Merge voxels into the main voxel map
-      const keys: VoxelKey[] = [];
-      for (const [key, voxel] of model.voxels) {
-        voxels.set(key, voxel);
-        keys.push(key);
-      }
-      // Create a body part for each model
-      parts.push({
-        id: model.name,
-        parent: parts.length > 0 ? parts[0].id : null,
-        joint: [0, 0, 0],
-        voxelKeys: keys,
-      });
-    }
-
-    set({
-      voxels,
-      characterParts: parts,
-      characterMode: true,
-      inspectorTab: 'character',
-    });
   },
 
   // ── File ──
