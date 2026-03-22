@@ -202,11 +202,13 @@ export function App() {
         <ResizeHandle onDrag={handleLeftDrag} />
 
         {/* Center panel */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
-          <div style={{ flex: 1, position: 'relative' as const }}>
-            <CharacterViewport />
-          </div>
-          {mode === 'animate' && <Timeline />}
+        <div style={{ flex: 1, position: 'relative' as const, overflow: 'hidden' }}>
+          <CharacterViewport />
+          {mode === 'animate' && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }}>
+              <Timeline />
+            </div>
+          )}
         </div>
         <ResizeHandle onDrag={handleRightDrag} />
 
