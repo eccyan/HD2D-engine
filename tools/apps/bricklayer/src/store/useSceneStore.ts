@@ -5,6 +5,7 @@ import type {
   StaticLight,
   NpcData,
   PortalData,
+  PlacedObjectData,
   EmitterConfig,
   BackgroundLayer,
   WeatherData,
@@ -127,6 +128,7 @@ export interface SceneStoreState {
   staticLights: StaticLight[];
   npcs: NpcData[];
   portals: PortalData[];
+  placedObjects: PlacedObjectData[];
   player: PlayerData;
   backgroundLayers: BackgroundLayer[];
   torchEmitter: EmitterConfig;
@@ -177,6 +179,9 @@ export interface SceneStoreState {
   addPortal: () => void;
   updatePortal: (id: string, patch: Partial<PortalData>) => void;
   removePortal: (id: string) => void;
+  addPlacedObject: (plyFile: string) => void;
+  updatePlacedObject: (id: string, patch: Partial<PlacedObjectData>) => void;
+  removePlacedObject: (id: string) => void;
   updatePlayer: (patch: Partial<PlayerData>) => void;
   addBackgroundLayer: () => void;
   updateBackgroundLayer: (id: string, patch: Partial<BackgroundLayer>) => void;
@@ -225,6 +230,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
   staticLights: [],
   npcs: [],
   portals: [],
+  placedObjects: [],
   player: defaultPlayer(),
   backgroundLayers: [],
   torchEmitter: defaultEmitter(),
@@ -435,6 +441,25 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
     portals: get().portals.filter((p) => p.id !== id),
   }),
 
+  addPlacedObject: (plyFile) => {
+    const obj: PlacedObjectData = {
+      id: genId('obj'),
+      ply_file: plyFile,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: 1,
+      is_static: true,
+      character_manifest: '',
+    };
+    set({ placedObjects: [...get().placedObjects, obj] });
+  },
+  updatePlacedObject: (id, patch) => set({
+    placedObjects: get().placedObjects.map((o) => (o.id === id ? { ...o, ...patch } : o)),
+  }),
+  removePlacedObject: (id) => set({
+    placedObjects: get().placedObjects.filter((o) => o.id !== id),
+  }),
+
   updatePlayer: (patch) => set({ player: { ...get().player, ...patch } }),
 
   addBackgroundLayer: () => {
@@ -511,6 +536,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
     staticLights: [],
     npcs: [],
     portals: [],
+    placedObjects: [],
     player: defaultPlayer(),
     backgroundLayers: [],
     torchPositions: [],
@@ -621,6 +647,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
         weather: s.weather,
         dayNight: s.dayNight,
         gaussianSplat: s.gaussianSplat,
+        placedObjects: s.placedObjects,
       },
     };
   },
@@ -639,6 +666,7 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
       staticLights: data.scene.staticLights,
       npcs: data.scene.npcs,
       portals: data.scene.portals,
+      placedObjects: data.scene.placedObjects ?? [],
       player: data.scene.player,
       backgroundLayers: data.scene.backgroundLayers,
       torchEmitter: data.scene.torchEmitter,
