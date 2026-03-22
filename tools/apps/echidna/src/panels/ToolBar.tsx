@@ -101,10 +101,6 @@ export function ToolBar() {
   const setTool = useCharacterStore((s) => s.setTool);
   const setActiveColor = useCharacterStore((s) => s.setActiveColor);
   const setBrushSize = useCharacterStore((s) => s.setBrushSize);
-  const selectedPart = useCharacterStore((s) => s.selectedPart);
-  const characterParts = useCharacterStore((s) => s.characterParts);
-  const setSelectedPart = useCharacterStore((s) => s.setSelectedPart);
-
   const hexColor = `#${activeColor.slice(0, 3).map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 
   return (
@@ -184,21 +180,6 @@ export function ToolBar() {
         </div>
       </div>
 
-      {activeTool === 'assign_part' && (
-        <div style={styles.section}>
-          <span style={styles.label}>Active Part</span>
-          <select
-            style={{ ...styles.input, width: '100%' }}
-            value={selectedPart ?? ''}
-            onChange={(e) => setSelectedPart(e.target.value || null)}
-          >
-            <option value="">(none)</option>
-            {characterParts.map((p) => (
-              <option key={p.id} value={p.id}>{p.id}</option>
-            ))}
-          </select>
-        </div>
-      )}
     </div>
   );
 }
