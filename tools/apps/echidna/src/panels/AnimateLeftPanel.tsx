@@ -4,9 +4,8 @@ import type { BodyPart } from '../store/types.js';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    width: 220,
+    flex: 1,
     background: '#1e1e3a',
-    borderRight: '1px solid #333',
     display: 'flex',
     flexDirection: 'column',
     overflowY: 'auto',
