@@ -47,64 +47,85 @@ function isDescendant(parts: BodyPart[], ancestorId: string, childId: string): b
   return false;
 }
 
-function BoneTree({ parts, parentId, depth, selected, onSelect, onReparent, dragOverId, setDragOverId }: {
+type DropZone = { id: string; zone: 'above' | 'child' } | null;
+
+function BoneTree({ parts, parentId, depth, selected, onSelect, onReparent, dropTarget, setDropTarget }: {
   parts: BodyPart[];
   parentId: string | null;
   depth: number;
   selected: string | null;
   onSelect: (id: string) => void;
   onReparent: (childId: string, newParentId: string | null) => void;
-  dragOverId: string | null;
-  setDragOverId: (id: string | null) => void;
+  dropTarget: DropZone;
+  setDropTarget: (t: DropZone) => void;
 }) {
   const children = parts.filter((p) => p.parent === parentId);
   return (
     <>
-      {children.map((part) => (
-        <React.Fragment key={part.id}>
-          <div
-            draggable
-            style={{
-              ...styles.treeItem,
-              paddingLeft: 8 + depth * 14,
-              ...(selected === part.id ? styles.treeItemSelected : {}),
-              ...(dragOverId === part.id ? { borderBottom: '2px solid #77f' } : {}),
-            }}
-            onClick={() => onSelect(part.id)}
-            onDragStart={(e) => {
-              e.dataTransfer.setData('text/plain', part.id);
-              e.dataTransfer.effectAllowed = 'move';
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              setDragOverId(part.id);
-            }}
-            onDragLeave={() => setDragOverId(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOverId(null);
-              const draggedId = e.dataTransfer.getData('text/plain');
-              if (draggedId && draggedId !== part.id && !isDescendant(parts, draggedId, part.id)) {
-                onReparent(draggedId, part.id);
-              }
-            }}
-          >
-            <span style={{ color: '#ddd' }}>{part.id}</span>
-            {part.parent === null && <span style={{ color: '#666', fontSize: 10, marginLeft: 4 }}>(root)</span>}
-          </div>
-          <BoneTree
-            parts={parts}
-            parentId={part.id}
-            depth={depth + 1}
-            selected={selected}
-            onSelect={onSelect}
-            onReparent={onReparent}
-            dragOverId={dragOverId}
-            setDragOverId={setDragOverId}
-          />
-        </React.Fragment>
-      ))}
+      {children.map((part) => {
+        const isDropAbove = dropTarget?.id === part.id && dropTarget.zone === 'above';
+        const isDropChild = dropTarget?.id === part.id && dropTarget.zone === 'child';
+
+        return (
+          <React.Fragment key={part.id}>
+            <div
+              draggable
+              style={{
+                ...styles.treeItem,
+                paddingLeft: 8 + depth * 14,
+                ...(selected === part.id ? styles.treeItemSelected : {}),
+                ...(isDropAbove ? { borderTop: '2px solid #77f' } : {}),
+                ...(isDropChild ? { background: '#2a2a5a', borderRadius: 4 } : {}),
+              }}
+              onClick={() => onSelect(part.id)}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', part.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                // Top 1/3 = sibling (above), bottom 2/3 = child
+                const rect = e.currentTarget.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const zone = y < rect.height / 3 ? 'above' : 'child';
+                setDropTarget({ id: part.id, zone });
+              }}
+              onDragLeave={() => setDropTarget(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const draggedId = e.dataTransfer.getData('text/plain');
+                const zone = dropTarget?.zone ?? 'child';
+                setDropTarget(null);
+                if (!draggedId || draggedId === part.id) return;
+                if (isDescendant(parts, draggedId, part.id)) return;
+
+                if (zone === 'above') {
+                  // Make sibling: same parent as the drop target
+                  onReparent(draggedId, part.parent);
+                } else {
+                  // Make child of the drop target
+                  onReparent(draggedId, part.id);
+                }
+              }}
+            >
+              <span style={{ color: '#ddd' }}>{part.id}</span>
+              {part.parent === null && <span style={{ color: '#666', fontSize: 10, marginLeft: 4 }}>(root)</span>}
+            </div>
+            <BoneTree
+              parts={parts}
+              parentId={part.id}
+              depth={depth + 1}
+              selected={selected}
+              onSelect={onSelect}
+              onReparent={onReparent}
+              dropTarget={dropTarget}
+              setDropTarget={setDropTarget}
+            />
+          </React.Fragment>
+        );
+      })}
     </>
   );
 }
@@ -117,7 +138,7 @@ export function AnimateLeftPanel() {
   const removePart = useCharacterStore((s) => s.removePart);
   const setPartParent = useCharacterStore((s) => s.setPartParent);
 
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropZone>(null);
 
   const handleReparent = (childId: string, newParentId: string | null) => {
     setPartParent(childId, newParentId);
@@ -142,7 +163,7 @@ export function AnimateLeftPanel() {
           onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
           onDrop={(e) => {
             e.preventDefault();
-            setDragOverId(null);
+            setDropTarget(null);
             const draggedId = e.dataTransfer.getData('text/plain');
             if (draggedId) handleReparent(draggedId, null);
           }}
@@ -157,8 +178,8 @@ export function AnimateLeftPanel() {
               selected={selectedPart}
               onSelect={setSelectedPart}
               onReparent={handleReparent}
-              dragOverId={dragOverId}
-              setDragOverId={setDragOverId}
+              dropTarget={dropTarget}
+              setDropTarget={setDropTarget}
             />
           )}
         </div>
