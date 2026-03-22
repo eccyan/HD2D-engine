@@ -3,9 +3,8 @@ import { useCharacterStore } from '../store/useCharacterStore.js';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    width: 280,
+    flex: 1,
     background: '#1e1e3a',
-    borderLeft: '1px solid #333',
     padding: 12,
     display: 'flex',
     flexDirection: 'column',

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { CharacterViewport } from './viewport/CharacterViewport.js';
 import { MenuBar } from './panels/MenuBar.js';
 import { ToolBar } from './panels/ToolBar.js';
@@ -34,9 +34,8 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
   inspector: {
-    width: 320,
+    flexShrink: 0,
     background: '#1e1e3a',
-    borderLeft: '1px solid #333',
     display: 'flex',
     flexDirection: 'column',
     overflowY: 'auto',
@@ -58,8 +57,60 @@ const animateToolKeys: Record<string, ToolType> = {
   s: 'box_select',
 };
 
+const RESIZE_HANDLE_STYLE: React.CSSProperties = {
+  width: 5,
+  cursor: 'col-resize',
+  background: 'transparent',
+  flexShrink: 0,
+  zIndex: 10,
+};
+
+function ResizeHandle({ onDrag }: { onDrag: (deltaX: number) => void }) {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+
+    const onMove = (ev: PointerEvent) => {
+      onDrag(ev.clientX - startX);
+    };
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+  }, [onDrag]);
+
+  return (
+    <div
+      style={RESIZE_HANDLE_STYLE}
+      onPointerDown={handlePointerDown}
+      onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.background = '#555'; }}
+      onMouseOut={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+    />
+  );
+}
+
 export function App() {
   const mode = useCharacterStore((s) => s.mode);
+  const [leftWidth, setLeftWidth] = useState(220);
+  const [rightWidth, setRightWidth] = useState(320);
+  const leftRef = useRef(leftWidth);
+  const rightRef = useRef(rightWidth);
+
+  // Keep refs in sync for drag callbacks
+  leftRef.current = leftWidth;
+  rightRef.current = rightWidth;
+
+  const handleLeftDrag = useCallback((delta: number) => {
+    setLeftWidth(Math.max(150, Math.min(400, leftRef.current + delta)));
+  }, []);
+
+  const handleRightDrag = useCallback((delta: number) => {
+    setRightWidth(Math.max(200, Math.min(500, rightRef.current - delta)));
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -143,7 +194,28 @@ export function App() {
     <div style={styles.root}>
       <MenuBar />
       <div style={styles.body}>
-        {mode === 'build' ? <BuildModeLayout /> : <AnimateModeLayout />}
+        {/* Left panel */}
+        <div style={{ width: leftWidth, flexShrink: 0, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', background: '#1e1e3a', borderRight: '1px solid #333' }}>
+          <ModeTabs />
+          {mode === 'build' ? <ToolBar /> : <AnimateLeftPanel />}
+        </div>
+        <ResizeHandle onDrag={handleLeftDrag} />
+
+        {/* Center panel */}
+        <div style={{ flex: 1, position: 'relative' as const, overflow: 'hidden' }}>
+          <CharacterViewport />
+          {mode === 'animate' && (
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }}>
+              <Timeline />
+            </div>
+          )}
+        </div>
+        <ResizeHandle onDrag={handleRightDrag} />
+
+        {/* Right panel */}
+        <div style={{ ...styles.inspector, width: rightWidth }}>
+          {mode === 'build' ? <BuildPanel /> : <AnimateRightPanel />}
+        </div>
       </div>
     </div>
   );
@@ -196,37 +268,3 @@ function ModeTabs() {
   );
 }
 
-function BuildModeLayout() {
-  return (
-    <>
-      <div style={{ display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
-        <ModeTabs />
-        <ToolBar />
-      </div>
-      <div style={styles.viewport}>
-        <CharacterViewport />
-      </div>
-      <div style={styles.inspector}>
-        <BuildPanel />
-      </div>
-    </>
-  );
-}
-
-function AnimateModeLayout() {
-  return (
-    <>
-      <div style={{ display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
-        <ModeTabs />
-        <AnimateLeftPanel />
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}>
-        <div style={styles.viewport}>
-          <CharacterViewport />
-        </div>
-        <Timeline />
-      </div>
-      <AnimateRightPanel />
-    </>
-  );
-}
