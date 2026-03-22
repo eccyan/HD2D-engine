@@ -8,6 +8,7 @@ import { VfxTab } from './VfxTab.js';
 import { EntitiesTab } from './EntitiesTab.js';
 import { BackgroundTab } from './BackgroundTab.js';
 import { GaussianTab } from './GaussianTab.js';
+import { ObjectsTab } from './ObjectsTab.js';
 
 const tabs: { id: InspectorTab; label: string }[] = [
   { id: 'scene', label: 'Scene' },
@@ -15,6 +16,7 @@ const tabs: { id: InspectorTab; label: string }[] = [
   { id: 'weather', label: 'Weather' },
   { id: 'vfx', label: 'VFX' },
   { id: 'entities', label: 'Entities' },
+  { id: 'objects', label: 'Objects' },
   { id: 'backgrounds', label: 'BG' },
   { id: 'gaussian', label: 'GS' },
 ];
@@ -78,6 +80,7 @@ export function Inspector() {
         {inspectorTab === 'weather' && <WeatherTab />}
         {inspectorTab === 'vfx' && <VfxTab />}
         {inspectorTab === 'entities' && <EntitiesTab />}
+        {inspectorTab === 'objects' && <ObjectsTab />}
         {inspectorTab === 'backgrounds' && <BackgroundTab />}
         {inspectorTab === 'gaussian' && <GaussianTab />}
       </div>

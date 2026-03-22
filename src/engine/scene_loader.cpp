@@ -103,6 +103,7 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         grid.width = col.value("width", 0u);
         grid.height = col.value("height", 0u);
         grid.cell_size = col.value("cell_size", 1.0f);
+        size_t total = static_cast<size_t>(grid.width) * grid.height;
         if (col.contains("solid")) {
             const auto& solid_arr = col["solid"];
             grid.solid.resize(solid_arr.size(), false);
@@ -110,9 +111,46 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
                 grid.solid[i] = solid_arr[i].get<bool>();
             }
         } else {
-            grid.solid.resize(static_cast<size_t>(grid.width) * grid.height, false);
+            grid.solid.resize(total, false);
+        }
+        if (col.contains("elevation")) {
+            const auto& elev_arr = col["elevation"];
+            grid.elevation.resize(elev_arr.size(), 0.0f);
+            for (size_t i = 0; i < elev_arr.size(); ++i) {
+                grid.elevation[i] = elev_arr[i].get<float>();
+            }
+        } else {
+            grid.elevation.resize(total, 0.0f);
+        }
+        if (col.contains("nav_zone")) {
+            const auto& zone_arr = col["nav_zone"];
+            grid.nav_zone.resize(zone_arr.size(), 0);
+            for (size_t i = 0; i < zone_arr.size(); ++i) {
+                grid.nav_zone[i] = zone_arr[i].get<uint8_t>();
+            }
+        } else {
+            grid.nav_zone.resize(total, 0);
+        }
+        if (col.contains("light_probe")) {
+            const auto& lp_arr = col["light_probe"];
+            grid.light_probe.resize(lp_arr.size() / 3, glm::vec3(0.5f));
+            for (size_t i = 0; i < grid.light_probe.size(); ++i) {
+                grid.light_probe[i] = glm::vec3(
+                    lp_arr[i * 3].get<float>(),
+                    lp_arr[i * 3 + 1].get<float>(),
+                    lp_arr[i * 3 + 2].get<float>());
+            }
+        } else {
+            grid.light_probe.resize(total, glm::vec3(0.5f));
         }
         data.collision = std::move(grid);
+    }
+
+    // Navigation zone names
+    if (j.contains("nav_zone_names")) {
+        for (const auto& name : j["nav_zone_names"]) {
+            data.nav_zone_names.push_back(name.get<std::string>());
+        }
     }
 
     // Tilemap
@@ -275,6 +313,21 @@ SceneData SceneLoader::from_json(const nlohmann::json& j) {
         }
     }
 
+    // Placed objects
+    if (j.contains("placed_objects")) {
+        for (const auto& obj_j : j["placed_objects"]) {
+            PlacedObjectData obj;
+            obj.id = obj_j.value("id", "");
+            obj.ply_file = obj_j["ply_file"].get<std::string>();
+            if (obj_j.contains("position")) obj.position = parse_vec3(obj_j["position"]);
+            if (obj_j.contains("rotation")) obj.rotation = parse_vec3(obj_j["rotation"]);
+            obj.scale = obj_j.value("scale", 1.0f);
+            obj.is_static = obj_j.value("is_static", true);
+            obj.character_manifest = obj_j.value("character_manifest", "");
+            data.placed_objects.push_back(std::move(obj));
+        }
+    }
+
     // Weather
     if (j.contains("weather")) {
         const auto& w = j["weather"];
@@ -421,6 +474,25 @@ nlohmann::json SceneLoader::to_json(const SceneData& data) {
         nlohmann::json solid_arr = nlohmann::json::array();
         for (bool s : grid.solid) solid_arr.push_back(s);
         col["solid"] = solid_arr;
+        if (!grid.elevation.empty()) {
+            nlohmann::json elev_arr = nlohmann::json::array();
+            for (float e : grid.elevation) elev_arr.push_back(e);
+            col["elevation"] = elev_arr;
+        }
+        if (!grid.nav_zone.empty()) {
+            nlohmann::json zone_arr = nlohmann::json::array();
+            for (uint8_t z : grid.nav_zone) zone_arr.push_back(z);
+            col["nav_zone"] = zone_arr;
+        }
+        if (!grid.light_probe.empty()) {
+            nlohmann::json lp_arr = nlohmann::json::array();
+            for (const auto& lp : grid.light_probe) {
+                lp_arr.push_back(lp.x);
+                lp_arr.push_back(lp.y);
+                lp_arr.push_back(lp.z);
+            }
+            col["light_probe"] = lp_arr;
+        }
         j["collision"] = col;
     }
 
@@ -581,6 +653,29 @@ nlohmann::json SceneLoader::to_json(const SceneData& data) {
             });
         }
         j["portals"] = portals;
+    }
+
+    // Placed objects
+    if (!data.placed_objects.empty()) {
+        nlohmann::json objects = nlohmann::json::array();
+        for (const auto& obj : data.placed_objects) {
+            nlohmann::json obj_j;
+            obj_j["id"] = obj.id;
+            obj_j["ply_file"] = obj.ply_file;
+            obj_j["position"] = vec3_json(obj.position);
+            obj_j["rotation"] = vec3_json(obj.rotation);
+            obj_j["scale"] = obj.scale;
+            obj_j["is_static"] = obj.is_static;
+            if (!obj.character_manifest.empty())
+                obj_j["character_manifest"] = obj.character_manifest;
+            objects.push_back(obj_j);
+        }
+        j["placed_objects"] = objects;
+    }
+
+    // Navigation zone names
+    if (!data.nav_zone_names.empty()) {
+        j["nav_zone_names"] = data.nav_zone_names;
     }
 
     // Weather

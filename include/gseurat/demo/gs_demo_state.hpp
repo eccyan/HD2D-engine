@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gseurat/engine/collision_gen.hpp"
 #include "gseurat/engine/game_state.hpp"
 #include "gseurat/engine/gaussian_cloud.hpp"
 #include "gseurat/engine/gs_chunk_streamer.hpp"
@@ -97,6 +98,11 @@ private:
     void spawn_test_character(AppBase& app);
     void despawn_test_character(AppBase& app);
     void update_character_pose(AppBase& app, float dt);
+
+    // Scene layers demo (N key)
+    bool scene_layers_active_ = false;
+    CollisionGrid scene_grid_;
+    void generate_scene_layers(AppBase& app);
 };
 
 }  // namespace gseurat

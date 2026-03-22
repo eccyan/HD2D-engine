@@ -8,6 +8,7 @@
 #include <stb_image_write.h>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <cmath>
 #include <cstdio>
@@ -74,6 +75,48 @@ void DemoApp::init_scene(const std::string& scene_path) {
             renderer_.gs_renderer().set_scale_multiplier(gs.scale_multiplier);
             std::fprintf(stderr, "GS: Loaded %u Gaussians from %s\n",
                          cloud.count(), gs.ply_file.c_str());
+
+            // Merge static placed objects into the main cloud
+            if (!scene_data.placed_objects.empty()) {
+                auto merged = cloud.gaussians();  // mutable copy
+                uint32_t merged_count = 0;
+                for (const auto& obj : scene_data.placed_objects) {
+                    if (!obj.is_static) continue;
+                    try {
+                        auto placed_cloud = GaussianCloud::load_ply(obj.ply_file);
+                        if (placed_cloud.empty()) continue;
+
+                        // Build transform matrix from position, rotation (euler degrees), scale
+                        glm::mat4 transform = glm::translate(glm::mat4(1.0f), obj.position);
+                        transform = glm::rotate(transform, glm::radians(obj.rotation.x), {1,0,0});
+                        transform = glm::rotate(transform, glm::radians(obj.rotation.y), {0,1,0});
+                        transform = glm::rotate(transform, glm::radians(obj.rotation.z), {0,0,1});
+                        transform = glm::scale(transform, glm::vec3(obj.scale));
+
+                        glm::quat rot_q = glm::quat(glm::radians(obj.rotation));
+                        auto placed_gaussians = placed_cloud.gaussians();  // copy
+                        for (auto& g : placed_gaussians) {
+                            g.position = glm::vec3(transform * glm::vec4(g.position, 1.0f));
+                            g.scale *= obj.scale;
+                            g.rotation = rot_q * g.rotation;
+                        }
+
+                        merged.insert(merged.end(), placed_gaussians.begin(), placed_gaussians.end());
+                        merged_count++;
+                        std::fprintf(stderr, "GS: Merged %u Gaussians from placed object '%s' (%s)\n",
+                                     placed_cloud.count(), obj.id.c_str(), obj.ply_file.c_str());
+                    } catch (const std::runtime_error& e) {
+                        std::fprintf(stderr, "Warning: Failed to load placed object '%s': %s\n",
+                                     obj.id.c_str(), e.what());
+                    }
+                }
+                if (merged_count > 0) {
+                    cloud = GaussianCloud::from_gaussians(std::move(merged));
+                    std::fprintf(stderr, "GS: Merged %u static objects, total %u Gaussians\n",
+                                 merged_count, cloud.count());
+                }
+            }
+
             std::fprintf(stderr, "GS: AABB min=(%.1f,%.1f,%.1f) max=(%.1f,%.1f,%.1f)\n",
                          cloud.bounds().min.x, cloud.bounds().min.y, cloud.bounds().min.z,
                          cloud.bounds().max.x, cloud.bounds().max.y, cloud.bounds().max.z);

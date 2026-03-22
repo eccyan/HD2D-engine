@@ -141,8 +141,19 @@ export type InspectorTab =
   | 'weather'
   | 'vfx'
   | 'entities'
+  | 'objects'
   | 'backgrounds'
   | 'gaussian';
+
+export interface PlacedObjectData {
+  id: string;
+  ply_file: string;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: number;
+  is_static: boolean;
+  character_manifest: string;
+}
 
 export interface SelectedEntity {
   type: string;
@@ -174,5 +185,6 @@ export interface BricklayerFile {
     weather: WeatherData;
     dayNight: DayNightData;
     gaussianSplat: GaussianSplatConfig;
+    placedObjects: PlacedObjectData[];
   };
 }

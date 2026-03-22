@@ -81,6 +81,16 @@ struct GaussianSplatData {
     std::string background_image;  // Optional background behind GS (sky, mountains, etc.)
 };
 
+struct PlacedObjectData {
+    std::string id;
+    std::string ply_file;                    // path to PLY asset
+    glm::vec3 position{0.0f};
+    glm::vec3 rotation{0.0f};               // euler angles in degrees
+    float scale = 1.0f;
+    bool is_static = true;                   // static = merge into terrain cloud
+    std::string character_manifest;          // if animated, path to Echidna manifest JSON
+};
+
 struct PortalData {
     glm::vec2 position{0.0f};
     glm::vec2 size{1.0f};
@@ -113,6 +123,9 @@ struct SceneData {
     // Portals
     std::vector<PortalData> portals;
 
+    // Placed objects (terrain chunks, props, characters)
+    std::vector<PlacedObjectData> placed_objects;
+
     // Minimap
     std::optional<Minimap::Config> minimap_config;
 
@@ -125,6 +138,9 @@ struct SceneData {
     std::vector<glm::vec3> torch_audio_positions;
     EmitterConfig footstep_emitter;
     EmitterConfig npc_aura_emitter;
+
+    // Navigation zone names (index 0 = "default", 1+ = named zones)
+    std::vector<std::string> nav_zone_names;
 };
 
 class SceneLoader {

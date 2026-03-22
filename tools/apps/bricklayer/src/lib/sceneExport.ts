@@ -105,6 +105,18 @@ export function exportSceneJson(state: SceneStoreState): object {
     parallax: state.gaussianSplat.parallax,
   };
 
+  if (state.placedObjects.length > 0) {
+    scene.placed_objects = state.placedObjects.map((obj) => ({
+      id: obj.id,
+      ply_file: obj.ply_file,
+      position: obj.position,
+      rotation: obj.rotation,
+      scale: obj.scale,
+      is_static: obj.is_static,
+      ...(obj.character_manifest ? { character_manifest: obj.character_manifest } : {}),
+    }));
+  }
+
   if (state.collisionGrid.size > 0) {
     const cells: { x: number; z: number }[] = [];
     for (const key of state.collisionGrid) {

@@ -7,6 +7,7 @@ import { GhostVoxel } from './GhostVoxel.js';
 import { LightGizmos } from './LightGizmos.js';
 import { NpcMarkers } from './NpcMarkers.js';
 import { PortalMarkers } from './PortalMarkers.js';
+import { ObjectMarkers } from './ObjectMarkers.js';
 import { PlayerMarker } from './PlayerMarker.js';
 import { CollisionOverlay } from './CollisionOverlay.js';
 import { useSceneStore } from '../store/useSceneStore.js';
@@ -47,6 +48,7 @@ export function Viewport() {
       <LightGizmos />
       <NpcMarkers />
       <PortalMarkers />
+      <ObjectMarkers />
       <PlayerMarker />
       <CollisionOverlay />
 
