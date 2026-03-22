@@ -232,3 +232,39 @@ add_custom_command(TARGET gseurat_demo POST_BUILD
         $<TARGET_FILE_DIR:gseurat_demo>/assets
     COMMENT "Copying assets to demo build directory"
 )
+
+# --- Tests ------------------------------------------------------------------
+
+enable_testing()
+
+# Helper: define a standalone test (no gseurat_core link — avoids duplicate symbols)
+function(add_gseurat_test NAME)
+    add_executable(${NAME} tests/${NAME}.cpp ${ARGN})
+    target_include_directories(${NAME} PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${stb_SOURCE_DIR}
+        ${miniaudio_SOURCE_DIR}
+    )
+    target_compile_definitions(${NAME} PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
+    target_link_libraries(${NAME} PRIVATE
+        Vulkan::Vulkan
+        glm::glm
+        GPUOpen::VulkanMemoryAllocator
+        nlohmann_json::nlohmann_json
+    )
+    add_test(NAME ${NAME} COMMAND ${NAME}
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+endfunction()
+
+add_gseurat_test(test_feature_flags)
+add_gseurat_test(test_async_loader     src/engine/async_loader.cpp)
+add_gseurat_test(test_character_data   src/engine/character_data.cpp)
+add_gseurat_test(test_gaussian_cloud   src/engine/gaussian_cloud.cpp src/engine/collision_gen.cpp
+                                       src/engine/scene_loader.cpp src/engine/tilemap.cpp)
+add_gseurat_test(test_gs_chunk_grid    src/engine/gs_chunk_grid.cpp src/engine/gaussian_cloud.cpp)
+add_gseurat_test(test_gs_chunk_streamer src/engine/gs_chunk_streamer.cpp src/engine/gaussian_cloud.cpp
+                                        src/engine/gs_chunk_grid.cpp src/engine/async_loader.cpp)
+add_gseurat_test(test_gs_parallax_camera src/engine/gs_parallax_camera.cpp)
+add_gseurat_test(test_screenshot       src/engine/screenshot.cpp)
+add_gseurat_test(test_staging_uploader src/engine/staging_uploader.cpp)
+add_gseurat_test(test_tilemap          src/engine/tilemap.cpp)
