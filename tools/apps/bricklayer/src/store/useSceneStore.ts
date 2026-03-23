@@ -21,6 +21,8 @@ import type {
   Snapshot,
   BricklayerFile,
   CollisionGridData,
+  TerrainEntry,
+  AssetEntry,
 } from './types.js';
 import { voxelKey, parseKey, floodFill3D, brushPositions } from '../lib/voxelUtils.js';
 
@@ -128,6 +130,13 @@ function genId(prefix: string): string {
 }
 
 export interface SceneStoreState {
+  // Project
+  projectName: string;
+  projectHandle: FileSystemDirectoryHandle | null;
+  terrains: TerrainEntry[];
+  currentTerrainId: string | null;
+  assets: AssetEntry[];
+
   // Voxels
   voxels: Map<VoxelKey, Voxel>;
   gridWidth: number;
@@ -240,6 +249,15 @@ export interface SceneStoreState {
   undo: () => void;
   redo: () => void;
 
+  // Actions – project
+  setProjectName: (name: string) => void;
+  setProjectHandle: (handle: FileSystemDirectoryHandle | null) => void;
+  addTerrain: (name: string) => void;
+  removeTerrain: (id: string) => void;
+  switchTerrain: (id: string) => void;
+  addAsset: (entry: AssetEntry) => void;
+  removeAsset: (id: string) => void;
+
   // Actions – file
   newScene: (width: number, depth: number) => void;
   importImage: (imageData: ImageData, mode: 'flat' | 'luminance' | 'depth', maxHeight: number, depthMap?: Float32Array, budget?: number) => void;
@@ -248,6 +266,12 @@ export interface SceneStoreState {
 }
 
 export const useSceneStore = create<SceneStoreState>((set, get) => ({
+  projectName: 'Untitled',
+  projectHandle: null,
+  terrains: [],
+  currentTerrainId: null,
+  assets: [],
+
   voxels: new Map(),
   gridWidth: 128,
   gridDepth: 96,
@@ -586,6 +610,44 @@ export const useSceneStore = create<SceneStoreState>((set, get) => ({
 
   removeNavZoneName: (index) => {
     set({ navZoneNames: get().navZoneNames.filter((_, i) => i !== index) });
+  },
+
+  // ── Project actions ──
+  setProjectName: (name) => set({ projectName: name }),
+  setProjectHandle: (handle) => set({ projectHandle: handle }),
+
+  addTerrain: (name) => {
+    const id = genId('terrain');
+    const entry: TerrainEntry = {
+      id,
+      name,
+      voxelFile: `terrains/${id}.bricklayer`,
+      collision: null,
+      navZoneNames: [],
+    };
+    set({ terrains: [...get().terrains, entry], currentTerrainId: id });
+  },
+
+  removeTerrain: (id) => {
+    const { terrains, currentTerrainId } = get();
+    const filtered = terrains.filter((t) => t.id !== id);
+    const nextId = currentTerrainId === id
+      ? (filtered.length > 0 ? filtered[0].id : null)
+      : currentTerrainId;
+    set({ terrains: filtered, currentTerrainId: nextId });
+  },
+
+  switchTerrain: (id) => {
+    const terrain = get().terrains.find((t) => t.id === id);
+    if (terrain) set({ currentTerrainId: id });
+  },
+
+  addAsset: (entry) => {
+    set({ assets: [...get().assets, entry] });
+  },
+
+  removeAsset: (id) => {
+    set({ assets: get().assets.filter((a) => a.id !== id) });
   },
 
   // ── Editor actions ──
