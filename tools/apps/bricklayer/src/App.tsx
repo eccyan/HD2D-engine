@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Viewport } from './viewport/Viewport.js';
+import { Viewport, getOrbitControls } from './viewport/Viewport.js';
 import { MenuBar } from './panels/MenuBar.js';
 import { ImportDialog } from './panels/ImportDialog.js';
 import { TerrainLeftPanel } from './panels/TerrainLeftPanel.js';
@@ -224,6 +224,52 @@ export function App() {
         store.setBrushSize(store.brushSize - 1);
       } else if (e.key === ']') {
         store.setBrushSize(store.brushSize + 1);
+      }
+
+      // F key: frame selected entity
+      if (e.key.toLowerCase() === 'f' && !meta && store.mode === 'scene' && store.selectedEntity) {
+        const controls = getOrbitControls();
+        if (!controls) return;
+
+        const sel = store.selectedEntity;
+        let pos: [number, number, number] | null = null;
+
+        if (sel.type === 'object') {
+          const obj = store.placedObjects.find((o) => o.id === sel.id);
+          if (obj) pos = obj.position;
+        } else if (sel.type === 'npc') {
+          const npc = store.npcs.find((n) => n.id === sel.id);
+          if (npc) pos = npc.position;
+        } else if (sel.type === 'portal') {
+          const portal = store.portals.find((p) => p.id === sel.id);
+          if (portal) pos = [portal.position[0], 0, portal.position[1]];
+        } else if (sel.type === 'light') {
+          const light = store.staticLights.find((l) => l.id === sel.id);
+          if (light) pos = [light.position[0], light.height, light.position[1]];
+        } else if (sel.type === 'player') {
+          pos = store.player.position;
+        }
+
+        if (pos) {
+          controls.target.set(pos[0], pos[1], pos[2]);
+          controls.update();
+        }
+        return;
+      }
+
+      // Home key: reset camera to default
+      if (e.key === 'Home') {
+        const controls = getOrbitControls();
+        if (!controls) return;
+
+        controls.target.set(store.gridWidth / 2, 0, store.gridDepth / 2);
+        controls.object.position.set(
+          store.gridWidth / 2,
+          30,
+          store.gridDepth + 20,
+        );
+        controls.update();
+        return;
       }
     };
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 
 const styles: Record<string, React.CSSProperties> = {
@@ -76,11 +77,10 @@ export function WeatherTab() {
             <span style={styles.label}>Fog</span>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 60 }}>Density</span>
-              <input
-                type="number"
+              <NumberInput
                 step={0.01}
                 value={weather.fog_density}
-                onChange={(e) => setWeather({ fog_density: Number(e.target.value) })}
+                onChange={(v) => setWeather({ fog_density: v })}
                 style={styles.input}
               />
             </div>
@@ -108,11 +108,10 @@ export function WeatherTab() {
 
           <div style={styles.section}>
             <span style={styles.label}>Transition Speed</span>
-            <input
-              type="number"
+            <NumberInput
               step={0.1}
               value={weather.transition_speed}
-              onChange={(e) => setWeather({ transition_speed: Number(e.target.value) })}
+              onChange={(v) => setWeather({ transition_speed: v })}
               style={styles.input}
             />
           </div>
@@ -121,28 +120,25 @@ export function WeatherTab() {
             <span style={styles.label}>Emitter</span>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 80 }}>Spawn Rate</span>
-              <input
-                type="number"
+              <NumberInput
                 value={weather.emitter.spawn_rate}
-                onChange={(e) => setWeather({ emitter: { ...weather.emitter, spawn_rate: Number(e.target.value) } })}
+                onChange={(v) => setWeather({ emitter: { ...weather.emitter, spawn_rate: v } })}
                 style={styles.input}
               />
             </div>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 80 }}>Lifetime</span>
-              <input
-                type="number"
+              <NumberInput
                 step={0.1}
                 value={weather.emitter.particle_lifetime_min}
-                onChange={(e) => setWeather({ emitter: { ...weather.emitter, particle_lifetime_min: Number(e.target.value) } })}
+                onChange={(v) => setWeather({ emitter: { ...weather.emitter, particle_lifetime_min: v } })}
                 style={{ ...styles.input, maxWidth: 60 }}
               />
               <span style={{ fontSize: 12 }}>-</span>
-              <input
-                type="number"
+              <NumberInput
                 step={0.1}
                 value={weather.emitter.particle_lifetime_max}
-                onChange={(e) => setWeather({ emitter: { ...weather.emitter, particle_lifetime_max: Number(e.target.value) } })}
+                onChange={(v) => setWeather({ emitter: { ...weather.emitter, particle_lifetime_max: v } })}
                 style={{ ...styles.input, maxWidth: 60 }}
               />
             </div>

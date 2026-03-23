@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import { estimateDepth } from '../lib/depthEstimate.js';
 
@@ -247,15 +248,13 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
 
         <div style={styles.row}>
           <span style={styles.label}>Voxel Budget</span>
-          <input
-            type="number"
+          <NumberInput
             min={10000}
             max={5000000}
             step={50000}
             value={voxelBudget}
-            onChange={(e) => setVoxelBudget(Math.max(10000, Number(e.target.value)))}
+            onChange={(v) => setVoxelBudget(v)}
             style={{ ...styles.input, maxWidth: 120 }}
-            disabled={loading}
           />
           <span style={{ fontSize: 12, color: '#888' }}>
             {(voxelBudget / 1000).toFixed(0)}K

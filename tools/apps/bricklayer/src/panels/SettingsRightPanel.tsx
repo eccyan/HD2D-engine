@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import { GaussianTab } from './GaussianTab.js';
 import { SceneTab } from './SceneTab.js';
@@ -94,23 +95,21 @@ function DayNightSettings() {
         <>
           <div style={row}>
             <span style={{ fontSize: 12, minWidth: 80 }}>Speed</span>
-            <input
-              type="number"
+            <NumberInput
               step={0.1}
               value={dayNight.cycle_speed}
-              onChange={(e) => setDayNight({ cycle_speed: Number(e.target.value) })}
+              onChange={(v) => setDayNight({ cycle_speed: v })}
               style={inputStyle}
             />
           </div>
           <div style={row}>
             <span style={{ fontSize: 12, minWidth: 80 }}>Initial Time</span>
-            <input
-              type="number"
+            <NumberInput
               step={0.05}
               min={0}
               max={1}
               value={dayNight.initial_time}
-              onChange={(e) => setDayNight({ initial_time: Number(e.target.value) })}
+              onChange={(v) => setDayNight({ initial_time: v })}
               style={inputStyle}
             />
           </div>

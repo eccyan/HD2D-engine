@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type {
   StaticLight,
@@ -43,14 +44,13 @@ function Vec3Input({
     <div style={styles.row}>
       {['X', 'Y', 'Z'].map((axis, i) => (
         <React.Fragment key={axis}>
-          <span style={{ fontSize: 11, color: '#888' }}>{axis}</span>
-          <input
-            type="number"
+          <NumberInput
+            label={axis}
             step={step ?? 0.1}
             value={value[i]}
-            onChange={(e) => {
+            onChange={(v) => {
               const next = [...value] as [number, number, number];
-              next[i] = Number(e.target.value);
+              next[i] = v;
               onChange(next);
             }}
             style={{ ...styles.input, maxWidth: 55 }}
@@ -97,11 +97,10 @@ function ObjectProperties({ obj }: { obj: PlacedObjectData }) {
 
       <div style={styles.section}>
         <span style={styles.label}>Scale</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={obj.scale}
-          onChange={(e) => update(obj.id, { scale: Number(e.target.value) })}
+          onChange={(v) => update(obj.id, { scale: v })}
           style={{ ...styles.input, maxWidth: 80 }}
         />
       </div>
@@ -146,18 +145,16 @@ function LightProperties({ light }: { light: StaticLight }) {
       <div style={styles.section}>
         <span style={styles.label}>Position</span>
         <div style={styles.row}>
-          <span style={{ fontSize: 12, minWidth: 20 }}>X</span>
-          <input
-            type="number"
+          <NumberInput
+            label="X"
             value={light.position[0]}
-            onChange={(e) => update(light.id, { position: [Number(e.target.value), light.position[1]] })}
+            onChange={(v) => update(light.id, { position: [v, light.position[1]] })}
             style={styles.input}
           />
-          <span style={{ fontSize: 12, minWidth: 20 }}>Z</span>
-          <input
-            type="number"
+          <NumberInput
+            label="Z"
             value={light.position[1]}
-            onChange={(e) => update(light.id, { position: [light.position[0], Number(e.target.value)] })}
+            onChange={(v) => update(light.id, { position: [light.position[0], v] })}
             style={styles.input}
           />
         </div>
@@ -165,22 +162,20 @@ function LightProperties({ light }: { light: StaticLight }) {
 
       <div style={styles.section}>
         <span style={styles.label}>Radius</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.5}
           value={light.radius}
-          onChange={(e) => update(light.id, { radius: Number(e.target.value) })}
+          onChange={(v) => update(light.id, { radius: v })}
           style={styles.input}
         />
       </div>
 
       <div style={styles.section}>
         <span style={styles.label}>Height</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.5}
           value={light.height}
-          onChange={(e) => update(light.id, { height: Number(e.target.value) })}
+          onChange={(v) => update(light.id, { height: v })}
           style={styles.input}
         />
       </div>
@@ -206,11 +201,10 @@ function LightProperties({ light }: { light: StaticLight }) {
 
       <div style={styles.section}>
         <span style={styles.label}>Intensity</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={light.intensity}
-          onChange={(e) => update(light.id, { intensity: Number(e.target.value) })}
+          onChange={(v) => update(light.id, { intensity: v })}
           style={styles.input}
         />
       </div>
@@ -269,21 +263,19 @@ function NpcProperties({ npc }: { npc: NpcData }) {
         <span style={styles.label}>Patrol</span>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Interval</span>
-          <input
-            type="number"
+          <NumberInput
             step={0.1}
             value={npc.patrol_interval}
-            onChange={(e) => update(npc.id, { patrol_interval: Number(e.target.value) })}
+            onChange={(v) => update(npc.id, { patrol_interval: v })}
             style={styles.input}
           />
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Speed</span>
-          <input
-            type="number"
+          <NumberInput
             step={0.1}
             value={npc.patrol_speed}
-            onChange={(e) => update(npc.id, { patrol_speed: Number(e.target.value) })}
+            onChange={(v) => update(npc.id, { patrol_speed: v })}
             style={styles.input}
           />
         </div>
@@ -314,18 +306,16 @@ function PortalProperties({ portal }: { portal: PortalData }) {
       <div style={styles.section}>
         <span style={styles.label}>Position</span>
         <div style={styles.row}>
-          <span style={{ fontSize: 12, minWidth: 20 }}>X</span>
-          <input
-            type="number"
+          <NumberInput
+            label="X"
             value={portal.position[0]}
-            onChange={(e) => update(portal.id, { position: [Number(e.target.value), portal.position[1]] })}
+            onChange={(v) => update(portal.id, { position: [v, portal.position[1]] })}
             style={styles.input}
           />
-          <span style={{ fontSize: 12, minWidth: 20 }}>Z</span>
-          <input
-            type="number"
+          <NumberInput
+            label="Z"
             value={portal.position[1]}
-            onChange={(e) => update(portal.id, { position: [portal.position[0], Number(e.target.value)] })}
+            onChange={(v) => update(portal.id, { position: [portal.position[0], v] })}
             style={styles.input}
           />
         </div>
@@ -334,18 +324,16 @@ function PortalProperties({ portal }: { portal: PortalData }) {
       <div style={styles.section}>
         <span style={styles.label}>Size</span>
         <div style={styles.row}>
-          <span style={{ fontSize: 12, minWidth: 20 }}>W</span>
-          <input
-            type="number"
+          <NumberInput
+            label="W"
             value={portal.size[0]}
-            onChange={(e) => update(portal.id, { size: [Number(e.target.value), portal.size[1]] })}
+            onChange={(v) => update(portal.id, { size: [v, portal.size[1]] })}
             style={styles.input}
           />
-          <span style={{ fontSize: 12, minWidth: 20 }}>H</span>
-          <input
-            type="number"
+          <NumberInput
+            label="H"
             value={portal.size[1]}
-            onChange={(e) => update(portal.id, { size: [portal.size[0], Number(e.target.value)] })}
+            onChange={(v) => update(portal.id, { size: [portal.size[0], v] })}
             style={styles.input}
           />
         </div>

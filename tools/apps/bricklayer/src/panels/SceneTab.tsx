@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 
 const styles: Record<string, React.CSSProperties> = {
@@ -76,23 +77,21 @@ export function SceneTab() {
           <>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 80 }}>Speed</span>
-              <input
-                type="number"
+              <NumberInput
                 step={0.1}
                 value={dayNight.cycle_speed}
-                onChange={(e) => setDayNight({ cycle_speed: Number(e.target.value) })}
+                onChange={(v) => setDayNight({ cycle_speed: v })}
                 style={styles.input}
               />
             </div>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 80 }}>Initial Time</span>
-              <input
-                type="number"
+              <NumberInput
                 step={0.05}
                 min={0}
                 max={1}
                 value={dayNight.initial_time}
-                onChange={(e) => setDayNight({ initial_time: Number(e.target.value) })}
+                onChange={(v) => setDayNight({ initial_time: v })}
                 style={styles.input}
               />
             </div>

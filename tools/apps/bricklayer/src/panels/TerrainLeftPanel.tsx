@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { ToolType, CollisionLayer } from '../store/types.js';
 
@@ -247,10 +248,9 @@ export function TerrainLeftPanel() {
             onChange={(e) => setYLevelLock(e.target.checked ? 0 : null)}
           />
           {yLevelLock !== null && (
-            <input
-              type="number"
+            <NumberInput
               value={yLevelLock}
-              onChange={(e) => setYLevelLock(Number(e.target.value))}
+              onChange={setYLevelLock}
               style={styles.input}
             />
           )}
@@ -271,31 +271,28 @@ export function TerrainLeftPanel() {
         {!collisionGridData ? (
             <>
               <div style={styles.row}>
-                <span style={{ fontSize: 12, minWidth: 40 }}>W</span>
-                <input
-                  type="number"
+                <NumberInput
+                  label="W"
                   value={gridW}
                   min={1}
-                  onChange={(e) => setGridW(Math.max(1, Number(e.target.value)))}
+                  onChange={(v) => setGridW(v)}
                   style={{ ...styles.inputFlex, maxWidth: 60 }}
                 />
-                <span style={{ fontSize: 12, minWidth: 20 }}>H</span>
-                <input
-                  type="number"
+                <NumberInput
+                  label="H"
                   value={gridH}
                   min={1}
-                  onChange={(e) => setGridH(Math.max(1, Number(e.target.value)))}
+                  onChange={(v) => setGridH(v)}
                   style={{ ...styles.inputFlex, maxWidth: 60 }}
                 />
               </div>
               <div style={styles.row}>
-                <span style={{ fontSize: 12, minWidth: 40 }}>Cell</span>
-                <input
-                  type="number"
+                <NumberInput
+                  label="Cell"
                   value={cellSize}
                   step={0.1}
                   min={0.1}
-                  onChange={(e) => setCellSize(Math.max(0.1, Number(e.target.value)))}
+                  onChange={(v) => setCellSize(v)}
                   style={{ ...styles.inputFlex, maxWidth: 60 }}
                 />
               </div>
@@ -323,11 +320,10 @@ export function TerrainLeftPanel() {
               {collisionLayer === 'elevation' && (
                 <div style={styles.row}>
                   <span style={{ fontSize: 12, minWidth: 50 }}>Height</span>
-                  <input
-                    type="number"
+                  <NumberInput
                     step={0.5}
                     value={collisionHeight}
-                    onChange={(e) => setCollisionHeight(Number(e.target.value))}
+                    onChange={setCollisionHeight}
                     style={styles.inputFlex}
                   />
                 </div>

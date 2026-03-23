@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { StaticLight } from '../store/types.js';
 
@@ -48,37 +49,33 @@ function LightEditor({ light }: { light: StaticLight }) {
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>Pos X</span>
-        <input
-          type="number"
+        <NumberInput
           value={light.position[0]}
-          onChange={(e) => updateLight(light.id, { position: [Number(e.target.value), light.position[1]] })}
+          onChange={(v) => updateLight(light.id, { position: [v, light.position[1]] })}
           style={styles.input}
         />
-        <span style={{ fontSize: 12, minWidth: 20 }}>Z</span>
-        <input
-          type="number"
+        <NumberInput
+          label="Z"
           value={light.position[1]}
-          onChange={(e) => updateLight(light.id, { position: [light.position[0], Number(e.target.value)] })}
+          onChange={(v) => updateLight(light.id, { position: [light.position[0], v] })}
           style={styles.input}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>Radius</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.5}
           value={light.radius}
-          onChange={(e) => updateLight(light.id, { radius: Number(e.target.value) })}
+          onChange={(v) => updateLight(light.id, { radius: v })}
           style={styles.input}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>Height</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.5}
           value={light.height}
-          onChange={(e) => updateLight(light.id, { height: Number(e.target.value) })}
+          onChange={(v) => updateLight(light.id, { height: v })}
           style={styles.input}
         />
       </div>
@@ -102,11 +99,10 @@ function LightEditor({ light }: { light: StaticLight }) {
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>Intensity</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={light.intensity}
-          onChange={(e) => updateLight(light.id, { intensity: Number(e.target.value) })}
+          onChange={(v) => updateLight(light.id, { intensity: v })}
           style={styles.input}
         />
       </div>
