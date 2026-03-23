@@ -158,7 +158,7 @@ export function TerrainLeftPanel() {
   const hexColor = `#${activeColor.slice(0, 3).map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 
   return (
-    <div>
+    <div style={{ flex: 1, overflowY: 'auto', padding: 0 }}>
       {/* Tools */}
       <div style={styles.section}>
         <span style={styles.label}>Tools</span>
@@ -257,11 +257,18 @@ export function TerrainLeftPanel() {
         </div>
       </div>
 
-      {/* Collision section — only shown when collision overlay is active */}
-      {showCollision && (
-        <div style={styles.section}>
-          <span style={styles.label}>Collision</span>
-          {!collisionGridData ? (
+      {/* Collision section — always shown in TERRAIN mode */}
+      <div style={styles.section}>
+        <span style={styles.label}>Collision Grid</span>
+        {!showCollision && (
+          <button
+            style={{ ...styles.btn, marginBottom: 8 }}
+            onClick={() => useSceneStore.getState().setShowCollision(true)}
+          >
+            Show Overlay
+          </button>
+        )}
+        {!collisionGridData ? (
             <>
               <div style={styles.row}>
                 <span style={{ fontSize: 12, minWidth: 40 }}>W</span>
@@ -374,7 +381,6 @@ export function TerrainLeftPanel() {
             </>
           )}
         </div>
-      )}
     </div>
   );
 }
