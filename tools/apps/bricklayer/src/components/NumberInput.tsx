@@ -150,23 +150,36 @@ export function NumberInput({
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         onPointerDown={(e) => {
-          // Allow drag-to-scrub on the input when not focused
+          // Only initiate drag if not already focused (typing mode)
           if (document.activeElement !== e.currentTarget) {
-            e.preventDefault();
-            dragging.current = true;
             dragStartX.current = e.clientX;
             dragStartValue.current = value;
+            dragging.current = false;  // Will become true on first move
             (e.target as HTMLElement).setPointerCapture(e.pointerId);
           }
         }}
         onPointerMove={(e) => {
-          if (!dragging.current) return;
+          if (!(e.target as HTMLElement).hasPointerCapture(e.pointerId)) return;
           const dx = e.clientX - dragStartX.current;
+          // Start dragging only after 3px threshold (allows click-to-focus)
+          if (!dragging.current && Math.abs(dx) < 3) return;
+          if (!dragging.current) {
+            dragging.current = true;
+            e.preventDefault();
+          }
           const delta = Math.round(dx / 2) * step;
           const newVal = clamp(dragStartValue.current + delta, min, max);
           onChange(newVal);
         }}
-        onPointerUp={() => { dragging.current = false; }}
+        onPointerUp={(e) => {
+          if (dragging.current) {
+            dragging.current = false;
+          } else {
+            // No drag happened — allow focus for typing
+            (e.target as HTMLInputElement).focus();
+          }
+          try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
+        }}
         style={{ ...defaultInputStyle, cursor: focused ? 'text' : 'ew-resize', ...style }}
       />
     </>
