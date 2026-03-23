@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { EmitterConfig } from '../store/types.js';
 
@@ -34,56 +35,50 @@ function EmitterEditor({
       <span style={styles.label}>{label}</span>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 80 }}>Spawn Rate</span>
-        <input
-          type="number"
+        <NumberInput
           value={emitter.spawn_rate}
-          onChange={(e) => onChange({ ...emitter, spawn_rate: Number(e.target.value) })}
+          onChange={(v) => onChange({ ...emitter, spawn_rate: v })}
           style={styles.input}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 80 }}>Lifetime</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={emitter.particle_lifetime_min}
-          onChange={(e) => onChange({ ...emitter, particle_lifetime_min: Number(e.target.value) })}
+          onChange={(v) => onChange({ ...emitter, particle_lifetime_min: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
         <span style={{ fontSize: 12 }}>-</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={emitter.particle_lifetime_max}
-          onChange={(e) => onChange({ ...emitter, particle_lifetime_max: Number(e.target.value) })}
+          onChange={(v) => onChange({ ...emitter, particle_lifetime_max: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 80 }}>Size</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={emitter.size_min}
-          onChange={(e) => onChange({ ...emitter, size_min: Number(e.target.value) })}
+          onChange={(v) => onChange({ ...emitter, size_min: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
         <span style={{ fontSize: 12 }}>-</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={emitter.size_max}
-          onChange={(e) => onChange({ ...emitter, size_max: Number(e.target.value) })}
+          onChange={(v) => onChange({ ...emitter, size_max: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 80 }}>End Scale</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={emitter.size_end_scale}
-          onChange={(e) => onChange({ ...emitter, size_end_scale: Number(e.target.value) })}
+          onChange={(v) => onChange({ ...emitter, size_end_scale: v })}
           style={styles.input}
         />
       </div>
@@ -122,22 +117,20 @@ export function VfxTab() {
         </div>
         {torchPositions.map(([x, z], i) => (
           <div key={i} style={styles.row}>
-            <input
-              type="number"
+            <NumberInput
               value={x}
-              onChange={(e) => {
+              onChange={(v) => {
                 const next = [...torchPositions] as [number, number][];
-                next[i] = [Number(e.target.value), z];
+                next[i] = [v, z];
                 useSceneStore.getState().setTorchPositions(next);
               }}
               style={{ ...styles.input, maxWidth: 60 }}
             />
-            <input
-              type="number"
+            <NumberInput
               value={z}
-              onChange={(e) => {
+              onChange={(v) => {
                 const next = [...torchPositions] as [number, number][];
-                next[i] = [x, Number(e.target.value)];
+                next[i] = [x, v];
                 useSceneStore.getState().setTorchPositions(next);
               }}
               style={{ ...styles.input, maxWidth: 60 }}

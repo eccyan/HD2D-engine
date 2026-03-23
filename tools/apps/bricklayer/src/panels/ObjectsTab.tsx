@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { PlacedObjectData } from '../store/types.js';
 
@@ -39,14 +40,13 @@ function Vec3Input({
     <div style={styles.row}>
       {['X', 'Y', 'Z'].map((axis, i) => (
         <React.Fragment key={axis}>
-          <span style={{ fontSize: 11, color: '#888' }}>{labelPrefix ?? ''}{axis}</span>
-          <input
-            type="number"
+          <NumberInput
+            label={`${labelPrefix ?? ''}${axis}`}
             step={0.1}
             value={value[i]}
-            onChange={(e) => {
+            onChange={(v) => {
               const next = [...value] as [number, number, number];
-              next[i] = Number(e.target.value);
+              next[i] = v;
               onChange(next);
             }}
             style={{ ...styles.input, maxWidth: 55 }}
@@ -99,11 +99,10 @@ function ObjectEditor({ obj }: { obj: PlacedObjectData }) {
       />
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 50 }}>Scale</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={obj.scale}
-          onChange={(e) => updatePlacedObject(obj.id, { scale: Number(e.target.value) })}
+          onChange={(v) => updatePlacedObject(obj.id, { scale: v })}
           style={{ ...styles.input, maxWidth: 80 }}
         />
       </div>

@@ -291,7 +291,7 @@ Engine (Vulkan) ←→ Unix Socket ←→ Bridge Proxy (ws://localhost:9100) ←
 | **Audio Composer** | 5177 | 4-layer interactive music editor with MusicGen AI |
 | **SFX Designer** | 5178 | Waveform editor, procedural synthesis, AI SFX generation |
 | **Echidna** | 5179 | Voxel character editor with body parts, bone posing, .vox import, PLY export |
-| **Bricklayer** | 5180 | 3D voxel map editor with collision grid, nav zones, placed objects, PLY export |
+| **Bricklayer** | 5180 | 3D map editor with terrain/scene/settings modes, collision grid, placed objects |
 
 ```bash
 # Prerequisites: Node.js 18+, pnpm

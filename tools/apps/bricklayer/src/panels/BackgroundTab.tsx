@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { BackgroundLayer } from '../store/types.js';
 
@@ -42,55 +43,47 @@ function LayerEditor({ layer }: { layer: BackgroundLayer }) {
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>Z</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={layer.z}
-          onChange={(e) => updateLayer(layer.id, { z: Number(e.target.value) })}
+          onChange={(v) => updateLayer(layer.id, { z: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
-        <span style={{ fontSize: 12, minWidth: 60 }}>Parallax</span>
-        <input
-          type="number"
+        <NumberInput
+          label="Parallax"
           step={0.1}
           value={layer.parallax_factor}
-          onChange={(e) => updateLayer(layer.id, { parallax_factor: Number(e.target.value) })}
+          onChange={(v) => updateLayer(layer.id, { parallax_factor: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>Size</span>
-        <input
-          type="number"
+        <NumberInput
           value={layer.quad_width}
-          onChange={(e) => updateLayer(layer.id, { quad_width: Number(e.target.value) })}
+          onChange={(v) => updateLayer(layer.id, { quad_width: v })}
           style={{ ...styles.input, maxWidth: 60 }}
-          placeholder="W"
         />
         <span style={{ fontSize: 11 }}>x</span>
-        <input
-          type="number"
+        <NumberInput
           value={layer.quad_height}
-          onChange={(e) => updateLayer(layer.id, { quad_height: Number(e.target.value) })}
+          onChange={(v) => updateLayer(layer.id, { quad_height: v })}
           style={{ ...styles.input, maxWidth: 60 }}
-          placeholder="H"
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 60 }}>UV Rep</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={layer.uv_repeat_x}
-          onChange={(e) => updateLayer(layer.id, { uv_repeat_x: Number(e.target.value) })}
+          onChange={(v) => updateLayer(layer.id, { uv_repeat_x: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
         <span style={{ fontSize: 11 }}>x</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={layer.uv_repeat_y}
-          onChange={(e) => updateLayer(layer.id, { uv_repeat_y: Number(e.target.value) })}
+          onChange={(v) => updateLayer(layer.id, { uv_repeat_y: v })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
       </div>
@@ -102,13 +95,11 @@ function LayerEditor({ layer }: { layer: BackgroundLayer }) {
         />
         Wall Mode
         {layer.wall && (
-          <input
-            type="number"
+          <NumberInput
             step={0.1}
             value={layer.wall_y_offset}
-            onChange={(e) => updateLayer(layer.id, { wall_y_offset: Number(e.target.value) })}
+            onChange={(v) => updateLayer(layer.id, { wall_y_offset: v })}
             style={{ ...styles.input, maxWidth: 60 }}
-            placeholder="Y offset"
           />
         )}
       </label>

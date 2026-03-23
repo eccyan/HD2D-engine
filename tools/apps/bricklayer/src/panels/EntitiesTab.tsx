@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { NpcData, PortalData } from '../store/types.js';
 
@@ -44,13 +45,13 @@ function Vec3Input({
     <div style={styles.row}>
       {['X', 'Y', 'Z'].map((axis, i) => (
         <React.Fragment key={axis}>
-          <span style={{ fontSize: 11, color: '#888' }}>{labelPrefix ?? ''}{axis}</span>
-          <input
-            type="number"
+          <NumberInput
+            label={`${labelPrefix ?? ''}${axis}`}
+            step={0.1}
             value={value[i]}
-            onChange={(e) => {
+            onChange={(v) => {
               const next = [...value] as [number, number, number];
-              next[i] = Number(e.target.value);
+              next[i] = v;
               onChange(next);
             }}
             style={{ ...styles.input, maxWidth: 55 }}
@@ -109,21 +110,17 @@ function NpcEditor({ npc }: { npc: NpcData }) {
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 50 }}>Patrol</span>
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={npc.patrol_interval}
-          onChange={(e) => updateNpc(npc.id, { patrol_interval: Number(e.target.value) })}
+          onChange={(v) => updateNpc(npc.id, { patrol_interval: v })}
           style={{ ...styles.input, maxWidth: 60 }}
-          placeholder="interval"
         />
-        <input
-          type="number"
+        <NumberInput
           step={0.1}
           value={npc.patrol_speed}
-          onChange={(e) => updateNpc(npc.id, { patrol_speed: Number(e.target.value) })}
+          onChange={(v) => updateNpc(npc.id, { patrol_speed: v })}
           style={{ ...styles.input, maxWidth: 60 }}
-          placeholder="speed"
         />
       </div>
     </div>
@@ -150,31 +147,27 @@ function PortalEditor({ portal }: { portal: PortalData }) {
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 40 }}>Pos</span>
-        <input
-          type="number"
+        <NumberInput
           value={portal.position[0]}
-          onChange={(e) => updatePortal(portal.id, { position: [Number(e.target.value), portal.position[1]] })}
+          onChange={(v) => updatePortal(portal.id, { position: [v, portal.position[1]] })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
-        <input
-          type="number"
+        <NumberInput
           value={portal.position[1]}
-          onChange={(e) => updatePortal(portal.id, { position: [portal.position[0], Number(e.target.value)] })}
+          onChange={(v) => updatePortal(portal.id, { position: [portal.position[0], v] })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
       </div>
       <div style={styles.row}>
         <span style={{ fontSize: 12, minWidth: 40 }}>Size</span>
-        <input
-          type="number"
+        <NumberInput
           value={portal.size[0]}
-          onChange={(e) => updatePortal(portal.id, { size: [Number(e.target.value), portal.size[1]] })}
+          onChange={(v) => updatePortal(portal.id, { size: [v, portal.size[1]] })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
-        <input
-          type="number"
+        <NumberInput
           value={portal.size[1]}
-          onChange={(e) => updatePortal(portal.id, { size: [portal.size[0], Number(e.target.value)] })}
+          onChange={(v) => updatePortal(portal.id, { size: [portal.size[0], v] })}
           style={{ ...styles.input, maxWidth: 60 }}
         />
       </div>

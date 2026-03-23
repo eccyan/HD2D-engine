@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useSceneStore } from '../store/useSceneStore.js';
+import { ThreeEvent } from '@react-three/fiber';
 
 // HSL hue per nav zone (golden angle spacing for good contrast)
 function zoneColor(zone: number): string {
@@ -39,6 +40,36 @@ export function CollisionOverlay() {
   const collisionGridData = useSceneStore((s) => s.collisionGridData);
   const showCollision = useSceneStore((s) => s.showCollision);
 
+  const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const store = useSceneStore.getState();
+    // Only handle clicks in TERRAIN mode
+    if (store.mode !== 'terrain') return;
+    const grid = store.collisionGridData;
+    if (!grid) return;
+
+    // Raycast hit point on the click plane
+    const point = e.point;
+    const cellX = Math.round(point.x / grid.cell_size);
+    const cellZ = Math.round(point.z / grid.cell_size);
+
+    if (cellX < 0 || cellX >= grid.width || cellZ < 0 || cellZ >= grid.height) return;
+
+    store.pushUndo();
+
+    switch (store.collisionLayer) {
+      case 'solid':
+        store.toggleCellSolid(cellX, cellZ);
+        break;
+      case 'elevation':
+        store.setCellElevation(cellX, cellZ, store.collisionHeight);
+        break;
+      case 'nav_zone':
+        store.setCellNavZone(cellX, cellZ, store.activeNavZone);
+        break;
+    }
+  }, []);
+
   const cells = useMemo(() => {
     if (!showCollision || !collisionGridData) return [];
 
@@ -48,8 +79,8 @@ export function CollisionOverlay() {
     // Determine if elevation varies
     let minElev = Infinity;
     let maxElev = -Infinity;
-    for (let i = 0; i < g.solid.length; i++) {
-      if (g.solid[i]) {
+    for (let i = 0; i < g.elevation.length; i++) {
+      if (g.elevation[i] !== 0) {
         minElev = Math.min(minElev, g.elevation[i]);
         maxElev = Math.max(maxElev, g.elevation[i]);
       }
@@ -65,15 +96,33 @@ export function CollisionOverlay() {
     for (let z = 0; z < g.height; z++) {
       for (let x = 0; x < g.width; x++) {
         const idx = z * g.width + x;
-        if (!g.solid[idx]) continue;
+        const isSolid = g.solid[idx];
 
         let color: string;
-        if (hasZones && g.nav_zone[idx] > 0) {
+        let opacity: number;
+
+        if (isSolid) {
+          // Solid cells: red, or colored by zone/elevation
+          if (hasZones && g.nav_zone[idx] > 0) {
+            color = zoneColor(g.nav_zone[idx]);
+          } else if (elevVaries) {
+            color = elevationColor(g.elevation[idx], minElev, maxElev);
+          } else {
+            color = '#ff1744';
+          }
+          opacity = 0.4;
+        } else if (hasZones && g.nav_zone[idx] > 0) {
+          // Walkable with zone
           color = zoneColor(g.nav_zone[idx]);
-        } else if (elevVaries) {
-          color = elevationColor(g.elevation[idx], minElev, maxElev);
+          opacity = 0.2;
+        } else if (g.elevation[idx] !== 0) {
+          // Walkable with elevation
+          color = elevationColor(g.elevation[idx], minElev || -10, maxElev || 10);
+          opacity = 0.15;
         } else {
-          color = '#ff1744';
+          // Walkable default — subtle green grid
+          color = '#44aa44';
+          opacity = 0.08;
         }
 
         result.push({
@@ -81,7 +130,7 @@ export function CollisionOverlay() {
           z,
           elevation: g.elevation[idx],
           color,
-          opacity: 0.35,
+          opacity,
           key: `${x},${z}`,
         });
       }
@@ -94,6 +143,23 @@ export function CollisionOverlay() {
 
   return (
     <group>
+      {/* Invisible click plane covering the full grid */}
+      <mesh
+        position={[
+          (collisionGridData.width * collisionGridData.cell_size) / 2 - collisionGridData.cell_size / 2,
+          0,
+          (collisionGridData.height * collisionGridData.cell_size) / 2 - collisionGridData.cell_size / 2,
+        ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onClick={handleClick}
+      >
+        <planeGeometry args={[
+          collisionGridData.width * collisionGridData.cell_size,
+          collisionGridData.height * collisionGridData.cell_size,
+        ]} />
+        <meshBasicMaterial visible={false} />
+      </mesh>
+
       {cells.map((c) => (
         <Cell
           key={c.key}

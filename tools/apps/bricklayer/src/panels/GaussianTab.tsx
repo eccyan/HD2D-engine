@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 
 const styles: Record<string, React.CSSProperties> = {
@@ -37,14 +38,13 @@ export function GaussianTab() {
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Pos</span>
           {[0, 1, 2].map((i) => (
-            <input
+            <NumberInput
               key={i}
-              type="number"
               step={0.5}
               value={gs.camera.position[i]}
-              onChange={(e) => {
+              onChange={(v) => {
                 const pos = [...gs.camera.position] as [number, number, number];
-                pos[i] = Number(e.target.value);
+                pos[i] = v;
                 setGs({ camera: { ...gs.camera, position: pos } });
               }}
               style={{ ...styles.input, maxWidth: 55 }}
@@ -54,14 +54,13 @@ export function GaussianTab() {
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Target</span>
           {[0, 1, 2].map((i) => (
-            <input
+            <NumberInput
               key={i}
-              type="number"
               step={0.5}
               value={gs.camera.target[i]}
-              onChange={(e) => {
+              onChange={(v) => {
                 const tgt = [...gs.camera.target] as [number, number, number];
-                tgt[i] = Number(e.target.value);
+                tgt[i] = v;
                 setGs({ camera: { ...gs.camera, target: tgt } });
               }}
               style={{ ...styles.input, maxWidth: 55 }}
@@ -70,11 +69,10 @@ export function GaussianTab() {
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>FOV</span>
-          <input
-            type="number"
+          <NumberInput
             step={1}
             value={gs.camera.fov}
-            onChange={(e) => setGs({ camera: { ...gs.camera, fov: Number(e.target.value) } })}
+            onChange={(v) => setGs({ camera: { ...gs.camera, fov: v } })}
             style={styles.input}
           />
         </div>
@@ -84,29 +82,26 @@ export function GaussianTab() {
         <span style={styles.label}>Render</span>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Width</span>
-          <input
-            type="number"
+          <NumberInput
             value={gs.render_width}
-            onChange={(e) => setGs({ render_width: Number(e.target.value) })}
+            onChange={(v) => setGs({ render_width: v })}
             style={styles.input}
           />
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Height</span>
-          <input
-            type="number"
+          <NumberInput
             value={gs.render_height}
-            onChange={(e) => setGs({ render_height: Number(e.target.value) })}
+            onChange={(v) => setGs({ render_height: v })}
             style={styles.input}
           />
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 50 }}>Scale</span>
-          <input
-            type="number"
+          <NumberInput
             step={0.1}
             value={gs.scale_multiplier}
-            onChange={(e) => setGs({ scale_multiplier: Number(e.target.value) })}
+            onChange={(v) => setGs({ scale_multiplier: v })}
             style={styles.input}
           />
         </div>
@@ -127,49 +122,44 @@ export function GaussianTab() {
         <span style={styles.label}>Parallax</span>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 80 }}>Azimuth</span>
-          <input
-            type="number"
+          <NumberInput
             step={1}
             value={gs.parallax.azimuth_range}
-            onChange={(e) => setGs({ parallax: { ...gs.parallax, azimuth_range: Number(e.target.value) } })}
+            onChange={(v) => setGs({ parallax: { ...gs.parallax, azimuth_range: v } })}
             style={styles.input}
           />
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 80 }}>Elev Min</span>
-          <input
-            type="number"
+          <NumberInput
             step={1}
             value={gs.parallax.elevation_min}
-            onChange={(e) => setGs({ parallax: { ...gs.parallax, elevation_min: Number(e.target.value) } })}
+            onChange={(v) => setGs({ parallax: { ...gs.parallax, elevation_min: v } })}
             style={{ ...styles.input, maxWidth: 60 }}
           />
           <span style={{ fontSize: 12, minWidth: 30 }}>Max</span>
-          <input
-            type="number"
+          <NumberInput
             step={1}
             value={gs.parallax.elevation_max}
-            onChange={(e) => setGs({ parallax: { ...gs.parallax, elevation_max: Number(e.target.value) } })}
+            onChange={(v) => setGs({ parallax: { ...gs.parallax, elevation_max: v } })}
             style={{ ...styles.input, maxWidth: 60 }}
           />
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 80 }}>Distance</span>
-          <input
-            type="number"
+          <NumberInput
             step={0.5}
             value={gs.parallax.distance_range}
-            onChange={(e) => setGs({ parallax: { ...gs.parallax, distance_range: Number(e.target.value) } })}
+            onChange={(v) => setGs({ parallax: { ...gs.parallax, distance_range: v } })}
             style={styles.input}
           />
         </div>
         <div style={styles.row}>
           <span style={{ fontSize: 12, minWidth: 80 }}>Strength</span>
-          <input
-            type="number"
+          <NumberInput
             step={0.1}
             value={gs.parallax.parallax_strength}
-            onChange={(e) => setGs({ parallax: { ...gs.parallax, parallax_strength: Number(e.target.value) } })}
+            onChange={(v) => setGs({ parallax: { ...gs.parallax, parallax_strength: v } })}
             style={styles.input}
           />
         </div>
@@ -182,18 +172,18 @@ export function GaussianTab() {
           <>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 50 }}>Width</span>
-              <input type="number" value={gridW} min={1}
-                onChange={(e) => setGridW(Math.max(1, Number(e.target.value)))}
+              <NumberInput value={gridW} min={1}
+                onChange={(v) => setGridW(v)}
                 style={{ ...styles.input, maxWidth: 60 }} />
               <span style={{ fontSize: 12, minWidth: 50 }}>Height</span>
-              <input type="number" value={gridH} min={1}
-                onChange={(e) => setGridH(Math.max(1, Number(e.target.value)))}
+              <NumberInput value={gridH} min={1}
+                onChange={(v) => setGridH(v)}
                 style={{ ...styles.input, maxWidth: 60 }} />
             </div>
             <div style={styles.row}>
               <span style={{ fontSize: 12, minWidth: 50 }}>Cell</span>
-              <input type="number" value={cellSize} step={0.1} min={0.1}
-                onChange={(e) => setCellSize(Math.max(0.1, Number(e.target.value)))}
+              <NumberInput value={cellSize} step={0.1} min={0.1}
+                onChange={(v) => setCellSize(v)}
                 style={{ ...styles.input, maxWidth: 60 }} />
             </div>
             <button style={styles.btn} onClick={() => initCollisionGrid(gridW, gridH, cellSize)}>

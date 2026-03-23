@@ -1,4 +1,5 @@
 import React from 'react';
+import { NumberInput } from '../components/NumberInput.js';
 import { useSceneStore } from '../store/useSceneStore.js';
 import type { ToolType } from '../store/types.js';
 
@@ -201,10 +202,9 @@ export function ToolBar() {
             onChange={(e) => setYLevelLock(e.target.checked ? 0 : null)}
           />
           {yLevelLock !== null && (
-            <input
-              type="number"
+            <NumberInput
               value={yLevelLock}
-              onChange={(e) => setYLevelLock(Number(e.target.value))}
+              onChange={setYLevelLock}
               style={styles.input}
             />
           )}
