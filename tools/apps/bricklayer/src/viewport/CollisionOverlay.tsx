@@ -77,8 +77,8 @@ export function CollisionOverlay() {
     // Determine if elevation varies
     let minElev = Infinity;
     let maxElev = -Infinity;
-    for (let i = 0; i < g.solid.length; i++) {
-      if (g.solid[i]) {
+    for (let i = 0; i < g.elevation.length; i++) {
+      if (g.elevation[i] !== 0) {
         minElev = Math.min(minElev, g.elevation[i]);
         maxElev = Math.max(maxElev, g.elevation[i]);
       }
@@ -94,15 +94,33 @@ export function CollisionOverlay() {
     for (let z = 0; z < g.height; z++) {
       for (let x = 0; x < g.width; x++) {
         const idx = z * g.width + x;
-        if (!g.solid[idx]) continue;
+        const isSolid = g.solid[idx];
 
         let color: string;
-        if (hasZones && g.nav_zone[idx] > 0) {
+        let opacity: number;
+
+        if (isSolid) {
+          // Solid cells: red, or colored by zone/elevation
+          if (hasZones && g.nav_zone[idx] > 0) {
+            color = zoneColor(g.nav_zone[idx]);
+          } else if (elevVaries) {
+            color = elevationColor(g.elevation[idx], minElev, maxElev);
+          } else {
+            color = '#ff1744';
+          }
+          opacity = 0.4;
+        } else if (hasZones && g.nav_zone[idx] > 0) {
+          // Walkable with zone
           color = zoneColor(g.nav_zone[idx]);
-        } else if (elevVaries) {
-          color = elevationColor(g.elevation[idx], minElev, maxElev);
+          opacity = 0.2;
+        } else if (g.elevation[idx] !== 0) {
+          // Walkable with elevation
+          color = elevationColor(g.elevation[idx], minElev || -10, maxElev || 10);
+          opacity = 0.15;
         } else {
-          color = '#ff1744';
+          // Walkable default — subtle green grid
+          color = '#44aa44';
+          opacity = 0.08;
         }
 
         result.push({
@@ -110,7 +128,7 @@ export function CollisionOverlay() {
           z,
           elevation: g.elevation[idx],
           color,
-          opacity: 0.35,
+          opacity,
           key: `${x},${z}`,
         });
       }
